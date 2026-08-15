@@ -1,4 +1,8 @@
-import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+
+import * as authApi from '@/lib/api/auth';
+import { setUnauthorizedListener } from '@/lib/api/client';
+import { clearTokens, getTokens, saveTokens } from '@/lib/token-storage';
 
 type Account = { email: string; password: string };
 
@@ -9,32 +13,72 @@ const EMAIL_PATTERN = /^\S+@\S+\.\S+$/;
 
 type SessionContextValue = {
   isLoggedIn: boolean;
-  /** Set by logIn()/signup's later login(email) call. Stays null for the Kakao/Google mock buttons, which never pass one. */
+  /** False until the stored-token check on launch finishes. Gates the initial navigator render (see app/_layout.tsx). */
+  isSessionReady: boolean;
+  /** Set by logIn()/signup's later login(email) call. Stays null for a real Kakao/Google session. */
   currentEmail: string | null;
   login: (email?: string) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
+  /** Exchanges a provider (Kakao) accessToken for our own tokens and stores them. Does NOT flip isLoggedIn — the caller still routes through onboarding-guide's login() first, same as the email/signup flow. */
+  loginWithKakao: (providerAccessToken: string) => Promise<void>;
+  /** Same as loginWithKakao but for Google. */
+  loginWithGoogle: (providerAccessToken: string) => Promise<void>;
   signUp: (email: string, password: string) => SignUpResult;
   logIn: (email: string, password: string) => LogInResult;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-// In-memory only, same as use-intro.tsx / use-captured-photos.tsx — this
-// project has no persistent storage module wired up yet, so registered
-// accounts live for the current app session and reset on a full restart.
+// Registered mock accounts (signUp/logIn) are in-memory only, same as
+// use-intro.tsx / use-captured-photos.tsx, and reset on a full restart.
+// isLoggedIn itself is now backed by expo-secure-store: real Kakao/Google
+// sessions survive an app restart (see the bootstrap effect below).
 export function SessionProvider({ children }: PropsWithChildren) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isSessionReady, setIsSessionReady] = useState(false);
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const tokens = await getTokens();
+      if (tokens) setIsLoggedIn(true);
+      setIsSessionReady(true);
+    })();
+  }, []);
+
+  useEffect(() => {
+    setUnauthorizedListener(() => {
+      setIsLoggedIn(false);
+      setCurrentEmail(null);
+    });
+    return () => setUnauthorizedListener(null);
+  }, []);
 
   const login = useCallback((email?: string) => {
     setIsLoggedIn(true);
     setCurrentEmail(email ?? null);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Best-effort: still clear local state even if the network call fails.
+    }
+    await clearTokens();
     setIsLoggedIn(false);
     setCurrentEmail(null);
+  }, []);
+
+  const loginWithKakao = useCallback(async (providerAccessToken: string) => {
+    const tokens = await authApi.loginWithKakao(providerAccessToken);
+    await saveTokens(tokens);
+  }, []);
+
+  const loginWithGoogle = useCallback(async (providerAccessToken: string) => {
+    const tokens = await authApi.loginWithGoogle(providerAccessToken);
+    await saveTokens(tokens);
   }, []);
 
   const signUp = useCallback(
@@ -62,8 +106,18 @@ export function SessionProvider({ children }: PropsWithChildren) {
   );
 
   const value = useMemo(
-    () => ({ isLoggedIn, currentEmail, login, logout, signUp, logIn }),
-    [isLoggedIn, currentEmail, login, logout, signUp, logIn],
+    () => ({
+      isLoggedIn,
+      isSessionReady,
+      currentEmail,
+      login,
+      logout,
+      loginWithKakao,
+      loginWithGoogle,
+      signUp,
+      logIn,
+    }),
+    [isLoggedIn, isSessionReady, currentEmail, login, logout, loginWithKakao, loginWithGoogle, signUp, logIn],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

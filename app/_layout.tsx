@@ -42,8 +42,12 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const colorScheme = useColorScheme();
-  const { isLoggedIn } = useSession();
+  const { isLoggedIn, isSessionReady } = useSession();
   const { hasSeenIntro } = useIntro();
+
+  // Wait for the stored-token check to finish so a real (Kakao/Google)
+  // session doesn't flash the login screen before landing on the tabs.
+  if (!isSessionReady) return null;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

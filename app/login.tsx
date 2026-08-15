@@ -1,29 +1,66 @@
+import { login as kakaoLogin } from "@react-native-seoul/kakao-login";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LanguagePickerModal } from "@/components/login/language-picker-modal";
 import { LOCALES, loginText } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { useSession } from "@/hooks/use-session";
 
 const logo = require("@/assets/images/login/logo.png");
 const google = require("@/assets/images/login/google.png");
 
 export default function LoginScreen() {
   const { locale, setLocale } = useLanguage();
+  const { loginWithKakao, loginWithGoogle } = useSession();
   const [isLangPickerVisible, setIsLangPickerVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const t = loginText[locale];
   const currentLocaleMeta = LOCALES.find((item) => item.code === locale)!;
 
-  const handleKakaoLogin = () => {
-    router.push("/onboarding-guide");
+  useEffect(() => {
+    GoogleSignin.configure({ webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID });
+  }, []);
+
+  const handleKakaoLogin = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const { accessToken } = await kakaoLogin();
+      await loginWithKakao(accessToken);
+      router.push("/onboarding-guide");
+    } catch (error) {
+      console.error("[login] kakao login failed", error);
+      setError(t.socialLoginError);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleGoogleLogin = () => {
-    router.push("/onboarding-guide");
+  const handleGoogleLogin = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+      if (response.type === "cancelled") return;
+      const { accessToken } = await GoogleSignin.getTokens();
+      await loginWithGoogle(accessToken);
+      router.push("/onboarding-guide");
+    } catch (error) {
+      console.error("[login] google login failed", error);
+      setError(t.socialLoginError);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleEmailLogin = () => {
@@ -71,12 +108,14 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.bottom}>
-        <Pressable style={styles.kakaoButton} onPress={handleKakaoLogin}>
+        {error && <Text style={styles.errorText}>{error}</Text>}
+
+        <Pressable style={styles.kakaoButton} onPress={handleKakaoLogin} disabled={isSubmitting}>
           <Text style={styles.kakaoEmoji}>💬</Text>
           <Text style={styles.kakaoText}>{t.kakaoButton}</Text>
         </Pressable>
 
-        <Pressable style={styles.googleButton} onPress={handleGoogleLogin}>
+        <Pressable style={styles.googleButton} onPress={handleGoogleLogin} disabled={isSubmitting}>
           <Image
             source={google}
             style={styles.googleIcon}
@@ -174,6 +213,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 35,
     gap: 12,
+  },
+  errorText: {
+    fontSize: 12,
+    textAlign: "center",
+    color: "#b91c1c",
   },
   kakaoButton: {
     height: 68,
