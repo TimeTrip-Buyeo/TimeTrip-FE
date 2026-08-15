@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { getMe } from "@/lib/api/auth";
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LOCALES, mapScreenText, myPageText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
@@ -20,13 +21,32 @@ export default function MyPageScreen() {
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const currentLocaleMeta = LOCALES.find((item) => item.code === locale)!;
 
+  // GET /users gives the real nickname for a Kakao/Google session. For the
+  // email mock session (or if the call fails), fall back to the previous
+  // currentEmail/guestLabel display.
+  const [nickname, setNickname] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (!cancelled) setNickname(me.name);
+      })
+      .catch(() => {
+        // Not a real session (or offline) — keep the currentEmail/guestLabel fallback below.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLanguageModalOpen(false);
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace("/login");
   };
 
@@ -41,7 +61,7 @@ export default function MyPageScreen() {
           <View style={styles.avatar}>
             <FontAwesome5 name="user" size={22} color="#800000" solid />
           </View>
-          <Text style={styles.accountEmail}>{currentEmail ?? t.guestLabel}</Text>
+          <Text style={styles.accountEmail}>{nickname ?? currentEmail ?? t.guestLabel}</Text>
         </View>
 
         <Text style={styles.sectionLabel}>{t.settingsSectionLabel}</Text>

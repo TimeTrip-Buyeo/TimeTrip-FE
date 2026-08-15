@@ -223,6 +223,7 @@ type LoginText = {
   googleButton: string;
   emailButton: string;
   terms: string;
+  socialLoginError: string;
 };
 
 export const loginText: Record<Locale, LoginText> = {
@@ -234,6 +235,7 @@ export const loginText: Record<Locale, LoginText> = {
     googleButton: '구글로 시작하기',
     emailButton: '이메일로 로그인',
     terms: '로그인 시 서비스 이용약관 및 개인정보처리방침에 동의합니다.',
+    socialLoginError: '로그인에 실패했어요. 다시 시도해주세요.',
   },
   en: {
     appTitle: 'TimeTrip',
@@ -243,6 +245,7 @@ export const loginText: Record<Locale, LoginText> = {
     googleButton: 'Continue with Google',
     emailButton: 'Log in with Email',
     terms: 'By logging in, you agree to the Terms of Service and Privacy Policy.',
+    socialLoginError: 'Login failed. Please try again.',
   },
   zh: {
     appTitle: 'TimeTrip',
@@ -252,6 +255,7 @@ export const loginText: Record<Locale, LoginText> = {
     googleButton: '使用Google继续',
     emailButton: '使用邮箱登录',
     terms: '登录即表示您同意服务条款及隐私政策。',
+    socialLoginError: '登录失败，请重试。',
   },
   ja: {
     appTitle: 'TimeTrip',
@@ -261,6 +265,7 @@ export const loginText: Record<Locale, LoginText> = {
     googleButton: 'Googleで始める',
     emailButton: 'メールでログイン',
     terms: 'ログインすると、利用規約およびプライバシーポリシーに同意したものとみなされます。',
+    socialLoginError: 'ログインに失敗しました。もう一度お試しください。',
   },
 };
 
