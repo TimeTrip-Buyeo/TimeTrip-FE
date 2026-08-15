@@ -14,6 +14,34 @@ import { useSession } from "@/hooks/use-session";
 const logo = require("@/assets/images/login/logo.png");
 const google = require("@/assets/images/login/google.png");
 
+function formatLoginError(error: unknown, fallbackMessage: string) {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (!error || typeof error !== "object") {
+    return fallbackMessage;
+  }
+
+  const maybeApiError = error as {
+    name?: string;
+    status?: number;
+    code?: string;
+    message?: string;
+  };
+
+  const detail = [
+    maybeApiError.name,
+    maybeApiError.status ? `status=${maybeApiError.status}` : null,
+    maybeApiError.code ? `code=${maybeApiError.code}` : null,
+    maybeApiError.message,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+
+  return detail || fallbackMessage;
+}
+
 export default function LoginScreen() {
   const { locale, setLocale } = useLanguage();
   const { loginWithKakao, loginWithGoogle } = useSession();
@@ -37,7 +65,7 @@ export default function LoginScreen() {
       await loginWithKakao(accessToken);
       router.push("/onboarding-guide");
     } catch (error) {
-      console.error("[login] kakao login failed", error);
+      console.error(`[login] kakao login failed ${formatLoginError(error, t.socialLoginError)}`);
       setError(t.socialLoginError);
     } finally {
       setIsSubmitting(false);
@@ -56,7 +84,7 @@ export default function LoginScreen() {
       await loginWithGoogle(accessToken);
       router.push("/onboarding-guide");
     } catch (error) {
-      console.error("[login] google login failed", error);
+      console.error(`[login] google login failed ${formatLoginError(error, t.socialLoginError)}`);
       setError(t.socialLoginError);
     } finally {
       setIsSubmitting(false);

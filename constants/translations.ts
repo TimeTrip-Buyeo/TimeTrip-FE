@@ -454,6 +454,8 @@ type MapScreenText = {
   appTitle: string;
   appSubtitle: string;
   guideLabel: string;
+  mapLoading: string;
+  mapLoadError: string;
   nav: { map: string; collection: string; album: string; myPage: string };
   pins: MapLocationText;
   heritageTag: string;
@@ -462,6 +464,7 @@ type MapScreenText = {
   /** "3월에 다시 방문하시면..." — month is 1-12. */
   revisitWarning: (month: number) => string;
   specialGuideMessage: string;
+  tourBasicGuideMessage: string;
   /** Shown for locations that never rotate into the special guide (e.g. the museum). */
   visitInPersonMessage: string;
 };
@@ -486,6 +489,8 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     appTitle: 'TimeTrip',
     appSubtitle: '부여',
     guideLabel: '가이드',
+    mapLoading: '지도 장소를 불러오는 중...',
+    mapLoadError: '지도 장소를 불러오지 못했어요.',
     nav: { map: '지도', collection: '도감', album: '앨범', myPage: '마이페이지' },
     pins: {
       museum: '국립부여박물관',
@@ -499,12 +504,15 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     audioSpecialGuideAvailable: '스페셜 가이드 이용 가능',
     revisitWarning: (month) => `⚠️ ${month}월에 다시 방문하시면 스페셜 가이드(AR,셀카, 컬렉션)를 들을 수 있어요!`,
     specialGuideMessage: 'AR, 셀카, 컬렉션으로 즐기는 스페셜 가이드를 지금 만나보세요!',
+    tourBasicGuideMessage: '관광·전시 중심 장소입니다. 현장에서 기본 음성 가이드로 천천히 둘러보세요!',
     visitInPersonMessage: '해당 유적지에 직접 방문해 더 많은 가이드를 경험해보세요!',
   },
   en: {
     appTitle: 'TimeTrip',
     appSubtitle: 'Buyeo',
     guideLabel: 'Guide',
+    mapLoading: 'Loading map spots...',
+    mapLoadError: 'Could not load map spots.',
     nav: { map: 'Map', collection: 'Collection', album: 'Album', myPage: 'My Page' },
     pins: {
       museum: 'Buyeo National Museum',
@@ -519,12 +527,15 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     revisitWarning: (month) =>
       `⚠️ Come back in ${EN_MONTH_NAMES[month - 1]} to experience the special guide (AR, photo booth, collectibles)!`,
     specialGuideMessage: 'Enjoy the special guide now — AR, photo booth, and collectibles!',
+    tourBasicGuideMessage: 'This is a tour-focused spot. Explore it with the basic audio guide on site.',
     visitInPersonMessage: 'Visit this heritage site in person to experience more guides!',
   },
   zh: {
     appTitle: 'TimeTrip',
     appSubtitle: '扶余',
     guideLabel: '导览',
+    mapLoading: '正在加载地图地点...',
+    mapLoadError: '无法加载地图地点。',
     nav: { map: '地图', collection: '图鉴', album: '相册', myPage: '我的' },
     pins: {
       museum: '国立扶余博物馆',
@@ -538,12 +549,15 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     audioSpecialGuideAvailable: '可使用特别导览',
     revisitWarning: (month) => `⚠️ ${month}月再次来访即可体验特别导览(AR、拍照、收藏品)!`,
     specialGuideMessage: '现在就体验AR、拍照和收藏品特别导览吧!',
+    tourBasicGuideMessage: '这里是观光与展示为主的地点。到现场使用基础语音导览慢慢参观吧!',
     visitInPersonMessage: '请直接前往该遗迹，体验更多导览内容!',
   },
   ja: {
     appTitle: 'TimeTrip',
     appSubtitle: '扶余',
     guideLabel: 'ガイド',
+    mapLoading: '地図スポットを読み込み中...',
+    mapLoadError: '地図スポットを読み込めませんでした。',
     nav: { map: '地図', collection: '図鑑', album: 'アルバム', myPage: 'マイページ' },
     pins: {
       museum: '国立扶余博物館',
@@ -557,6 +571,7 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     audioSpecialGuideAvailable: 'スペシャルガイド利用可能',
     revisitWarning: (month) => `⚠️ ${month}月に再訪すると、スペシャルガイド(AR、写真、コレクション)を楽しめます!`,
     specialGuideMessage: 'AR・フォト・コレクションで楽しむスペシャルガイドを今すぐ体験!',
+    tourBasicGuideMessage: '観光・展示が中心のスポットです。現地で基本音声ガイドを聞きながら巡ってみてください!',
     visitInPersonMessage: 'この遺跡に直接訪れて、より多くのガイドを体験してみてください!',
   },
 };

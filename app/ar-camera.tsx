@@ -10,7 +10,7 @@ import { CollectibleAcquiredModal } from "@/components/collectible-acquired-moda
 import { LanguageLegendModal } from "@/components/onboarding/language-legend-modal";
 import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { MAP_LOCATIONS, type LocationId } from "@/constants/locations";
+import { MAP_LOCATIONS, SPOT_ID_TO_LOCATION_ID, type LocationId } from "@/constants/locations";
 import { arCameraText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 
@@ -22,14 +22,27 @@ const AUDIO_GUIDE_PLACEHOLDER_DURATION_MS = 3000;
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
 
-function resolveLocationId(raw: string | string[] | undefined): LocationId {
+function resolveSingleParam(raw: string | string[] | undefined) {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+function resolveLocationId(rawLocationId: string | string[] | undefined, rawSpotId: string | string[] | undefined): LocationId {
+  const value = resolveSingleParam(rawLocationId);
+  if (value && KNOWN_LOCATION_IDS.has(value)) return value as LocationId;
+
+  const spotId = Number(resolveSingleParam(rawSpotId));
+  return SPOT_ID_TO_LOCATION_ID[spotId] ?? "busosanseong";
+}
+
+function resolveSpotTitle(raw: string | string[] | undefined) {
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return value && KNOWN_LOCATION_IDS.has(value) ? (value as LocationId) : "pagoda";
+  return value || null;
 }
 
 export default function ArCameraScreen() {
-  const params = useLocalSearchParams<{ locationId?: string }>();
-  const locationId = resolveLocationId(params.locationId);
+  const params = useLocalSearchParams<{ locationId?: string; spotId?: string; storyId?: string; spotName?: string }>();
+  const locationId = resolveLocationId(params.locationId, params.spotId);
+  const spotTitle = resolveSpotTitle(params.spotName);
   const insets = useSafeAreaInsets();
 
   const { locale, setLocale } = useLanguage();
@@ -98,7 +111,7 @@ export default function ArCameraScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={20} color="#fff" solid />
           </Pressable>
-          <Text style={styles.locationTitle}>{mapT.pins[locationId]}</Text>
+          <Text style={styles.locationTitle}>{spotTitle ?? mapT.pins[locationId]}</Text>
         </View>
         <View style={styles.arActivePill}>
           <View style={styles.arActiveDot} />
