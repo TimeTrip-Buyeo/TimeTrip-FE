@@ -1,43 +1,128 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
-import { LocationBeacon } from "@/components/map/location-beacon";
+import { KakaoMapView } from "@/components/map/kakao-map-view";
 import { MapHeaderCard } from "@/components/map/map-header-card";
-import { MapPin } from "@/components/map/map-pin";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import {
-  MAP_LOCATIONS,
-  NEXT_SPECIAL_GUIDE_MONTH,
-  SPECIAL_GUIDE_COLOR,
-  SPECIAL_GUIDE_LOCATION_IDS,
-  type LocationId,
-} from "@/constants/locations";
+import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
 import { mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-
-const SPECIAL_GUIDE_LOCATION_SET = new Set<LocationId>(SPECIAL_GUIDE_LOCATION_IDS);
+import {
+  getLocalizedSpotName,
+  getSpotDetail,
+  getSpotSpecialMonths,
+  getSpots,
+  getSpotStory,
+  type Spot,
+  type SpotDetail,
+  type SpotStory,
+} from "@/lib/api/spots";
 
 export default function MapScreen() {
   const { locale, setLocale } = useLanguage();
-  const { width: windowWidth } = useWindowDimensions();
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const [selectedLocationId, setSelectedLocationId] = useState<LocationId | null>(null);
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
+  const [selectedSpotDetail, setSelectedSpotDetail] = useState<SpotDetail | null>(null);
+  const [selectedSpotStory, setSelectedSpotStory] = useState<SpotStory | null>(null);
+  const [selectedSpotSpecialMonths, setSelectedSpotSpecialMonths] = useState<number[]>([]);
+  const [isLoadingSpots, setIsLoadingSpots] = useState(true);
+  const [hasMapError, setHasMapError] = useState(false);
 
   const t = mapScreenText[locale];
-  const selectedLocation = MAP_LOCATIONS.find((location) => location.id === selectedLocationId) ?? null;
-  const isSelectedSpecial = selectedLocationId !== null && SPECIAL_GUIDE_LOCATION_SET.has(selectedLocationId);
-  const selectedLocationMessage = selectedLocation
-    ? isSelectedSpecial
+  const selectedSpot = selectedSpotDetail ?? spots.find((spot) => spot.id === selectedSpotId) ?? null;
+  const isTourSpot = selectedSpot?.spotType === "TOUR";
+  const isSelectedSpecial = !isTourSpot && selectedSpotStory?.storyType === "special";
+  const nextSpecialMonth = getNextSpecialMonth(
+    selectedSpotSpecialMonths,
+    selectedSpotStory?.month ?? new Date().getMonth() + 1,
+  );
+  const selectedSpotMessage = selectedSpot
+    ? isTourSpot
+      ? t.tourBasicGuideMessage
+      : isSelectedSpecial
       ? t.specialGuideMessage
-      : selectedLocation.alwaysBasicGuideOnly
-        ? t.visitInPersonMessage
-        : t.revisitWarning(NEXT_SPECIAL_GUIDE_MONTH[selectedLocation.id])
+      : nextSpecialMonth
+        ? t.revisitWarning(nextSpecialMonth)
+        : t.visitInPersonMessage
     : "";
+
+  useEffect(() => {
+    let isActive = true;
+
+    getSpots()
+      .then((nextSpots) => {
+        if (!isActive) return;
+        setSpots(nextSpots);
+        setHasMapError(false);
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        console.error("[map] spots failed", error);
+        setHasMapError(true);
+      })
+      .finally(() => {
+        if (isActive) setIsLoadingSpots(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedSpotId === null) {
+      setSelectedSpotDetail(null);
+      setSelectedSpotStory(null);
+      setSelectedSpotSpecialMonths([]);
+      return;
+    }
+
+    let isActive = true;
+    setSelectedSpotStory(null);
+    setSelectedSpotSpecialMonths([]);
+
+    const spotSummary = spots.find((spot) => spot.id === selectedSpotId);
+    const isTourSummary = spotSummary?.spotType === "TOUR";
+
+    Promise.allSettled([
+      getSpotDetail(selectedSpotId),
+      isTourSummary ? Promise.resolve(null) : getSpotStory(selectedSpotId, locale),
+      isTourSummary ? Promise.resolve([]) : getSpotSpecialMonths(selectedSpotId),
+    ])
+      .then(([detailResult, storyResult, monthsResult]) => {
+        if (!isActive) return;
+
+        if (detailResult.status === "fulfilled") {
+          setSelectedSpotDetail(detailResult.value);
+        } else {
+          const message = detailResult.reason instanceof Error ? detailResult.reason.message : t.mapLoadError;
+          console.error(`[map] spot detail failed ${message}`);
+        }
+
+        if (storyResult.status === "fulfilled") {
+          setSelectedSpotStory(storyResult.value);
+        } else {
+          const message = storyResult.reason instanceof Error ? storyResult.reason.message : t.mapLoadError;
+          console.error(`[map] spot story failed ${message}`);
+        }
+
+        if (monthsResult.status === "fulfilled") {
+          setSelectedSpotSpecialMonths(monthsResult.value);
+        } else {
+          const message = monthsResult.reason instanceof Error ? monthsResult.reason.message : t.mapLoadError;
+          console.error(`[map] spot special months failed ${message}`);
+        }
+      })
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, selectedSpotId, spots, t.mapLoadError]);
 
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -47,27 +132,18 @@ export default function MapScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.mapArea}>
-        {/* Placeholder terrain — swapped for a real map (react-native-maps or
-            similar) once GPS-based positioning lands; see MAP_LOCATIONS. */}
-        <LinearGradient colors={["#d9e8d2", "#a9c9a0"]} style={StyleSheet.absoluteFill} />
+        <KakaoMapView
+          spots={spots}
+          locale={locale}
+          selectedSpotId={selectedSpotId}
+          onSelectSpot={setSelectedSpotId}
+        />
 
-        {MAP_LOCATIONS.map((location) => {
-          const isSpecial = SPECIAL_GUIDE_LOCATION_SET.has(location.id);
-          return (
-            <MapPin
-              key={location.id}
-              style={{ top: location.top, left: location.left }}
-              color={isSpecial ? SPECIAL_GUIDE_COLOR : location.defaultColor}
-              icon={location.icon}
-              label={t.pins[location.id]}
-              containerWidth={windowWidth}
-              highlighted={selectedLocationId === location.id}
-              onPress={() => setSelectedLocationId(location.id)}
-            />
-          );
-        })}
-
-        <LocationBeacon style={{ top: "44%", left: "50%" }} />
+        {(isLoadingSpots || hasMapError) && (
+          <View style={[styles.mapStatusPill, hasMapError && styles.mapStatusPillError]}>
+            <Text style={styles.mapStatusText}>{hasMapError ? t.mapLoadError : t.mapLoading}</Text>
+          </View>
+        )}
 
         <View style={styles.guideButtonGroup}>
           <Pressable
@@ -93,12 +169,12 @@ export default function MapScreen() {
           onSelectLocale={handleSelectLocale}
         />
 
-        {selectedLocation && (
+        {selectedSpot && (
           <View style={styles.detailCardWrapper}>
             <View style={styles.detailCard}>
               <Pressable
                 style={styles.detailCardCloseButton}
-                onPress={() => setSelectedLocationId(null)}
+                onPress={() => setSelectedSpotId(null)}
                 hitSlop={8}>
                 <FontAwesome5 name="times" size={12} color="#8b7b73" solid />
               </Pressable>
@@ -117,9 +193,14 @@ export default function MapScreen() {
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.detailCardTitle}>{t.pins[selectedLocation.id]}</Text>
+                <Text style={styles.detailCardTitle}>{getLocalizedSpotName(selectedSpot, locale)}</Text>
+                {selectedSpotDetail?.address && (
+                  <Text style={styles.detailCardAddress} numberOfLines={1}>
+                    {selectedSpotDetail.address}
+                  </Text>
+                )}
                 <View style={[styles.detailCardOverlay, isSelectedSpecial && styles.detailCardOverlaySpecial]}>
-                  <Text style={styles.detailCardOverlayText}>{selectedLocationMessage}</Text>
+                  <Text style={styles.detailCardOverlayText}>{selectedSpotMessage}</Text>
                 </View>
               </View>
               {/* Tapping this is a stand-in trigger for now. Eventually arriving
@@ -127,7 +208,19 @@ export default function MapScreen() {
                   camera automatically instead of requiring a manual tap. */}
               <Pressable
                 style={({ pressed }) => [styles.detailCardPlayButton, pressed && styles.detailCardPlayButtonPressed]}
-                onPress={() => router.push({ pathname: "/ar-camera", params: { locationId: selectedLocation.id } })}>
+                onPress={() =>
+                  router.push({
+                    pathname: "/ar-camera",
+                    params: {
+                      spotId: String(selectedSpot.id),
+                      spotName: getLocalizedSpotName(selectedSpot, locale),
+                      ...(SPOT_ID_TO_LOCATION_ID[selectedSpot.id]
+                        ? { locationId: SPOT_ID_TO_LOCATION_ID[selectedSpot.id] }
+                        : {}),
+                      ...(selectedSpotStory ? { storyId: String(selectedSpotStory.storyId) } : {}),
+                    },
+                  })
+                }>
                 <FontAwesome5 name="volume-up" size={18} color="#fff" solid />
               </Pressable>
             </View>
@@ -148,6 +241,11 @@ export default function MapScreen() {
   );
 }
 
+function getNextSpecialMonth(months: number[], currentMonth: number) {
+  const sortedMonths = [...new Set(months)].sort((a, b) => a - b);
+  return sortedMonths.find((month) => month > currentMonth) ?? sortedMonths[0] ?? null;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -163,6 +261,28 @@ const styles = StyleSheet.create({
     bottom: "24.4%",
     right: "4.3%",
     opacity: 0.6,
+  },
+  mapStatusPill: {
+    position: "absolute",
+    left: "7.4%",
+    right: "7.4%",
+    bottom: "17%",
+    zIndex: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(184,134,11,0.18)",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  mapStatusPillError: {
+    borderColor: "rgba(128,0,0,0.22)",
+  },
+  mapStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#800000",
+    textAlign: "center",
   },
   guideCircleButton: {
     width: 48,
@@ -243,6 +363,11 @@ const styles = StyleSheet.create({
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 18,
     color: "#1b1b1b",
+  },
+  detailCardAddress: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#8b7b73",
   },
   detailCardOverlay: {
     backgroundColor: "rgba(184,134,11,0.2)",

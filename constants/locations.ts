@@ -30,6 +30,14 @@ export const MAP_LOCATIONS: MapLocationData[] = [
   { id: "gungnamji", top: "56%", left: "38%", defaultColor: "#800000", icon: "gopuram" },
 ];
 
+export const SPOT_ID_TO_LOCATION_ID: Partial<Record<number, LocationId>> = {
+  1: "busosanseong",
+  3: "pagoda",
+  4: "royalTombs",
+  6: "gungnamji",
+  9: "museum",
+};
+
 // Gold pin color for whichever locations currently offer the special guide —
 // exact Figma color.
 export const SPECIAL_GUIDE_COLOR = "#b8860b";

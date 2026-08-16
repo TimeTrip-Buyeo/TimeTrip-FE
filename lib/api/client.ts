@@ -117,6 +117,10 @@ export function publicPost<T>(path: string, body?: unknown): Promise<T> {
   return rawRequest<T>(path, { method: "POST", body });
 }
 
+export function publicGet<T>(path: string): Promise<T> {
+  return rawRequest<T>(path);
+}
+
 export function apiGet<T>(path: string): Promise<T> {
   return authedRequest<T>(path);
 }
