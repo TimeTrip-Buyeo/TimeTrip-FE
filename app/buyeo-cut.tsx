@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { ALBUM_ENTRIES, type AlbumEntry } from "@/constants/album";
-import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import type { LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
@@ -52,21 +51,14 @@ type PickerItem = {
   id: string;
   locationId: LocationId;
   source: ImageSourcePropType;
-  isPlaceholder: boolean;
   poseImage?: ImageSourcePropType;
   poseAspectRatio?: number;
 };
 
 // Rebuilt to match Figma's "부여세컷 선택" → "콜라주 만들기" flow (nodes 0:1418,
-// 0:1670, 0:580/0:612) directly: the picker grid shows every photo the album
-// already has for a location — real captures first, then that location's own
-// album/collectible artwork repeated to fill out its photoCount — exactly
-// what album.tsx's own detail grid does, so this screen never looks sparser
-// than the Album page for the same location. Selecting 3 leads into a
-// collage builder (frame choice, save, share) instead of a second Figma
-// route, since the flow is linear/wizard-like rather than deep-linkable —
-// same "local view state" approach collection.tsx/album.tsx already use for
-// their own multi-step screens.
+// 0:1670, 0:580/0:612) directly. The picker grid only shows real captures
+// from the current app session; mock album/collectible artwork is intentionally
+// excluded so tests don't accidentally select placeholder photos.
 export default function BuyeoCutScreen() {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
@@ -86,9 +78,6 @@ export default function BuyeoCutScreen() {
       .map((id) => {
         const entry = ALBUM_ENTRIES[id]!;
         const capturedPhotos = photosByLocation[id] ?? [];
-        const collectible = COLLECTIBLES[id];
-        const placeholderImage = collectible?.obtained ? collectible.image : entry.thumbnail;
-        const placeholderCount = Math.max(entry.photoCount - capturedPhotos.length, 0);
         const items: PickerItem[] = [
           ...capturedPhotos.map((photo) => {
             const pose = PERSON_POSES[id]?.find((candidate) => candidate.id === photo.poseId);
@@ -96,19 +85,10 @@ export default function BuyeoCutScreen() {
               id: photo.id,
               locationId: id,
               source: { uri: photo.uri },
-              isPlaceholder: false,
               poseImage: pose?.image,
               poseAspectRatio: pose?.aspectRatio,
             };
           }),
-          ...(placeholderImage
-            ? Array.from({ length: placeholderCount }, (_, index) => ({
-                id: `${id}-placeholder-${index}`,
-                locationId: id,
-                source: placeholderImage,
-                isPlaceholder: true,
-              }))
-            : []),
         ];
         return { id, entry, items };
       })

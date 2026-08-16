@@ -8,7 +8,6 @@ import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { LangPill } from "@/components/lang-pill";
 import { ALBUM_ENTRIES } from "@/constants/album";
-import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
@@ -229,8 +228,6 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const collectible = COLLECTIBLES[locationId];
-  const photo = collectible?.obtained ? collectible : undefined;
   const { photosByLocation, removePhoto } = useCapturedPhotos();
   const capturedPhotos = photosByLocation[locationId] ?? [];
   const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
@@ -265,7 +262,7 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
     </View>
   );
 
-  if (!photo && mergedCapturedPhotos.length === 0) {
+  if (mergedCapturedPhotos.length === 0) {
     // Matches Figma "앨범( 사진 없을때)", node 0:384, literally.
     return (
       <View style={styles.container}>
@@ -313,11 +310,8 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
         {header}
         <View style={styles.photoSectionHeader}>
           <Text style={styles.themeLabel}>{entry?.name[locale] ?? t.themeLabel}</Text>
-          {(mergedCapturedPhotos.length > 0 || photo) && (
+          {mergedCapturedPhotos.length > 0 && (
             <View style={styles.editControls}>
-              {/* Placeholder slots have no real timestamp, so reordering them
-                  is meaningless — only show sort once there's more than one
-                  real capture to reorder. */}
               {mergedCapturedPhotos.length > 0 && (
                 <Pressable
                   style={[styles.editControlButton, sortOldestFirst && styles.editControlButtonActive]}
@@ -341,10 +335,6 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
           )}
         </View>
         <View style={styles.photoGrid}>
-          {/* Real captures (from the person camera) lead the grid; the rest
-              is filled out to the entry's known photoCount (법왕: 6, 무왕: 3)
-              with the same placeholder illustration Figma's own photo-picker
-              screens (node 0:1418) reuse across every slot in a theme. */}
           {displayedCapturedPhotos.map((captured) => {
             const isRemote = captured.id.startsWith("remote-");
             // A locally-captured photo that already synced to the server
@@ -376,27 +366,6 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
               </Pressable>
             );
           })}
-          {/* Placeholder-filled slots stay visible in edit mode too (previously
-              hidden whenever isEditMode was true) — with 0-1 real captures,
-              hiding them made the whole grid go blank the moment edit mode
-              was entered, which read as "delete is broken" even though
-              removePhoto itself worked fine. They're just not deletable
-              (nothing to delete — disabled instead of wired to remove), so
-              tapping into one mid-edit doesn't also navigate away. */}
-          {photo &&
-            Array.from({ length: Math.max((entry?.photoCount ?? 1) - mergedCapturedPhotos.length, 0) }).map((_, index) => (
-              <Pressable
-                key={index}
-                style={({ pressed }) => [
-                  styles.photoCard,
-                  pressed && styles.photoCardPressed,
-                  isEditMode && styles.photoCardDimmed,
-                ]}
-                disabled={isEditMode}
-                onPress={() => router.push({ pathname: "/album", params: { locationId, photo: String(index) } })}>
-                <Image source={photo.image} style={styles.photoImage} resizeMode="cover" />
-              </Pressable>
-            ))}
         </View>
       </ScrollView>
 
@@ -421,14 +390,13 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const collectible = COLLECTIBLES[locationId];
   const { photosByLocation } = useCapturedPhotos();
   const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
 
   const handleShare = () => {
-    const label = captured?.poseLabel || remotePhoto?.collectionItemName || collectible?.name[locale];
+    const label = captured?.poseLabel || remotePhoto?.collectionItemName;
     if (!label) return;
     Share.share({ message: `${label} · ${mapT.pins[locationId]} ${shareSuffix[locale]}` });
   };
@@ -455,12 +423,10 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
             resizeMode="cover"
             onError={retryImageHeaders}
           />
-        ) : (
-          collectible && <Image source={collectible.image} style={styles.viewerPhoto} resizeMode="cover" />
-        )}
-        {(captured?.poseLabel || remotePhoto?.collectionItemName || entry) && (
+        ) : null}
+        {(captured?.poseLabel || remotePhoto?.collectionItemName) && (
           <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || remotePhoto?.collectionItemName || entry?.name[locale]}</Text>
+            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || remotePhoto?.collectionItemName}</Text>
           </View>
         )}
       </View>
@@ -757,9 +723,6 @@ const styles = StyleSheet.create({
   photoCardPressed: {
     opacity: 0.6,
     transform: [{ scale: 0.97 }],
-  },
-  photoCardDimmed: {
-    opacity: 0.4,
   },
   photoImage: {
     width: "100%",
