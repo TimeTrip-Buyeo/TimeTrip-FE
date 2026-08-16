@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,16 +10,68 @@ import { LangPill } from "@/components/lang-pill";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import type { LocationId } from "@/constants/locations";
+import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
+import { toApiUrl } from "@/lib/api/client";
+import { getSelfiePhotoOptions, type SelfiePhotoOption } from "@/lib/api/selfies";
+import { getTokens } from "@/lib/token-storage";
 
 // Figma's "앨범" list (node 0:1079) only ever shows entries it has real
 // content for — it doesn't define a locked/"?" card style the way "도감"
 // does. So this list only renders what's in ALBUM_ENTRIES, nothing invented.
 const ALBUM_LOCATION_IDS = Object.keys(ALBUM_ENTRIES) as LocationId[];
+
+type RemoteAlbumPhoto = SelfiePhotoOption & {
+  id: string;
+  uri: string;
+};
+
+function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
+  const [remotePhotos, setRemotePhotos] = useState<RemoteAlbumPhoto[]>([]);
+  const [imageHeaders, setImageHeaders] = useState<Record<string, string> | undefined>();
+
+  useEffect(() => {
+    getTokens()
+      .then((tokens) => {
+        setImageHeaders(tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined);
+      })
+      .catch(() => setImageHeaders(undefined));
+  }, []);
+
+  useEffect(() => {
+    const spotId = LOCATION_ID_TO_SPOT_ID[locationId];
+    if (!spotId) {
+      setRemotePhotos([]);
+      return;
+    }
+
+    let isActive = true;
+    getSelfiePhotoOptions({ locale, spotId })
+      .then(({ selfiePhotos }) => {
+        if (!isActive) return;
+        setRemotePhotos(
+          selfiePhotos.map((photo) => ({
+            ...photo,
+            id: `remote-${photo.selfiePhotoId}`,
+            uri: toApiUrl(photo.photoUrl),
+          })),
+        );
+      })
+      .catch((error) => {
+        console.error("[album] selfie photos failed", error);
+        if (isActive) setRemotePhotos([]);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, locationId]);
+
+  return { remotePhotos, imageHeaders };
+}
 
 export default function AlbumScreen() {
   const params = useLocalSearchParams<{ locationId?: string; photo?: string }>();
@@ -154,10 +206,15 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
   const photo = collectible?.obtained ? collectible : undefined;
   const { photosByLocation, removePhoto } = useCapturedPhotos();
   const capturedPhotos = photosByLocation[locationId] ?? [];
+  const { remotePhotos, imageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const [isEditMode, setIsEditMode] = useState(false);
   const [sortOldestFirst, setSortOldestFirst] = useState(false);
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const displayedCapturedPhotos = sortOldestFirst ? [...capturedPhotos].reverse() : capturedPhotos;
+  const mergedCapturedPhotos = [
+    ...capturedPhotos,
+    ...remotePhotos.filter((remote) => !capturedPhotos.some((photo) => photo.serverSelfiePhotoId === remote.selfiePhotoId)),
+  ];
+  const displayedCapturedPhotos = sortOldestFirst ? [...mergedCapturedPhotos].reverse() : mergedCapturedPhotos;
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
@@ -178,7 +235,7 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
     </View>
   );
 
-  if (!photo && capturedPhotos.length === 0) {
+  if (!photo && mergedCapturedPhotos.length === 0) {
     // Matches Figma "앨범( 사진 없을때)", node 0:384, literally.
     return (
       <View style={styles.container}>
@@ -226,12 +283,12 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
         {header}
         <View style={styles.photoSectionHeader}>
           <Text style={styles.themeLabel}>{entry?.name[locale] ?? t.themeLabel}</Text>
-          {(capturedPhotos.length > 0 || photo) && (
+          {(mergedCapturedPhotos.length > 0 || photo) && (
             <View style={styles.editControls}>
               {/* Placeholder slots have no real timestamp, so reordering them
                   is meaningless — only show sort once there's more than one
                   real capture to reorder. */}
-              {capturedPhotos.length > 0 && (
+              {mergedCapturedPhotos.length > 0 && (
                 <Pressable
                   style={[styles.editControlButton, sortOldestFirst && styles.editControlButtonActive]}
                   onPress={() => setSortOldestFirst((current) => !current)}
@@ -259,17 +316,22 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
               with the same placeholder illustration Figma's own photo-picker
               screens (node 0:1418) reuse across every slot in a theme. */}
           {displayedCapturedPhotos.map((captured) => {
-            const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId);
+            const pose = "poseId" in captured ? PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId) : undefined;
+            const isRemote = captured.id.startsWith("remote-");
             return (
               <Pressable
                 key={captured.id}
                 style={({ pressed }) => [styles.photoCard, pressed && styles.photoCardPressed]}
                 onPress={() =>
                   isEditMode
-                    ? removePhoto(locationId, captured.id)
+                    ? !isRemote && removePhoto(locationId, captured.id)
                     : router.push({ pathname: "/album", params: { locationId, photo: captured.id } })
                 }>
-                <Image source={{ uri: captured.uri }} style={styles.photoImage} resizeMode="cover" />
+                <Image
+                  source={{ uri: captured.uri, ...(isRemote && imageHeaders ? { headers: imageHeaders } : {}) }}
+                  style={styles.photoImage}
+                  resizeMode="cover"
+                />
                 {pose && (
                   <Image
                     source={pose.image}
@@ -277,7 +339,7 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
                     resizeMode="cover"
                   />
                 )}
-                {isEditMode && (
+                {isEditMode && !isRemote && (
                   <View style={styles.deleteBadge}>
                     <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
                   </View>
@@ -293,7 +355,7 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
               (nothing to delete — disabled instead of wired to remove), so
               tapping into one mid-edit doesn't also navigate away. */}
           {photo &&
-            Array.from({ length: Math.max((entry?.photoCount ?? 1) - capturedPhotos.length, 0) }).map((_, index) => (
+            Array.from({ length: Math.max((entry?.photoCount ?? 1) - mergedCapturedPhotos.length, 0) }).map((_, index) => (
               <Pressable
                 key={index}
                 style={({ pressed }) => [
@@ -332,11 +394,13 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const entry = ALBUM_ENTRIES[locationId];
   const collectible = COLLECTIBLES[locationId];
   const { photosByLocation } = useCapturedPhotos();
+  const { remotePhotos, imageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
+  const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
   const capturedPose = captured && PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId);
 
   const handleShare = () => {
-    const label = captured?.poseLabel || collectible?.name[locale];
+    const label = captured?.poseLabel || remotePhoto?.collectionItemName || collectible?.name[locale];
     if (!label) return;
     Share.share({ message: `${label} · ${mapT.pins[locationId]} ${shareSuffix[locale]}` });
   };
@@ -365,12 +429,18 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
               />
             )}
           </>
+        ) : remotePhoto ? (
+          <Image
+            source={{ uri: remotePhoto.uri, ...(imageHeaders ? { headers: imageHeaders } : {}) }}
+            style={styles.viewerPhoto}
+            resizeMode="cover"
+          />
         ) : (
           collectible && <Image source={collectible.image} style={styles.viewerPhoto} resizeMode="cover" />
         )}
-        {(captured?.poseLabel || entry) && (
+        {(captured?.poseLabel || remotePhoto?.collectionItemName || entry) && (
           <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || entry?.name[locale]}</Text>
+            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || remotePhoto?.collectionItemName || entry?.name[locale]}</Text>
           </View>
         )}
       </View>

@@ -20,6 +20,10 @@ function resolveLocationId(raw: string | string[] | undefined): LocationId {
   return value && KNOWN_LOCATION_IDS.has(value) ? (value as LocationId) : "pagoda";
 }
 
+function resolveSingleParam(raw: string | string[] | undefined) {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
 
@@ -28,7 +32,12 @@ const ACTION_BAR_CONTENT_HEIGHT = 105;
 // file — this project has no view-shot/native compositing module installed
 // yet), and capture uses expo-camera's own takePictureAsync.
 export default function PersonCameraScreen() {
-  const params = useLocalSearchParams<{ locationId?: string }>();
+  const params = useLocalSearchParams<{
+    locationId?: string;
+    spotId?: string;
+    storyId?: string;
+    collectionItemId?: string;
+  }>();
   const locationId = resolveLocationId(params.locationId);
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
@@ -119,6 +128,11 @@ export default function PersonCameraScreen() {
           poseId: selectedPose?.id ?? "",
           poseLabel: selectedPose?.label[locale] ?? "",
           uri: photo.uri,
+          ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
+          ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
+          ...(resolveSingleParam(params.collectionItemId)
+            ? { collectionItemId: resolveSingleParam(params.collectionItemId)! }
+            : {}),
         },
       });
     } finally {

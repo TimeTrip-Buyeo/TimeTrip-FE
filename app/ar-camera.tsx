@@ -13,6 +13,7 @@ import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { MAP_LOCATIONS, SPOT_ID_TO_LOCATION_ID, type LocationId } from "@/constants/locations";
 import { arCameraText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { getCollectionItems, type CollectionItem } from "@/lib/api/collections";
 
 // Placeholder — no real audio guide asset is wired up yet, so pressing play
 // simulates a few seconds of playback to demonstrate the finished-gating
@@ -39,10 +40,18 @@ function resolveSpotTitle(raw: string | string[] | undefined) {
   return value || null;
 }
 
+function resolveNumberParam(raw: string | string[] | undefined) {
+  const value = resolveSingleParam(raw);
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
 export default function ArCameraScreen() {
   const params = useLocalSearchParams<{ locationId?: string; spotId?: string; storyId?: string; spotName?: string }>();
   const locationId = resolveLocationId(params.locationId, params.spotId);
   const spotTitle = resolveSpotTitle(params.spotName);
+  const spotId = resolveNumberParam(params.spotId);
+  const storyId = resolveNumberParam(params.storyId);
   const insets = useSafeAreaInsets();
 
   const { locale, setLocale } = useLanguage();
@@ -55,6 +64,7 @@ export default function ArCameraScreen() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isAudioFinished, setIsAudioFinished] = useState(false);
   const [isAcquiredModalVisible, setIsAcquiredModalVisible] = useState(false);
+  const [collectionItem, setCollectionItem] = useState<CollectionItem | null>(null);
   const collectible = COLLECTIBLES[locationId];
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -64,6 +74,28 @@ export default function ArCameraScreen() {
       requestPermission();
     }
   }, [permission, requestPermission]);
+
+  useEffect(() => {
+    if (!spotId || !storyId) {
+      setCollectionItem(null);
+      return;
+    }
+
+    let isActive = true;
+    getCollectionItems(storyId, { spotId, locale, type: "CHARACTER" })
+      .then(({ items }) => {
+        if (!isActive) return;
+        setCollectionItem(items[0] ?? null);
+      })
+      .catch((error) => {
+        console.error("[ar-camera] collection item lookup failed", error);
+        if (isActive) setCollectionItem(null);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, spotId, storyId]);
 
   const mapT = mapScreenText[locale];
   const t = arCameraText[locale];
@@ -229,7 +261,15 @@ export default function ArCameraScreen() {
             collectible.type === "person"
               ? () => {
                   setIsAcquiredModalVisible(false);
-                  router.push({ pathname: "/person-camera", params: { locationId } });
+                  router.push({
+                    pathname: "/person-camera",
+                    params: {
+                      locationId,
+                      ...(spotId ? { spotId: String(spotId) } : {}),
+                      ...(storyId ? { storyId: String(storyId) } : {}),
+                      ...(collectionItem ? { collectionItemId: String(collectionItem.collectionItemId) } : {}),
+                    },
+                  });
                 }
               : undefined
           }

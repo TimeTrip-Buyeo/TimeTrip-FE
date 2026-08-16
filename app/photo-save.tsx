@@ -12,18 +12,39 @@ import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText, shareSuffix } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
+import { saveSelfiePhoto } from "@/lib/api/selfies";
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
+
+function resolveSingleParam(raw: string | string[] | undefined) {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+function resolveNumberParam(raw: string | string[] | undefined) {
+  const value = Number(resolveSingleParam(raw));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
 // viewer, but the center action is "download/save" (not share) and there's
 // a small share button pinned to the photo's own corner instead.
 export default function PhotoSaveScreen() {
-  const params = useLocalSearchParams<{ locationId?: string; poseId?: string; poseLabel?: string; uri?: string }>();
+  const params = useLocalSearchParams<{
+    locationId?: string;
+    poseId?: string;
+    poseLabel?: string;
+    uri?: string;
+    spotId?: string;
+    storyId?: string;
+    collectionItemId?: string;
+  }>();
   const locationId = KNOWN_LOCATION_IDS.has(params.locationId ?? "") ? (params.locationId as LocationId) : "pagoda";
   const poseId = params.poseId ?? "";
   const poseLabel = params.poseLabel ?? "";
   const uri = params.uri ?? "";
+  const spotId = resolveNumberParam(params.spotId);
+  const storyId = resolveNumberParam(params.storyId);
+  const collectionItemId = resolveNumberParam(params.collectionItemId);
 
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
@@ -35,6 +56,7 @@ export default function PhotoSaveScreen() {
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
 
   const handleShare = () => {
@@ -46,11 +68,23 @@ export default function PhotoSaveScreen() {
   // linked in — it's already installed but needs a native rebuild
   // (`npx expo run:android`) before captureRef() is safe to call, so this
   // still saves the raw camera frame for now.
-  const handleSave = () => {
-    if (isSaved || !uri) return;
-    addPhoto({ locationId, poseId, poseLabel, uri });
-    setIsSaved(true);
-    setShowSaveToast(true);
+  const handleSave = async () => {
+    if (isSaved || isSaving || !uri) return;
+    setIsSaving(true);
+    try {
+      let serverSelfiePhotoId: number | undefined;
+      if (spotId && storyId && collectionItemId) {
+        const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: uri });
+        serverSelfiePhotoId = saved.selfiePhotoId;
+      }
+      addPhoto({ locationId, poseId, poseLabel, uri, serverSelfiePhotoId });
+      setIsSaved(true);
+      setShowSaveToast(true);
+    } catch (error) {
+      console.error("[photo-save] selfie photo save failed", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -103,7 +137,7 @@ export default function PhotoSaveScreen() {
           <Text style={styles.sideLabel}>{albumT.buyeoCutLabel}</Text>
         </Pressable>
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
+        <Pressable style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
           <FontAwesome5 name={isSaved ? "check" : "download"} size={24} color="#fff" solid />
         </Pressable>
 

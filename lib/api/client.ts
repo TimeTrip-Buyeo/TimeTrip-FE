@@ -22,7 +22,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://10.0.2.2:8081";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://10.0.2.2:8081";
 
 if (!process.env.EXPO_PUBLIC_API_BASE_URL) {
   console.warn(`[api] EXPO_PUBLIC_API_BASE_URL이 설정되지 않아 기본값을 사용합니다: ${API_BASE_URL}`);
@@ -52,6 +52,20 @@ async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  });
+
+  const json = (await response.json()) as ApiEnvelope<T>;
+  if (!json.isSuccess) {
+    throw new ApiError(response.status, json.code, json.message);
+  }
+  return json.result;
+}
+
+async function rawMultipartRequest<T>(path: string, formData: FormData, headers: Record<string, string> = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
   });
 
   const json = (await response.json()) as ApiEnvelope<T>;
@@ -113,6 +127,26 @@ async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T
   }
 }
 
+async function authedMultipartRequest<T>(path: string, formData: FormData): Promise<T> {
+  const tokens = await getTokens();
+  const headers: Record<string, string> = tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : {};
+
+  try {
+    return await rawMultipartRequest<T>(path, formData, headers);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401 || !tokens) throw error;
+
+    const refreshed = await reissueOnce(tokens.refreshToken);
+    if (!refreshed) {
+      await clearTokens();
+      unauthorizedListener?.();
+      throw error;
+    }
+
+    return rawMultipartRequest<T>(path, formData, { Authorization: `Bearer ${refreshed.accessToken}` });
+  }
+}
+
 export function publicPost<T>(path: string, body?: unknown): Promise<T> {
   return rawRequest<T>(path, { method: "POST", body });
 }
@@ -129,6 +163,15 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return authedRequest<T>(path, { method: "POST", body });
 }
 
+export function apiMultipartPost<T>(path: string, formData: FormData): Promise<T> {
+  return authedMultipartRequest<T>(path, formData);
+}
+
 export function apiDelete<T>(path: string): Promise<T> {
   return authedRequest<T>(path, { method: "DELETE" });
+}
+
+export function toApiUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//.test(pathOrUrl)) return pathOrUrl;
+  return `${API_BASE_URL}${pathOrUrl}`;
 }

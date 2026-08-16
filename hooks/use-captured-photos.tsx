@@ -10,6 +10,7 @@ export type CapturedPhoto = {
   /** file:// URI from expo-camera's takePictureAsync — the un-composited camera frame. */
   uri: string;
   takenAt: number;
+  serverSelfiePhotoId?: number;
 };
 
 type CapturedPhotosContextValue = {
