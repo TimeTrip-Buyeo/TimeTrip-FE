@@ -182,14 +182,21 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
   const isPerson = collectible?.type === "person";
   const spotId = LOCATION_ID_TO_SPOT_ID[locationId] ?? null;
   const [guideRouteParams, setGuideRouteParams] = useState<Record<string, string>>({});
+  // Gates the guide/photo buttons until guideRouteParams finishes loading —
+  // without this, a tap that lands before the async lookup resolves sends
+  // spotId/storyId/collectionItemId as empty, so photo-save silently skips
+  // the server save with no error shown.
+  const [isGuideParamsLoading, setIsGuideParamsLoading] = useState(spotId !== null);
 
   useEffect(() => {
     if (!collectible || spotId === null) {
       setGuideRouteParams({});
+      setIsGuideParamsLoading(false);
       return;
     }
 
     let isActive = true;
+    setIsGuideParamsLoading(true);
     getStoryTopics({ locale, spotId, storyType: "special" })
       .then(async ({ topics }) => {
         const story = topics[0];
@@ -210,6 +217,9 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
       .catch((error) => {
         console.error("[collection] guide route lookup failed", error);
         if (isActive) setGuideRouteParams(spotId === null ? {} : { spotId: String(spotId) });
+      })
+      .finally(() => {
+        if (isActive) setIsGuideParamsLoading(false);
       });
 
     return () => {
@@ -309,14 +319,16 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
 
         <View style={[styles.actionButtons, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
-            style={styles.primaryButton}
+            style={[styles.primaryButton, isGuideParamsLoading && styles.primaryButtonDisabled]}
+            disabled={isGuideParamsLoading}
             onPress={() => router.push({ pathname: "/ar-camera", params: { locationId, ...guideRouteParams } })}>
             <FontAwesome5 name="headphones" size={16} color="#fff" solid />
             <Text style={styles.primaryButtonText}>{t.listenToAudioGuide}</Text>
           </Pressable>
           {isPerson && (
             <Pressable
-              style={styles.primaryButton}
+              style={[styles.primaryButton, isGuideParamsLoading && styles.primaryButtonDisabled]}
+              disabled={isGuideParamsLoading}
               onPress={() => router.push({ pathname: "/person-camera", params: { locationId, ...guideRouteParams } })}>
               <FontAwesome5 name="camera" size={16} color="#fff" solid />
               <Text style={styles.primaryButtonText}>{t.takePhotoWithFigure}</Text>
@@ -638,6 +650,9 @@ const styles = StyleSheet.create({
     height: 52,
     backgroundColor: "#800000",
     borderRadius: 16,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
   },
   primaryButtonText: {
     fontFamily: "serif",

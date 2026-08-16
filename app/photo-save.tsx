@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -61,29 +61,46 @@ export default function PhotoSaveScreen() {
   const collectionItemId = resolveNumberParam(params.collectionItemId);
 
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
   const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
-  const personOverlayHeight = windowHeight * PERSON_OVERLAY_SCREEN_HEIGHT_RATIO;
   const compositeRef = useRef<View>(null);
+  // Measured (not windowHeight) — this card is shrunk by the header/action
+  // bar around it, unlike person-camera's full-screen container that
+  // PERSON_OVERLAY_SCREEN_HEIGHT_RATIO was tuned against. Sizing off the
+  // window here made the saved/shared overlay noticeably larger than what
+  // was actually framed in the live camera preview.
+  const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
+  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_SCREEN_HEIGHT_RATIO;
+  const handlePhotoWrapperLayout = (event: LayoutChangeEvent) => {
+    setPhotoWrapperHeight(event.nativeEvent.layout.height);
+  };
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [showShareUnavailableToast, setShowShareUnavailableToast] = useState(false);
 
-  const captureCompositePhoto = () => {
-    if (!compositeRef.current) return Promise.resolve(uri);
-    return captureRef(compositeRef.current, {
-      format: "jpg",
-      quality: 0.9,
-      result: "tmpfile",
-    });
+  const captureCompositePhoto = async () => {
+    if (!compositeRef.current) return uri;
+    try {
+      return await captureRef(compositeRef.current, {
+        format: "jpg",
+        quality: 0.9,
+        result: "tmpfile",
+      });
+    } catch (error) {
+      // e.g. an old dev client running before react-native-view-shot's
+      // native module was linked — fall back to the raw frame instead of
+      // letting this throw abort the whole save/share silently.
+      console.error("[photo-save] view-shot capture failed, using raw camera frame", error);
+      return uri;
+    }
   };
 
   const handleShare = async () => {
@@ -91,10 +108,16 @@ export default function PhotoSaveScreen() {
     setIsSharing(true);
     try {
       const sharing = await getSharingModule();
-      if (!sharing) return;
+      if (!sharing) {
+        setShowShareUnavailableToast(true);
+        return;
+      }
 
       const isAvailable = await sharing.isAvailableAsync?.();
-      if (!isAvailable || !sharing.shareAsync) return;
+      if (!isAvailable || !sharing.shareAsync) {
+        setShowShareUnavailableToast(true);
+        return;
+      }
 
       const compositeUri = await captureCompositePhoto();
       await sharing.shareAsync(compositeUri, {
@@ -103,6 +126,7 @@ export default function PhotoSaveScreen() {
       });
     } catch (error) {
       console.error("[photo-save] selfie photo share failed", error);
+      setShowShareUnavailableToast(true);
     } finally {
       setIsSharing(false);
     }
@@ -117,8 +141,14 @@ export default function PhotoSaveScreen() {
       const compositeUri = await captureCompositePhoto();
       let serverSelfiePhotoId: number | undefined;
       if (spotId !== null && storyId !== null && collectionItemId !== null) {
-        const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
-        serverSelfiePhotoId = saved.selfiePhotoId;
+        try {
+          const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
+          serverSelfiePhotoId = saved.selfiePhotoId;
+        } catch (error) {
+          // Server sync is best-effort — the local save below must still
+          // happen so a network hiccup doesn't lose the capture entirely.
+          console.error("[photo-save] server selfie sync failed, keeping local copy only", error);
+        }
       }
       addPhoto({ locationId, poseId, poseLabel, uri: compositeUri, serverSelfiePhotoId });
       setIsSaved(true);
@@ -136,6 +166,12 @@ export default function PhotoSaveScreen() {
     return () => clearTimeout(timer);
   }, [showSaveToast]);
 
+  useEffect(() => {
+    if (!showShareUnavailableToast) return;
+    const timer = setTimeout(() => setShowShareUnavailableToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [showShareUnavailableToast]);
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
@@ -151,7 +187,7 @@ export default function PhotoSaveScreen() {
         </View>
       </View>
 
-      <View style={styles.photoWrapper}>
+      <View style={styles.photoWrapper} onLayout={handlePhotoWrapperLayout}>
         <View ref={compositeRef} style={styles.compositePhoto} collapsable={false}>
           {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
           {pose && (
@@ -173,7 +209,13 @@ export default function PhotoSaveScreen() {
           <FontAwesome5 name="share-alt" size={16} color="#b8860b" solid />
         </Pressable>
 
-        {showSaveToast && <SaveToast title={t.photoSavedToastTitle} body={t.photoSavedToastBody} />}
+        {showSaveToast ? (
+          <SaveToast title={t.photoSavedToastTitle} body={t.photoSavedToastBody} />
+        ) : (
+          showShareUnavailableToast && (
+            <SaveToast title={t.shareUnavailableToastTitle} body={t.shareUnavailableToastBody} />
+          )
+        )}
       </View>
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>

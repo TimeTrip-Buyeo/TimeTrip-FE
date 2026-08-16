@@ -141,6 +141,27 @@ export function apiDelete<T>(path: string): Promise<T> {
   return authedRequest<T>(path, { method: "DELETE" });
 }
 
+export async function getAuthHeaders(): Promise<Record<string, string> | undefined> {
+  const tokens = await getTokens();
+  return tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined;
+}
+
+// For non-fetch consumers (e.g. RN <Image> headers) that never go through
+// authedRequest's automatic 401 → reissue → retry path, so a stale token
+// would otherwise fail forever with no self-healing.
+export async function refreshAuthHeaders(): Promise<Record<string, string> | undefined> {
+  const tokens = await getTokens();
+  if (!tokens) return undefined;
+
+  const refreshed = await reissueOnce(tokens.refreshToken);
+  if (!refreshed) {
+    await clearTokens();
+    unauthorizedListener?.();
+    return undefined;
+  }
+  return { Authorization: `Bearer ${refreshed.accessToken}` };
+}
+
 export function toApiUrl(pathOrUrl: string): string {
   if (/^https?:\/\//.test(pathOrUrl)) return pathOrUrl;
   return `${API_BASE_URL}${pathOrUrl}`;

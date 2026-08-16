@@ -963,6 +963,8 @@ type PersonCameraText = {
   timerOptionLabel: (seconds: number) => string;
   photoSavedToastTitle: string;
   photoSavedToastBody: string;
+  shareUnavailableToastTitle: string;
+  shareUnavailableToastBody: string;
 };
 
 export const personCameraText: Record<Locale, PersonCameraText> = {
@@ -979,6 +981,8 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}초`,
     photoSavedToastTitle: '앨범에 저장되었습니다',
     photoSavedToastBody: '확인해 보세요!',
+    shareUnavailableToastTitle: '공유할 수 없어요',
+    shareUnavailableToastBody: '잠시 후 다시 시도해 주세요.',
   },
   en: {
     posePickerLabel: 'Choose a Pose',
@@ -993,6 +997,8 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}s`,
     photoSavedToastTitle: 'Saved to your album',
     photoSavedToastBody: 'Take a look!',
+    shareUnavailableToastTitle: "Can't share right now",
+    shareUnavailableToastBody: 'Please try again in a moment.',
   },
   zh: {
     posePickerLabel: '选择姿势',
@@ -1007,6 +1013,8 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}秒`,
     photoSavedToastTitle: '已保存到相册',
     photoSavedToastBody: '快去看看吧！',
+    shareUnavailableToastTitle: '暂时无法分享',
+    shareUnavailableToastBody: '请稍后再试一次。',
   },
   ja: {
     posePickerLabel: 'ポーズ設定',
@@ -1021,5 +1029,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}秒`,
     photoSavedToastTitle: 'アルバムに保存しました',
     photoSavedToastBody: '確認してみてください！',
+    shareUnavailableToastTitle: '共有できませんでした',
+    shareUnavailableToastBody: 'しばらくしてからもう一度お試しください。',
   },
 };

@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -12,31 +12,25 @@ import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
-import { useCapturedPhotos } from "@/hooks/use-captured-photos";
+import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-import { toApiUrl } from "@/lib/api/client";
-import { getSelfiePhotoOptions, type SelfiePhotoOption } from "@/lib/api/selfies";
-import { getTokens } from "@/lib/token-storage";
+import { getAuthHeaders, refreshAuthHeaders, toApiUrl } from "@/lib/api/client";
+import { getSelfiePhotoOptions } from "@/lib/api/selfies";
+import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
 
 // Figma's "앨범" list (node 0:1079) only ever shows entries it has real
 // content for — it doesn't define a locked/"?" card style the way "도감"
 // does. So this list only renders what's in ALBUM_ENTRIES, nothing invented.
 const ALBUM_LOCATION_IDS = Object.keys(ALBUM_ENTRIES) as LocationId[];
 
-type RemoteAlbumPhoto = SelfiePhotoOption & {
-  id: string;
-  uri: string;
-};
-
-type RemoteAlbumPhotoCacheEntry = {
-  photos: RemoteAlbumPhoto[];
-};
-
-const remoteAlbumPhotoCache = new Map<string, RemoteAlbumPhotoCacheEntry>();
+function getTakenAtMillis(takenAt: number | string): number {
+  return typeof takenAt === "number" ? takenAt : new Date(takenAt).getTime();
+}
 
 function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
   const [remotePhotos, setRemotePhotos] = useState<RemoteAlbumPhoto[]>([]);
   const [imageHeaders, setImageHeaders] = useState<Record<string, string> | undefined>();
+  const hasRetriedHeaders = useRef(false);
 
   useEffect(() => {
     const spotId = LOCATION_ID_TO_SPOT_ID[locationId];
@@ -46,32 +40,35 @@ function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
       return;
     }
 
-    const cacheKey = `${locationId}:${locale}`;
-    const cached = remoteAlbumPhotoCache.get(cacheKey);
+    hasRetriedHeaders.current = false;
+    let isActive = true;
+
+    const cached = getCachedRemoteAlbumPhotos(locationId, locale);
     if (cached) {
       setRemotePhotos(cached.photos);
-      getTokens()
-        .then((tokens) => {
-          setImageHeaders(tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined);
+      getAuthHeaders()
+        .then((headers) => {
+          if (isActive) setImageHeaders(headers);
         })
-        .catch(() => setImageHeaders(undefined));
-      return;
+        .catch(() => {
+          if (isActive) setImageHeaders(undefined);
+        });
+      return () => {
+        isActive = false;
+      };
     }
 
-    let isActive = true;
-    getSelfiePhotoOptions({ locale, spotId })
-      .then(async ({ selfiePhotos }) => {
-        const tokens = await getTokens();
-        const nextImageHeaders = tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined;
+    Promise.all([getSelfiePhotoOptions({ locale, spotId }), getAuthHeaders()])
+      .then(([{ selfiePhotos }, headers]) => {
         const nextPhotos = selfiePhotos.map((photo) => ({
           ...photo,
           id: `remote-${photo.selfiePhotoId}`,
           uri: toApiUrl(photo.photoUrl),
         }));
         if (!isActive) return;
-        remoteAlbumPhotoCache.set(cacheKey, { photos: nextPhotos });
+        setCachedRemoteAlbumPhotos(locationId, locale, nextPhotos);
         setRemotePhotos(nextPhotos);
-        setImageHeaders(nextImageHeaders);
+        setImageHeaders(headers);
       })
       .catch((error) => {
         console.error("[album] selfie photos failed", error);
@@ -86,7 +83,21 @@ function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
     };
   }, [locale, locationId]);
 
-  return { remotePhotos, imageHeaders };
+  // A stale access token makes remote thumbnails 401 with no retry from RN's
+  // <Image> (unlike the JSON API path, which auto-reissues via
+  // authedRequest) — give each mount a single chance to refresh the token
+  // and retry once an image actually fails to load.
+  const retryImageHeaders = useCallback(() => {
+    if (hasRetriedHeaders.current) return;
+    hasRetriedHeaders.current = true;
+    refreshAuthHeaders()
+      .then((headers) => {
+        if (headers) setImageHeaders(headers);
+      })
+      .catch(() => {});
+  }, []);
+
+  return { remotePhotos, imageHeaders, retryImageHeaders };
 }
 
 export default function AlbumScreen() {
@@ -222,14 +233,17 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
   const photo = collectible?.obtained ? collectible : undefined;
   const { photosByLocation, removePhoto } = useCapturedPhotos();
   const capturedPhotos = photosByLocation[locationId] ?? [];
-  const { remotePhotos, imageHeaders } = useRemoteAlbumPhotos(locationId, locale);
+  const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const [isEditMode, setIsEditMode] = useState(false);
   const [sortOldestFirst, setSortOldestFirst] = useState(false);
   const [isLegendVisible, setIsLegendVisible] = useState(false);
+  // Newest-first by actual capture time (server photos carry a real
+  // `takenAt` too) rather than just local-photos-then-remote-photos, so the
+  // sort toggle reflects true chronological order once both sources exist.
   const mergedCapturedPhotos = [
     ...capturedPhotos,
     ...remotePhotos.filter((remote) => !capturedPhotos.some((photo) => photo.serverSelfiePhotoId === remote.selfiePhotoId)),
-  ];
+  ].sort((a, b) => getTakenAtMillis(b.takenAt) - getTakenAtMillis(a.takenAt));
   const displayedCapturedPhotos = sortOldestFirst ? [...mergedCapturedPhotos].reverse() : mergedCapturedPhotos;
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -333,21 +347,28 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
               screens (node 0:1418) reuse across every slot in a theme. */}
           {displayedCapturedPhotos.map((captured) => {
             const isRemote = captured.id.startsWith("remote-");
+            // A locally-captured photo that already synced to the server
+            // (serverSelfiePhotoId set) can't actually be deleted there —
+            // "deleting" it here only hid it until the next server fetch
+            // resurrected it. Treat it as non-deletable, same as isRemote.
+            const isSynced = !isRemote && (captured as CapturedPhoto).serverSelfiePhotoId !== undefined;
+            const canDelete = !isRemote && !isSynced;
             return (
               <Pressable
                 key={captured.id}
                 style={({ pressed }) => [styles.photoCard, pressed && styles.photoCardPressed]}
                 onPress={() =>
                   isEditMode
-                    ? !isRemote && removePhoto(locationId, captured.id)
+                    ? canDelete && removePhoto(locationId, captured.id)
                     : router.push({ pathname: "/album", params: { locationId, photo: captured.id } })
                 }>
                 <Image
                   source={{ uri: captured.uri, ...(isRemote && imageHeaders ? { headers: imageHeaders } : {}) }}
                   style={styles.photoImage}
                   resizeMode="cover"
+                  onError={isRemote ? retryImageHeaders : undefined}
                 />
-                {isEditMode && !isRemote && (
+                {isEditMode && canDelete && (
                   <View style={styles.deleteBadge}>
                     <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
                   </View>
@@ -402,7 +423,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const entry = ALBUM_ENTRIES[locationId];
   const collectible = COLLECTIBLES[locationId];
   const { photosByLocation } = useCapturedPhotos();
-  const { remotePhotos, imageHeaders } = useRemoteAlbumPhotos(locationId, locale);
+  const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
 
@@ -432,6 +453,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
             source={{ uri: remotePhoto.uri, ...(imageHeaders ? { headers: imageHeaders } : {}) }}
             style={styles.viewerPhoto}
             resizeMode="cover"
+            onError={retryImageHeaders}
           />
         ) : (
           collectible && <Image source={collectible.image} style={styles.viewerPhoto} resizeMode="cover" />
