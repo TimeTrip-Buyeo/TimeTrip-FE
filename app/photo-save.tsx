@@ -1,4 +1,5 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -25,6 +26,11 @@ type ExpoSharingModule = {
 type ExpoSharingModuleShape = ExpoSharingModule & { default?: ExpoSharingModule };
 
 async function getSharingModule(): Promise<ExpoSharingModule | null> {
+  if (!requireOptionalNativeModule("ExpoSharing")) {
+    console.warn("[photo-save] ExpoSharing native module is unavailable. Rebuild the dev client to enable image sharing.");
+    return null;
+  }
+
   try {
     // Lazy-load because an old dev client can run without the native ExpoSharing
     // module until the user rebuilds after installing expo-sharing.
