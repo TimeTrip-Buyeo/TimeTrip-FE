@@ -26,7 +26,7 @@ function resolveSingleParam(raw: string | string[] | undefined) {
 
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
-const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.4;
+const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.5;
 
 // Matches Figma "인물 카메라 (포즈 선택 가능)", node 0:1000. The person cutout is
 // composited live over the real camera feed (not baked into a single photo

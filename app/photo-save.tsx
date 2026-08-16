@@ -1,7 +1,8 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import * as Sharing from "expo-sharing";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -10,13 +11,13 @@ import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { MAP_LOCATIONS, type LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
-import { albumScreenText, mapScreenText, personCameraText, shareSuffix } from "@/constants/translations";
+import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
-const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.4;
+const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.5;
 
 function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;
@@ -62,10 +63,35 @@ export default function PhotoSaveScreen() {
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
 
-  const handleShare = () => {
-    Share.share({ message: `${poseLabel || entry?.name[locale] || mapT.pins[locationId]} ${shareSuffix[locale]}` });
+  const captureCompositePhoto = () => {
+    if (!compositeRef.current) return Promise.resolve(uri);
+    return captureRef(compositeRef.current, {
+      format: "jpg",
+      quality: 0.9,
+      result: "tmpfile",
+    });
+  };
+
+  const handleShare = async () => {
+    if (isSharing || !uri) return;
+    setIsSharing(true);
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) return;
+
+      const compositeUri = await captureCompositePhoto();
+      await Sharing.shareAsync(compositeUri, {
+        mimeType: "image/jpeg",
+        dialogTitle: poseLabel || entry?.name[locale] || mapT.pins[locationId],
+      });
+    } catch (error) {
+      console.error("[photo-save] selfie photo share failed", error);
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   // TODO: composite the person cutout into the saved photo itself (not just
@@ -77,13 +103,7 @@ export default function PhotoSaveScreen() {
     if (isSaved || isSaving || !uri) return;
     setIsSaving(true);
     try {
-      const compositeUri = compositeRef.current
-        ? await captureRef(compositeRef.current, {
-            format: "jpg",
-            quality: 0.9,
-            result: "tmpfile",
-          })
-        : uri;
+      const compositeUri = await captureCompositePhoto();
       let serverSelfiePhotoId: number | undefined;
       if (spotId && storyId && collectionItemId) {
         const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
@@ -138,7 +158,7 @@ export default function PhotoSaveScreen() {
           </View>
         )}
 
-        <Pressable style={styles.shareCorner} onPress={handleShare}>
+        <Pressable style={styles.shareCorner} onPress={handleShare} disabled={isSharing}>
           <FontAwesome5 name="share-alt" size={16} color="#b8860b" solid />
         </Pressable>
 
