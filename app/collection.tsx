@@ -182,6 +182,7 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
   const isPerson = collectible?.type === "person";
   const spotId = LOCATION_ID_TO_SPOT_ID[locationId] ?? null;
   const [guideRouteParams, setGuideRouteParams] = useState<Record<string, string>>({});
+  const [isServerItemAcquired, setIsServerItemAcquired] = useState(false);
   // Gates the guide/photo buttons until guideRouteParams finishes loading —
   // without this, a tap that lands before the async lookup resolves sends
   // spotId/storyId/collectionItemId as empty, so photo-save silently skips
@@ -191,12 +192,14 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
   useEffect(() => {
     if (!collectible || spotId === null) {
       setGuideRouteParams({});
+      setIsServerItemAcquired(false);
       setIsGuideParamsLoading(false);
       return;
     }
 
     let isActive = true;
     setIsGuideParamsLoading(true);
+    setIsServerItemAcquired(false);
     getStoryTopics({ locale, spotId, storyType: "special" })
       .then(async (stories) => {
         const story = stories[0];
@@ -205,10 +208,12 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
         if (!isPerson) return { spotId: String(spotId), storyId: String(story.storyId) };
 
         const { items } = await getCollectionItems(story.storyId, { locale, spotId, type: "CHARACTER" });
+        const item = items[0];
+        if (isActive) setIsServerItemAcquired(item?.isAcquired ?? false);
         return {
           spotId: String(spotId),
           storyId: String(story.storyId),
-          ...(items[0] ? { collectionItemId: String(items[0].collectionItemId) } : {}),
+          ...(item ? { collectionItemId: String(item.collectionItemId) } : {}),
         };
       })
       .then((params) => {
@@ -269,6 +274,7 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
   }
 
   const secondaryLabel = collectible.secondaryLabelKey === "lifespan" ? t.lifespanLabel : t.productionPeriodLabel;
+  const canTakePersonPhoto = isPerson && isServerItemAcquired && !!guideRouteParams.collectionItemId;
 
   return (
     <View style={styles.container}>
@@ -325,7 +331,7 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
             <FontAwesome5 name="headphones" size={16} color="#fff" solid />
             <Text style={styles.primaryButtonText}>{t.listenToAudioGuide}</Text>
           </Pressable>
-          {isPerson && (
+          {canTakePersonPhoto && (
             <Pressable
               style={[styles.primaryButton, isGuideParamsLoading && styles.primaryButtonDisabled]}
               disabled={isGuideParamsLoading}
