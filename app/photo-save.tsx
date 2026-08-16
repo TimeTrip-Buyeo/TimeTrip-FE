@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { captureRef } from "react-native-view-shot";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { ALBUM_ENTRIES } from "@/constants/album";
@@ -53,6 +54,7 @@ export default function PhotoSaveScreen() {
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
   const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const compositeRef = useRef<View>(null);
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -72,12 +74,19 @@ export default function PhotoSaveScreen() {
     if (isSaved || isSaving || !uri) return;
     setIsSaving(true);
     try {
+      const compositeUri = compositeRef.current
+        ? await captureRef(compositeRef.current, {
+            format: "jpg",
+            quality: 0.9,
+            result: "tmpfile",
+          })
+        : uri;
       let serverSelfiePhotoId: number | undefined;
       if (spotId && storyId && collectionItemId) {
-        const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: uri });
+        const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
         serverSelfiePhotoId = saved.selfiePhotoId;
       }
-      addPhoto({ locationId, poseId, poseLabel, uri, serverSelfiePhotoId });
+      addPhoto({ locationId, poseId, poseLabel, uri: compositeUri, serverSelfiePhotoId });
       setIsSaved(true);
       setShowSaveToast(true);
     } catch (error) {
@@ -109,12 +118,14 @@ export default function PhotoSaveScreen() {
       </View>
 
       <View style={styles.photoWrapper}>
-        {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
-        {pose && (
-          <View style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio }]} pointerEvents="none">
-            <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
-          </View>
-        )}
+        <View ref={compositeRef} style={styles.compositePhoto} collapsable={false}>
+          {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
+          {pose && (
+            <View style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio }]} pointerEvents="none">
+              <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
+            </View>
+          )}
+        </View>
 
         {poseLabel && (
           <View style={styles.captionPill}>
@@ -204,6 +215,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     overflow: "hidden",
   },
+  compositePhoto: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#f3f4f6",
+  },
   photoBackground: {
     width: "100%",
     height: "100%",
@@ -212,9 +227,9 @@ const styles = StyleSheet.create({
   // so the saved preview matches what was actually framed in the shot.
   photoPersonOverlay: {
     position: "absolute",
-    right: 0,
+    right: -24,
     bottom: 0,
-    height: "92%",
+    height: "40%",
     zIndex: 2,
   },
   photoPersonOverlayImage: {
