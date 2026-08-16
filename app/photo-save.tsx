@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -61,6 +61,7 @@ export default function PhotoSaveScreen() {
   const collectionItemId = resolveNumberParam(params.collectionItemId);
 
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
@@ -68,16 +69,7 @@ export default function PhotoSaveScreen() {
   const entry = ALBUM_ENTRIES[locationId];
   const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
   const compositeRef = useRef<View>(null);
-  // Measured (not windowHeight) — this card is shrunk by the header/action
-  // bar around it, unlike person-camera's full-screen container that
-  // PERSON_OVERLAY_HEIGHT_RATIO was tuned against. Sizing off the
-  // window here made the saved/shared overlay noticeably larger than what
-  // was actually framed in the live camera preview.
-  const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
-  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_HEIGHT_RATIO;
-  const handlePhotoWrapperLayout = (event: LayoutChangeEvent) => {
-    setPhotoWrapperHeight(event.nativeEvent.layout.height);
-  };
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -187,7 +179,7 @@ export default function PhotoSaveScreen() {
         </View>
       </View>
 
-      <View style={styles.photoWrapper} onLayout={handlePhotoWrapperLayout}>
+      <View style={styles.photoWrapper}>
         <View ref={compositeRef} style={styles.compositePhoto} collapsable={false}>
           {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
           {pose && (
