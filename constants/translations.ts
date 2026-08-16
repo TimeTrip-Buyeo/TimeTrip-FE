@@ -12,7 +12,7 @@ export const LOCALES: LocaleMeta[] = [
   { code: 'ko', badgeLabel: 'KR', nativeLabel: '한국어' },
   { code: 'en', badgeLabel: 'EN', nativeLabel: 'English' },
   { code: 'zh', badgeLabel: 'CN', nativeLabel: '中文' },
-  { code: 'ja', badgeLabel: 'JP', nativeLabel: 'にほんご' },
+  { code: 'ja', badgeLabel: 'JP', nativeLabel: '日本語' },
 ];
 
 // Shared "— TimeTrip 부여" suffix appended to every Share.share() message
