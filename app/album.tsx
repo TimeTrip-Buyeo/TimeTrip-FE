@@ -28,40 +28,57 @@ type RemoteAlbumPhoto = SelfiePhotoOption & {
   uri: string;
 };
 
+type RemoteAlbumPhotoCacheEntry = {
+  photos: RemoteAlbumPhoto[];
+};
+
+const remoteAlbumPhotoCache = new Map<string, RemoteAlbumPhotoCacheEntry>();
+
 function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
   const [remotePhotos, setRemotePhotos] = useState<RemoteAlbumPhoto[]>([]);
   const [imageHeaders, setImageHeaders] = useState<Record<string, string> | undefined>();
 
   useEffect(() => {
-    getTokens()
-      .then((tokens) => {
-        setImageHeaders(tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined);
-      })
-      .catch(() => setImageHeaders(undefined));
-  }, []);
-
-  useEffect(() => {
     const spotId = LOCATION_ID_TO_SPOT_ID[locationId];
     if (!spotId) {
       setRemotePhotos([]);
+      setImageHeaders(undefined);
+      return;
+    }
+
+    const cacheKey = `${locationId}:${locale}`;
+    const cached = remoteAlbumPhotoCache.get(cacheKey);
+    if (cached) {
+      setRemotePhotos(cached.photos);
+      getTokens()
+        .then((tokens) => {
+          setImageHeaders(tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined);
+        })
+        .catch(() => setImageHeaders(undefined));
       return;
     }
 
     let isActive = true;
     getSelfiePhotoOptions({ locale, spotId })
-      .then(({ selfiePhotos }) => {
+      .then(async ({ selfiePhotos }) => {
+        const tokens = await getTokens();
+        const nextImageHeaders = tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined;
+        const nextPhotos = selfiePhotos.map((photo) => ({
+          ...photo,
+          id: `remote-${photo.selfiePhotoId}`,
+          uri: toApiUrl(photo.photoUrl),
+        }));
         if (!isActive) return;
-        setRemotePhotos(
-          selfiePhotos.map((photo) => ({
-            ...photo,
-            id: `remote-${photo.selfiePhotoId}`,
-            uri: toApiUrl(photo.photoUrl),
-          })),
-        );
+        remoteAlbumPhotoCache.set(cacheKey, { photos: nextPhotos });
+        setRemotePhotos(nextPhotos);
+        setImageHeaders(nextImageHeaders);
       })
       .catch((error) => {
         console.error("[album] selfie photos failed", error);
-        if (isActive) setRemotePhotos([]);
+        if (isActive) {
+          setRemotePhotos([]);
+          setImageHeaders(undefined);
+        }
       });
 
     return () => {
@@ -726,12 +743,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  photoImagePersonOverlay: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    height: "92%",
-  },
   // Photo viewer (Figma "사진 개별 선택시", node 0:1630)
   viewerHeader: {
     alignItems: "center",
@@ -766,12 +777,6 @@ const styles = StyleSheet.create({
   viewerPhoto: {
     width: "100%",
     height: "100%",
-  },
-  viewerPersonOverlay: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    height: "92%",
   },
   viewerCaptionPill: {
     position: "absolute",

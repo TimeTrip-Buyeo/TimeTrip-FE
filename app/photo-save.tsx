@@ -9,15 +9,12 @@ import { captureRef } from "react-native-view-shot";
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { MAP_LOCATIONS, type LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
-
-const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
-const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.5;
+import { PERSON_OVERLAY_SCREEN_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
 
 type ExpoSharingModule = {
   isAvailableAsync?: () => Promise<boolean>;
@@ -42,15 +39,6 @@ async function getSharingModule(): Promise<ExpoSharingModule | null> {
   }
 }
 
-function resolveSingleParam(raw: string | string[] | undefined) {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
-
-function resolveNumberParam(raw: string | string[] | undefined) {
-  const value = Number(resolveSingleParam(raw));
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
 // viewer, but the center action is "download/save" (not share) and there's
 // a small share button pinned to the photo's own corner instead.
@@ -64,7 +52,7 @@ export default function PhotoSaveScreen() {
     storyId?: string;
     collectionItemId?: string;
   }>();
-  const locationId = KNOWN_LOCATION_IDS.has(params.locationId ?? "") ? (params.locationId as LocationId) : "pagoda";
+  const locationId = resolveLocationId(params.locationId);
   const poseId = params.poseId ?? "";
   const poseLabel = params.poseLabel ?? "";
   const uri = params.uri ?? "";
@@ -120,18 +108,15 @@ export default function PhotoSaveScreen() {
     }
   };
 
-  // TODO: composite the person cutout into the saved photo itself (not just
-  // display them as two live-layered images) once react-native-view-shot is
-  // linked in — it's already installed but needs a native rebuild
-  // (`npx expo run:android`) before captureRef() is safe to call, so this
-  // still saves the raw camera frame for now.
+  // Saves the same composed frame the user sees here: camera photo plus the
+  // selected person overlay captured by react-native-view-shot.
   const handleSave = async () => {
     if (isSaved || isSaving || !uri) return;
     setIsSaving(true);
     try {
       const compositeUri = await captureCompositePhoto();
       let serverSelfiePhotoId: number | undefined;
-      if (spotId && storyId && collectionItemId) {
+      if (spotId !== null && storyId !== null && collectionItemId !== null) {
         const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
         serverSelfiePhotoId = saved.selfiePhotoId;
       }

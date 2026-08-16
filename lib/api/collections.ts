@@ -16,9 +16,35 @@ export type CollectionItem = {
   acquiredAt: string | null;
 };
 
+export type StoryTopic = {
+  storyId: number;
+  spotId: number;
+  title: string;
+  thumbnailUrl: string | null;
+  totalCollectionCount: number;
+  acquiredCollectionCount: number;
+  progressRate: number;
+};
+
+type StoryTopicListResponse = {
+  topics: StoryTopic[];
+};
+
 type CollectionItemListResponse = {
   items: CollectionItem[];
 };
+
+export function getStoryTopics(options: {
+  locale: Locale;
+  spotId?: number;
+  storyType?: "special" | "normal";
+}): Promise<StoryTopicListResponse> {
+  const params = new URLSearchParams({ language: options.locale });
+  if (options.spotId !== undefined) params.set("spotId", String(options.spotId));
+  if (options.storyType) params.set("storyType", options.storyType);
+
+  return apiGet<StoryTopicListResponse>(`/api/collections?${params.toString()}`);
+}
 
 export function getCollectionItems(
   storyId: number,

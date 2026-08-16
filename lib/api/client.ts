@@ -44,30 +44,20 @@ type RequestInit = {
   body?: unknown;
 };
 
-async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+function buildFetchInit(init: RequestInit = {}): globalThis.RequestInit {
+  const isFormData = init.body instanceof FormData;
+  return {
     method: init.method ?? "GET",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init.headers,
     },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-
-  const json = (await response.json()) as ApiEnvelope<T>;
-  if (!json.isSuccess) {
-    throw new ApiError(response.status, json.code, json.message);
-  }
-  return json.result;
+    body: init.body === undefined ? undefined : isFormData ? (init.body as BodyInit) : JSON.stringify(init.body),
+  };
 }
 
-async function rawMultipartRequest<T>(path: string, formData: FormData, headers: Record<string, string> = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers,
-    body: formData,
-  });
-
+async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, buildFetchInit(init));
   const json = (await response.json()) as ApiEnvelope<T>;
   if (!json.isSuccess) {
     throw new ApiError(response.status, json.code, json.message);
@@ -127,26 +117,6 @@ async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T
   }
 }
 
-async function authedMultipartRequest<T>(path: string, formData: FormData): Promise<T> {
-  const tokens = await getTokens();
-  const headers: Record<string, string> = tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : {};
-
-  try {
-    return await rawMultipartRequest<T>(path, formData, headers);
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 401 || !tokens) throw error;
-
-    const refreshed = await reissueOnce(tokens.refreshToken);
-    if (!refreshed) {
-      await clearTokens();
-      unauthorizedListener?.();
-      throw error;
-    }
-
-    return rawMultipartRequest<T>(path, formData, { Authorization: `Bearer ${refreshed.accessToken}` });
-  }
-}
-
 export function publicPost<T>(path: string, body?: unknown): Promise<T> {
   return rawRequest<T>(path, { method: "POST", body });
 }
@@ -164,7 +134,7 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export function apiMultipartPost<T>(path: string, formData: FormData): Promise<T> {
-  return authedMultipartRequest<T>(path, formData);
+  return authedRequest<T>(path, { method: "POST", body: formData });
 }
 
 export function apiDelete<T>(path: string): Promise<T> {

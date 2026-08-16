@@ -7,7 +7,7 @@ export type CapturedPhoto = {
   locationId: LocationId;
   poseId: string;
   poseLabel: string;
-  /** file:// URI from expo-camera's takePictureAsync — the un-composited camera frame. */
+  /** file:// URI for the final selfie image saved by the photo-save screen. */
   uri: string;
   takenAt: number;
   serverSelfiePhotoId?: number;
