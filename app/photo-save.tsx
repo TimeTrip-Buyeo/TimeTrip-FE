@@ -18,13 +18,18 @@ import { saveSelfiePhoto } from "@/lib/api/selfies";
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
 const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.5;
 
-type ExpoSharingModule = typeof import("expo-sharing");
+type ExpoSharingModule = {
+  isAvailableAsync?: () => Promise<boolean>;
+  shareAsync?: (url: string, options?: { mimeType?: string; dialogTitle?: string }) => Promise<void>;
+};
+type ExpoSharingModuleShape = ExpoSharingModule & { default?: ExpoSharingModule };
 
 async function getSharingModule(): Promise<ExpoSharingModule | null> {
   try {
     // Lazy-load because an old dev client can run without the native ExpoSharing
     // module until the user rebuilds after installing expo-sharing.
-    return await import("expo-sharing");
+    const sharing = (await import("expo-sharing")) as ExpoSharingModuleShape;
+    return sharing.isAvailableAsync ? sharing : sharing.default ?? null;
   } catch (error) {
     console.error("[photo-save] expo-sharing native module is unavailable", error);
     return null;
@@ -94,8 +99,8 @@ export default function PhotoSaveScreen() {
       const sharing = await getSharingModule();
       if (!sharing) return;
 
-      const isAvailable = await sharing.isAvailableAsync();
-      if (!isAvailable) return;
+      const isAvailable = await sharing.isAvailableAsync?.();
+      if (!isAvailable || !sharing.shareAsync) return;
 
       const compositeUri = await captureCompositePhoto();
       await sharing.shareAsync(compositeUri, {

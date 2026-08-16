@@ -11,7 +11,6 @@ import { ALBUM_ENTRIES } from "@/constants/album";
 import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
-import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
@@ -316,7 +315,6 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
               with the same placeholder illustration Figma's own photo-picker
               screens (node 0:1418) reuse across every slot in a theme. */}
           {displayedCapturedPhotos.map((captured) => {
-            const pose = "poseId" in captured ? PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId) : undefined;
             const isRemote = captured.id.startsWith("remote-");
             return (
               <Pressable
@@ -332,13 +330,6 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
                   style={styles.photoImage}
                   resizeMode="cover"
                 />
-                {pose && (
-                  <Image
-                    source={pose.image}
-                    style={[styles.photoImagePersonOverlay, { aspectRatio: pose.aspectRatio }]}
-                    resizeMode="cover"
-                  />
-                )}
                 {isEditMode && !isRemote && (
                   <View style={styles.deleteBadge}>
                     <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
@@ -397,7 +388,6 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const { remotePhotos, imageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
-  const capturedPose = captured && PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId);
 
   const handleShare = () => {
     const label = captured?.poseLabel || remotePhoto?.collectionItemName || collectible?.name[locale];
@@ -419,16 +409,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
 
       <View style={styles.viewerPhotoWrapper}>
         {captured ? (
-          <>
-            <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
-            {capturedPose && (
-              <Image
-                source={capturedPose.image}
-                style={[styles.viewerPersonOverlay, { aspectRatio: capturedPose.aspectRatio }]}
-                resizeMode="cover"
-              />
-            )}
-          </>
+          <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
         ) : remotePhoto ? (
           <Image
             source={{ uri: remotePhoto.uri, ...(imageHeaders ? { headers: imageHeaders } : {}) }}
