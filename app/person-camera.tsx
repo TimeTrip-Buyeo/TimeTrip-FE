@@ -11,7 +11,7 @@ import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { PERSON_OVERLAY_SCREEN_HEIGHT_RATIO, resolveLocationId, resolveSingleParam } from "@/lib/selfie-route";
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveSingleParam } from "@/lib/selfie-route";
 
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
@@ -102,7 +102,7 @@ export default function PersonCameraScreen() {
   // back to 0 before the first layout pass and whenever there's no pose
   // section to render at all (poses.length <= 1).
   const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
-  const personOverlayHeight = windowHeight * PERSON_OVERLAY_SCREEN_HEIGHT_RATIO;
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;

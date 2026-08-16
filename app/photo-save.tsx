@@ -14,7 +14,7 @@ import { albumScreenText, mapScreenText, personCameraText } from "@/constants/tr
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
-import { PERSON_OVERLAY_SCREEN_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
 
 type ExpoSharingModule = {
   isAvailableAsync?: () => Promise<boolean>;
@@ -70,11 +70,11 @@ export default function PhotoSaveScreen() {
   const compositeRef = useRef<View>(null);
   // Measured (not windowHeight) — this card is shrunk by the header/action
   // bar around it, unlike person-camera's full-screen container that
-  // PERSON_OVERLAY_SCREEN_HEIGHT_RATIO was tuned against. Sizing off the
+  // PERSON_OVERLAY_HEIGHT_RATIO was tuned against. Sizing off the
   // window here made the saved/shared overlay noticeably larger than what
   // was actually framed in the live camera preview.
   const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
-  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_SCREEN_HEIGHT_RATIO;
+  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_HEIGHT_RATIO;
   const handlePhotoWrapperLayout = (event: LayoutChangeEvent) => {
     setPhotoWrapperHeight(event.nativeEvent.layout.height);
   };

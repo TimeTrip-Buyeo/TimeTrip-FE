@@ -2,7 +2,7 @@ import { MAP_LOCATIONS, SPOT_ID_TO_LOCATION_ID, type LocationId } from "@/consta
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
 
-export const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.5;
+export const PERSON_OVERLAY_HEIGHT_RATIO = 0.5;
 
 export function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;
