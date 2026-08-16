@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -16,6 +16,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
+const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.4;
 
 function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;
@@ -48,12 +49,14 @@ export default function PhotoSaveScreen() {
   const collectionItemId = resolveNumberParam(params.collectionItemId);
 
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
   const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_SCREEN_HEIGHT_RATIO;
   const compositeRef = useRef<View>(null);
 
   const { addPhoto } = useCapturedPhotos();
@@ -121,7 +124,9 @@ export default function PhotoSaveScreen() {
         <View ref={compositeRef} style={styles.compositePhoto} collapsable={false}>
           {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
           {pose && (
-            <View style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio }]} pointerEvents="none">
+            <View
+              style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio, height: personOverlayHeight }]}
+              pointerEvents="none">
               <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
             </View>
           )}
@@ -229,7 +234,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -24,
     bottom: 0,
-    height: "40%",
     zIndex: 2,
   },
   photoPersonOverlayImage: {

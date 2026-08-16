@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, LayoutAnimation, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Animated, Image, LayoutAnimation, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
@@ -26,6 +26,7 @@ function resolveSingleParam(raw: string | string[] | undefined) {
 
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
+const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.4;
 
 // Matches Figma "인물 카메라 (포즈 선택 가능)", node 0:1000. The person cutout is
 // composited live over the real camera feed (not baked into a single photo
@@ -40,6 +41,7 @@ export default function PersonCameraScreen() {
   }>();
   const locationId = resolveLocationId(params.locationId);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
 
   const mapT = mapScreenText[locale];
@@ -115,6 +117,7 @@ export default function PersonCameraScreen() {
   // back to 0 before the first layout pass and whenever there's no pose
   // section to render at all (poses.length <= 1).
   const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_SCREEN_HEIGHT_RATIO;
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -205,7 +208,7 @@ export default function PersonCameraScreen() {
         <View
           style={[
             styles.personOverlay,
-            { aspectRatio: selectedPose.aspectRatio, bottom: personFloor },
+            { aspectRatio: selectedPose.aspectRatio, bottom: personFloor, height: personOverlayHeight },
           ]}
           pointerEvents="none">
           <Image source={selectedPose.image} style={styles.personOverlayImage} resizeMode="cover" />
@@ -379,7 +382,6 @@ const styles = StyleSheet.create({
   personOverlay: {
     position: "absolute",
     right: -24,
-    height: "40%",
   },
   personOverlayImage: {
     width: "100%",
