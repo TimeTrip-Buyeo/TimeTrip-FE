@@ -1,5 +1,4 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import * as Sharing from "expo-sharing";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -18,6 +17,19 @@ import { saveSelfiePhoto } from "@/lib/api/selfies";
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
 const PERSON_OVERLAY_SCREEN_HEIGHT_RATIO = 0.5;
+
+type ExpoSharingModule = typeof import("expo-sharing");
+
+async function getSharingModule(): Promise<ExpoSharingModule | null> {
+  try {
+    // Lazy-load because an old dev client can run without the native ExpoSharing
+    // module until the user rebuilds after installing expo-sharing.
+    return await import("expo-sharing");
+  } catch (error) {
+    console.error("[photo-save] expo-sharing native module is unavailable", error);
+    return null;
+  }
+}
 
 function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;
@@ -79,11 +91,14 @@ export default function PhotoSaveScreen() {
     if (isSharing || !uri) return;
     setIsSharing(true);
     try {
-      const isAvailable = await Sharing.isAvailableAsync();
+      const sharing = await getSharingModule();
+      if (!sharing) return;
+
+      const isAvailable = await sharing.isAvailableAsync();
       if (!isAvailable) return;
 
       const compositeUri = await captureCompositePhoto();
-      await Sharing.shareAsync(compositeUri, {
+      await sharing.shareAsync(compositeUri, {
         mimeType: "image/jpeg",
         dialogTitle: poseLabel || entry?.name[locale] || mapT.pins[locationId],
       });
