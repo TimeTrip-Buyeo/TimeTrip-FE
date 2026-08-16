@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import { Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -15,21 +15,36 @@ import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-
-// Figma's "앨범" list (node 0:1079) only ever shows entries it has real
-// content for — it doesn't define a locked/"?" card style the way "도감"
-// does. So this list only renders what's in ALBUM_ENTRIES, nothing invented.
-const ALBUM_LOCATION_IDS = Object.keys(ALBUM_ENTRIES) as LocationId[];
+import {
+  getAlbumPhotoDetail,
+  getAlbumPhotos,
+  getAlbums,
+  type AlbumPhotoDetailResponse,
+  type AlbumPhotoListResponse,
+  type AlbumResponse,
+} from "@/lib/api/album";
+import { ApiError } from "@/lib/api/client";
 
 export default function AlbumScreen() {
-  const params = useLocalSearchParams<{ locationId?: string; photo?: string }>();
+  const params = useLocalSearchParams<{
+    locationId?: string;
+    photo?: string;
+    collectionItemId?: string;
+    selfiePhotoId?: string;
+  }>();
   const locationId = Array.isArray(params.locationId) ? params.locationId[0] : params.locationId;
   const photo = Array.isArray(params.photo) ? params.photo[0] : params.photo;
+  const collectionItemId = Array.isArray(params.collectionItemId) ? params.collectionItemId[0] : params.collectionItemId;
+  const selfiePhotoId = Array.isArray(params.selfiePhotoId) ? params.selfiePhotoId[0] : params.selfiePhotoId;
 
   if (locationId && photo !== undefined) {
     return <PhotoViewer locationId={locationId as LocationId} photoParam={photo} />;
   }
   if (locationId) return <AlbumDetail locationId={locationId as LocationId} />;
+  if (collectionItemId && selfiePhotoId) {
+    return <AlbumServerPhotoViewer selfiePhotoId={Number(selfiePhotoId)} />;
+  }
+  if (collectionItemId) return <AlbumServerDetail collectionItemId={Number(collectionItemId)} />;
   return <AlbumList />;
 }
 
@@ -47,12 +62,29 @@ function AlbumList() {
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const { photosByLocation, clearLocationPhotos } = useCapturedPhotos();
+  const [albums, setAlbums] = useState<AlbumResponse[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setAlbums(null);
+    setLoadError(false);
+    getAlbums()
+      .then((response) => {
+        if (!cancelled) setAlbums(response.albums);
+      })
+      .catch((error) => {
+        console.error("[album] failed to load albums", error instanceof ApiError ? error.message : error);
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -73,60 +105,55 @@ function AlbumList() {
         </View>
         <View style={styles.listSubtitleRow}>
           <Text style={styles.headerSubtitle}>{t.subtitle}</Text>
-          <Pressable
-            style={[styles.editControlButton, isEditMode && styles.editControlButtonActive]}
-            onPress={() => setIsEditMode((current) => !current)}
-            hitSlop={8}>
-            <FontAwesome5 name={isEditMode ? "check" : "pen"} size={12} color={isEditMode ? "#fff" : "#9ca3af"} solid />
-          </Pressable>
         </View>
 
-        <View style={styles.list}>
-          {ALBUM_LOCATION_IDS.map((id) => {
-            const entry = ALBUM_ENTRIES[id]!;
-            const hasCapturedPhotos = (photosByLocation[id]?.length ?? 0) > 0;
-            return (
+        {loadError ? (
+          <View style={styles.stateBox}>
+            <Text style={styles.stateText}>{t.loadErrorText}</Text>
+          </View>
+        ) : albums === null ? (
+          <View style={styles.stateBox}>
+            <ActivityIndicator color="#800000" />
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {albums.map((album) => (
               <Pressable
-                key={id}
+                key={album.collectionItemId}
                 style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
                 onPress={() =>
-                  isEditMode
-                    ? hasCapturedPhotos && clearLocationPhotos(id)
-                    : router.push({ pathname: "/album", params: { locationId: id } })
-                }
-                disabled={isEditMode && !hasCapturedPhotos}>
+                  router.push({
+                    pathname: "/album",
+                    params: { collectionItemId: String(album.collectionItemId) },
+                  })
+                }>
                 <View style={styles.cardThumb}>
-                  {entry.thumbnail && (
-                    <Image source={entry.thumbnail} style={styles.cardThumbImage} resizeMode="cover" />
+                  {!!album.thumbnailUrl && (
+                    <Image source={{ uri: album.thumbnailUrl }} style={styles.cardThumbImage} resizeMode="cover" />
                   )}
                   <View style={styles.cardPhotoCountBadge}>
                     <Text style={styles.cardPhotoCountText}>
-                      {entry.photoCount}
+                      {album.photoCount}
                       {t.photoCountSuffix}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.cardTextColumn}>
-                  <Text style={styles.cardTitle}>{entry.name[locale]}</Text>
+                  <Text style={styles.cardTitle}>{album.name}</Text>
                   <View style={styles.cardLocationRow}>
                     <FontAwesome5 name="medal" size={11} color="#b8860b" solid />
-                    <Text style={styles.cardLocation}>{entry.locationCaption[locale]}</Text>
+                    <Text style={styles.cardLocation}>{album.spotName}</Text>
                   </View>
                 </View>
-                {isEditMode ? (
-                  <FontAwesome5
-                    name="trash-alt"
-                    size={14}
-                    color={hasCapturedPhotos ? "#800000" : "#e7e5e4"}
-                    solid
-                  />
+                {album.isLocked ? (
+                  <FontAwesome5 name="lock" size={14} color="#d1d5db" solid />
                 ) : (
                   <FontAwesome5 name="chevron-right" size={12} color="#d1d5db" solid />
                 )}
               </Pressable>
-            );
-          })}
-        </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       <BuyeoCutFab bottom={insets.bottom + 96} />
@@ -140,6 +167,171 @@ function AlbumList() {
           if (key === "myPage") router.push("/my-page");
         }}
       />
+    </View>
+  );
+}
+
+function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
+  const insets = useSafeAreaInsets();
+  const { locale, setLocale } = useLanguage();
+  const t = albumScreenText[locale];
+  const mapT = mapScreenText[locale];
+  const [isLegendVisible, setIsLegendVisible] = useState(false);
+  const [data, setData] = useState<AlbumPhotoListResponse | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const handleSelectLocale = (nextLocale: Locale) => {
+    setLocale(nextLocale);
+    setIsLegendVisible(false);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setData(null);
+    setLoadError(false);
+    getAlbumPhotos(collectionItemId)
+      .then((response) => {
+        if (!cancelled) setData(response);
+      })
+      .catch((error) => {
+        console.error("[album] failed to load album photos", error instanceof ApiError ? error.message : error);
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionItemId]);
+
+  return (
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.photoSection}>
+        <View style={[styles.detailHeader, { paddingTop: insets.top + 16 }]}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
+          </Pressable>
+          <Text style={styles.headerTitle}>{data?.name ?? mapT.nav.album}</Text>
+          <LangPill
+            locale={locale}
+            isLegendVisible={isLegendVisible}
+            onToggleLegend={() => setIsLegendVisible((visible) => !visible)}
+            onSelectLocale={handleSelectLocale}
+          />
+        </View>
+        <View style={styles.photoSectionHeader}>
+          <Text style={styles.themeLabel}>{data?.name ?? t.themeLabel}</Text>
+        </View>
+
+        {loadError ? (
+          <View style={styles.stateBox}>
+            <Text style={styles.stateText}>{t.loadErrorText}</Text>
+          </View>
+        ) : data === null ? (
+          <View style={styles.stateBox}>
+            <ActivityIndicator color="#800000" />
+          </View>
+        ) : (
+          <View style={styles.photoGrid}>
+            {data.photos.map((photo) => (
+              <Pressable
+                key={photo.selfiePhotoId}
+                style={({ pressed }) => [styles.photoCard, pressed && styles.photoCardPressed]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/album",
+                    params: {
+                      collectionItemId: String(collectionItemId),
+                      selfiePhotoId: String(photo.selfiePhotoId),
+                    },
+                  })
+                }>
+                <Image source={{ uri: photo.photoUrl }} style={styles.photoImage} resizeMode="cover" />
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      <BuyeoCutFab bottom={insets.bottom + 96} />
+
+      <BottomNav
+        active="album"
+        labels={mapT.nav}
+        onNavigate={(key: BottomNavKey) => {
+          if (key === "map") router.push("/(tabs)");
+          if (key === "collection") router.push("/collection");
+          if (key === "myPage") router.push("/my-page");
+        }}
+      />
+    </View>
+  );
+}
+
+function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
+  const insets = useSafeAreaInsets();
+  const { locale } = useLanguage();
+  const t = albumScreenText[locale];
+  const [photo, setPhoto] = useState<AlbumPhotoDetailResponse | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPhoto(null);
+    setLoadError(false);
+    getAlbumPhotoDetail(selfiePhotoId)
+      .then((response) => {
+        if (!cancelled) setPhoto(response);
+      })
+      .catch((error) => {
+        console.error("[album] failed to load photo detail", error instanceof ApiError ? error.message : error);
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selfiePhotoId]);
+
+  const handleShare = () => {
+    if (!photo) return;
+    Share.share({ message: `${photo.personName} · ${photo.spotName} ${shareSuffix[locale]}` });
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.viewerHeader, { paddingTop: insets.top + 16 }]}>
+        <Pressable onPress={() => router.back()} hitSlop={8} style={styles.viewerBackButton}>
+          <FontAwesome5 name="chevron-left" size={20} color="#1b1b1b" solid />
+        </Pressable>
+        <View style={styles.viewerHeaderText}>
+          <Text style={styles.viewerTitle}>{photo?.personName ?? ""}</Text>
+          <Text style={styles.viewerSubtitle}>{photo?.spotName ?? ""}</Text>
+        </View>
+      </View>
+
+      {loadError ? (
+        <View style={styles.stateBox}>
+          <Text style={styles.stateText}>{t.loadErrorText}</Text>
+        </View>
+      ) : photo === null ? (
+        <View style={styles.stateBox}>
+          <ActivityIndicator color="#800000" />
+        </View>
+      ) : (
+        <>
+          <View style={styles.viewerPhotoWrapper}>
+            <Image source={{ uri: photo.photoUrl }} style={styles.viewerPhoto} resizeMode="cover" />
+            <View style={styles.viewerCaptionPill}>
+              <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
+            </View>
+          </View>
+
+          {photo.shareable && (
+            <View style={[styles.viewerActions, { justifyContent: "center", paddingBottom: insets.bottom + 16 }]}>
+              <Pressable style={styles.viewerDownloadButton} onPress={handleShare}>
+                <FontAwesome5 name="share-alt" size={20} color="#fff" solid />
+              </Pressable>
+            </View>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -461,6 +653,18 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 24,
     paddingTop: 20,
+  },
+  stateBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingTop: 60,
+  },
+  stateText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#78716c",
+    textAlign: "center",
   },
   card: {
     flexDirection: "row",
