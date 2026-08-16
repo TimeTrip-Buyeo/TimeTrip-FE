@@ -27,7 +27,8 @@ export type StoryTopic = {
 };
 
 type StoryTopicListResponse = {
-  topics: StoryTopic[];
+  stories?: StoryTopic[];
+  topics?: StoryTopic[];
 };
 
 type CollectionItemListResponse = {
@@ -38,12 +39,15 @@ export function getStoryTopics(options: {
   locale: Locale;
   spotId?: number;
   storyType?: "special" | "normal";
-}): Promise<StoryTopicListResponse> {
+}): Promise<StoryTopic[]> {
   const params = new URLSearchParams({ language: options.locale });
   if (options.spotId !== undefined) params.set("spotId", String(options.spotId));
   if (options.storyType) params.set("storyType", options.storyType);
 
-  return apiGet<StoryTopicListResponse>(`/api/collections?${params.toString()}`);
+  return apiGet<StoryTopicListResponse | StoryTopic[]>(`/api/collections?${params.toString()}`).then((result) => {
+    if (Array.isArray(result)) return result;
+    return result.stories ?? result.topics ?? [];
+  });
 }
 
 export function getCollectionItems(

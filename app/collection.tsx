@@ -198,8 +198,8 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
     let isActive = true;
     setIsGuideParamsLoading(true);
     getStoryTopics({ locale, spotId, storyType: "special" })
-      .then(async ({ topics }) => {
-        const story = topics[0];
+      .then(async (stories) => {
+        const story = stories[0];
         if (!story) return { spotId: String(spotId) };
 
         if (!isPerson) return { spotId: String(spotId), storyId: String(story.storyId) };

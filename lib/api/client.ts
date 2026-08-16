@@ -91,6 +91,10 @@ function reissueOnce(refreshToken: string): Promise<AuthTokens | null> {
   return pendingReissue;
 }
 
+function shouldReissue(error: ApiError) {
+  return error.status === 401 || error.code.startsWith("SEC401_") || error.code === "COMMON401";
+}
+
 async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const tokens = await getTokens();
   const headers = {
@@ -101,7 +105,7 @@ async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T
   try {
     return await rawRequest<T>(path, { ...init, headers });
   } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 401 || !tokens) throw error;
+    if (!(error instanceof ApiError) || !shouldReissue(error) || !tokens) throw error;
 
     const refreshed = await reissueOnce(tokens.refreshToken);
     if (!refreshed) {
