@@ -1,29 +1,64 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { captureRef } from "react-native-view-shot";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { MAP_LOCATIONS, type LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
-import { albumScreenText, mapScreenText, personCameraText, shareSuffix } from "@/constants/translations";
+import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
+import { saveSelfiePhoto } from "@/lib/api/selfies";
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
 
-const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
+type ExpoSharingModule = {
+  isAvailableAsync?: () => Promise<boolean>;
+  shareAsync?: (url: string, options?: { mimeType?: string; dialogTitle?: string }) => Promise<void>;
+};
+type ExpoSharingModuleShape = ExpoSharingModule & { default?: ExpoSharingModule };
+
+async function getSharingModule(): Promise<ExpoSharingModule | null> {
+  if (!requireOptionalNativeModule("ExpoSharing")) {
+    console.warn("[photo-save] ExpoSharing native module is unavailable. Rebuild the dev client to enable image sharing.");
+    return null;
+  }
+
+  try {
+    // Lazy-load because an old dev client can run without the native ExpoSharing
+    // module until the user rebuilds after installing expo-sharing.
+    const sharing = (await import("expo-sharing")) as ExpoSharingModuleShape;
+    return sharing.isAvailableAsync ? sharing : sharing.default ?? null;
+  } catch (error) {
+    console.error("[photo-save] expo-sharing native module is unavailable", error);
+    return null;
+  }
+}
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
 // viewer, but the center action is "download/save" (not share) and there's
 // a small share button pinned to the photo's own corner instead.
 export default function PhotoSaveScreen() {
-  const params = useLocalSearchParams<{ locationId?: string; poseId?: string; poseLabel?: string; uri?: string }>();
-  const locationId = KNOWN_LOCATION_IDS.has(params.locationId ?? "") ? (params.locationId as LocationId) : "pagoda";
+  const params = useLocalSearchParams<{
+    locationId?: string;
+    poseId?: string;
+    poseLabel?: string;
+    uri?: string;
+    spotId?: string;
+    storyId?: string;
+    collectionItemId?: string;
+  }>();
+  const locationId = resolveLocationId(params.locationId);
   const poseId = params.poseId ?? "";
   const poseLabel = params.poseLabel ?? "";
   const uri = params.uri ?? "";
+  const spotId = resolveNumberParam(params.spotId);
+  const storyId = resolveNumberParam(params.storyId);
+  const collectionItemId = resolveNumberParam(params.collectionItemId);
 
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
@@ -32,25 +67,96 @@ export default function PhotoSaveScreen() {
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
   const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const compositeRef = useRef<View>(null);
+  const compositePhotoUriRef = useRef<string | null>(null);
+  const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
+  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const handlePhotoWrapperLayout = (event: LayoutChangeEvent) => {
+    setPhotoWrapperHeight(event.nativeEvent.layout.height);
+  };
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [showShareUnavailableToast, setShowShareUnavailableToast] = useState(false);
 
-  const handleShare = () => {
-    Share.share({ message: `${poseLabel || entry?.name[locale] || mapT.pins[locationId]} ${shareSuffix[locale]}` });
+  const captureCompositePhoto = async () => {
+    if (compositePhotoUriRef.current) return compositePhotoUriRef.current;
+    if (!compositeRef.current) return uri;
+    try {
+      const compositeUri = await captureRef(compositeRef.current, {
+        format: "jpg",
+        quality: 0.9,
+        result: "tmpfile",
+      });
+      compositePhotoUriRef.current = compositeUri;
+      return compositeUri;
+    } catch (error) {
+      // e.g. an old dev client running before react-native-view-shot's
+      // native module was linked — fall back to the raw frame instead of
+      // letting this throw abort the whole save/share silently.
+      console.error("[photo-save] view-shot capture failed, using raw camera frame", error);
+      return uri;
+    }
   };
 
-  // TODO: composite the person cutout into the saved photo itself (not just
-  // display them as two live-layered images) once react-native-view-shot is
-  // linked in — it's already installed but needs a native rebuild
-  // (`npx expo run:android`) before captureRef() is safe to call, so this
-  // still saves the raw camera frame for now.
-  const handleSave = () => {
-    if (isSaved || !uri) return;
-    addPhoto({ locationId, poseId, poseLabel, uri });
-    setIsSaved(true);
-    setShowSaveToast(true);
+  const handleShare = async () => {
+    if (isSharing || !uri) return;
+    setIsSharing(true);
+    try {
+      const sharing = await getSharingModule();
+      if (!sharing) {
+        setShowShareUnavailableToast(true);
+        return;
+      }
+
+      const isAvailable = await sharing.isAvailableAsync?.();
+      if (!isAvailable || !sharing.shareAsync) {
+        setShowShareUnavailableToast(true);
+        return;
+      }
+
+      const compositeUri = await captureCompositePhoto();
+      await sharing.shareAsync(compositeUri, {
+        mimeType: "image/jpeg",
+        dialogTitle: poseLabel || entry?.name[locale] || mapT.pins[locationId],
+      });
+    } catch (error) {
+      console.error("[photo-save] selfie photo share failed", error);
+      setShowShareUnavailableToast(true);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // Saves the same composed frame the user sees here: camera photo plus the
+  // selected person overlay captured by react-native-view-shot.
+  const handleSave = async () => {
+    if (isSaved || isSaving || !uri) return;
+    setIsSaving(true);
+    try {
+      const compositeUri = await captureCompositePhoto();
+      let serverSelfiePhotoId: number | undefined;
+      if (spotId !== null && storyId !== null && collectionItemId !== null) {
+        try {
+          const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
+          serverSelfiePhotoId = saved.selfiePhotoId;
+        } catch (error) {
+          // Server sync is best-effort — the local save below must still
+          // happen so a network hiccup doesn't lose the capture entirely.
+          console.error("[photo-save] server selfie sync failed, keeping local copy only", error);
+        }
+      }
+      addPhoto({ locationId, poseId, poseLabel, uri: compositeUri, serverSelfiePhotoId });
+      setIsSaved(true);
+      setShowSaveToast(true);
+    } catch (error) {
+      console.error("[photo-save] selfie photo save failed", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -58,6 +164,12 @@ export default function PhotoSaveScreen() {
     const timer = setTimeout(() => setShowSaveToast(false), 2200);
     return () => clearTimeout(timer);
   }, [showSaveToast]);
+
+  useEffect(() => {
+    if (!showShareUnavailableToast) return;
+    const timer = setTimeout(() => setShowShareUnavailableToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [showShareUnavailableToast]);
 
   return (
     <View style={styles.container}>
@@ -74,13 +186,17 @@ export default function PhotoSaveScreen() {
         </View>
       </View>
 
-      <View style={styles.photoWrapper}>
-        {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
-        {pose && (
-          <View style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio }]} pointerEvents="none">
-            <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
-          </View>
-        )}
+      <View style={styles.photoWrapper} onLayout={handlePhotoWrapperLayout}>
+        <View ref={compositeRef} style={styles.compositePhoto} collapsable={false}>
+          {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
+          {pose && (
+            <View
+              style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio, height: personOverlayHeight }]}
+              pointerEvents="none">
+              <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
+            </View>
+          )}
+        </View>
 
         {poseLabel && (
           <View style={styles.captionPill}>
@@ -88,11 +204,17 @@ export default function PhotoSaveScreen() {
           </View>
         )}
 
-        <Pressable style={styles.shareCorner} onPress={handleShare}>
+        <Pressable style={styles.shareCorner} onPress={handleShare} disabled={isSharing}>
           <FontAwesome5 name="share-alt" size={16} color="#b8860b" solid />
         </Pressable>
 
-        {showSaveToast && <SaveToast title={t.photoSavedToastTitle} body={t.photoSavedToastBody} />}
+        {showSaveToast ? (
+          <SaveToast title={t.photoSavedToastTitle} body={t.photoSavedToastBody} />
+        ) : (
+          showShareUnavailableToast && (
+            <SaveToast title={t.shareUnavailableToastTitle} body={t.shareUnavailableToastBody} />
+          )
+        )}
       </View>
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
@@ -103,7 +225,7 @@ export default function PhotoSaveScreen() {
           <Text style={styles.sideLabel}>{albumT.buyeoCutLabel}</Text>
         </Pressable>
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
+        <Pressable style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
           <FontAwesome5 name={isSaved ? "check" : "download"} size={24} color="#fff" solid />
         </Pressable>
 
@@ -170,6 +292,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     overflow: "hidden",
   },
+  compositePhoto: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#f3f4f6",
+  },
   photoBackground: {
     width: "100%",
     height: "100%",
@@ -178,9 +304,8 @@ const styles = StyleSheet.create({
   // so the saved preview matches what was actually framed in the shot.
   photoPersonOverlay: {
     position: "absolute",
-    right: 0,
+    right: -24,
     bottom: 0,
-    height: "92%",
     zIndex: 2,
   },
   photoPersonOverlayImage: {

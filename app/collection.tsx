@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -9,10 +9,11 @@ import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LangPill } from "@/components/lang-pill";
 import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT, GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import type { LocationId } from "@/constants/locations";
+import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
 import { COLLECTION_THEMES, type CollectionTheme } from "@/constants/themes";
 import { collectionScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { getCollectionItems, getStoryTopics } from "@/lib/api/collections";
 
 function themeTitle(theme: CollectionTheme, locale: Locale) {
   return typeof theme.title === "string" ? theme.title : theme.title[locale];
@@ -178,6 +179,58 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
   const t = collectionScreenText[locale];
   const mapT = mapScreenText[locale];
   const collectible = COLLECTIBLES[locationId];
+  const isPerson = collectible?.type === "person";
+  const spotId = LOCATION_ID_TO_SPOT_ID[locationId] ?? null;
+  const [guideRouteParams, setGuideRouteParams] = useState<Record<string, string>>({});
+  const [isServerItemAcquired, setIsServerItemAcquired] = useState(false);
+  // Gates the guide/photo buttons until guideRouteParams finishes loading —
+  // without this, a tap that lands before the async lookup resolves sends
+  // spotId/storyId/collectionItemId as empty, so photo-save silently skips
+  // the server save with no error shown.
+  const [isGuideParamsLoading, setIsGuideParamsLoading] = useState(spotId !== null);
+
+  useEffect(() => {
+    if (!collectible || spotId === null) {
+      setGuideRouteParams({});
+      setIsServerItemAcquired(false);
+      setIsGuideParamsLoading(false);
+      return;
+    }
+
+    let isActive = true;
+    setIsGuideParamsLoading(true);
+    setIsServerItemAcquired(false);
+    getStoryTopics({ locale, spotId, storyType: "special" })
+      .then(async (stories) => {
+        const story = stories[0];
+        if (!story) return { spotId: String(spotId) };
+
+        if (!isPerson) return { spotId: String(spotId), storyId: String(story.storyId) };
+
+        const { items } = await getCollectionItems(story.storyId, { locale, spotId, type: "CHARACTER" });
+        const item = items[0];
+        if (isActive) setIsServerItemAcquired(item?.isAcquired ?? false);
+        return {
+          spotId: String(spotId),
+          storyId: String(story.storyId),
+          ...(item ? { collectionItemId: String(item.collectionItemId) } : {}),
+        };
+      })
+      .then((params) => {
+        if (isActive) setGuideRouteParams(params);
+      })
+      .catch((error) => {
+        console.error("[collection] guide route lookup failed", error);
+        if (isActive) setGuideRouteParams(spotId === null ? {} : { spotId: String(spotId) });
+      })
+      .finally(() => {
+        if (isActive) setIsGuideParamsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [collectible, isPerson, locale, spotId]);
 
   const handleShare = () => {
     if (!collectible) return;
@@ -220,8 +273,8 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
     );
   }
 
-  const isPerson = collectible.type === "person";
   const secondaryLabel = collectible.secondaryLabelKey === "lifespan" ? t.lifespanLabel : t.productionPeriodLabel;
+  const canTakePersonPhoto = isPerson && isServerItemAcquired && !!guideRouteParams.collectionItemId;
 
   return (
     <View style={styles.container}>
@@ -272,15 +325,17 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
 
         <View style={[styles.actionButtons, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
-            style={styles.primaryButton}
-            onPress={() => router.push({ pathname: "/ar-camera", params: { locationId } })}>
+            style={[styles.primaryButton, isGuideParamsLoading && styles.primaryButtonDisabled]}
+            disabled={isGuideParamsLoading}
+            onPress={() => router.push({ pathname: "/ar-camera", params: { locationId, ...guideRouteParams } })}>
             <FontAwesome5 name="headphones" size={16} color="#fff" solid />
             <Text style={styles.primaryButtonText}>{t.listenToAudioGuide}</Text>
           </Pressable>
-          {isPerson && (
+          {canTakePersonPhoto && (
             <Pressable
-              style={styles.primaryButton}
-              onPress={() => router.push({ pathname: "/person-camera", params: { locationId } })}>
+              style={[styles.primaryButton, isGuideParamsLoading && styles.primaryButtonDisabled]}
+              disabled={isGuideParamsLoading}
+              onPress={() => router.push({ pathname: "/person-camera", params: { locationId, ...guideRouteParams } })}>
               <FontAwesome5 name="camera" size={16} color="#fff" solid />
               <Text style={styles.primaryButtonText}>{t.takePhotoWithFigure}</Text>
             </Pressable>
@@ -601,6 +656,9 @@ const styles = StyleSheet.create({
     height: 52,
     backgroundColor: "#800000",
     borderRadius: 16,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
   },
   primaryButtonText: {
     fontFamily: "serif",

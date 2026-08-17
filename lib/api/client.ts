@@ -5,8 +5,8 @@ import { clearTokens, getTokens, saveTokens, type AuthTokens } from "@/lib/token
 // 판정은 HTTP status가 아니라 isSuccess로 해야 한다.
 type ApiEnvelope<T> = {
   isSuccess: boolean;
-  code: string;
-  message: string;
+  code?: string;
+  message?: string;
   result: T;
 };
 
@@ -14,15 +14,15 @@ export class ApiError extends Error {
   status: number;
   code: string;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string | undefined, message: string | undefined) {
     super(message);
     this.name = "ApiError";
     this.status = status;
-    this.code = code;
+    this.code = code ?? "";
   }
 }
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://10.0.2.2:8081";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://10.0.2.2:8081";
 
 if (!process.env.EXPO_PUBLIC_API_BASE_URL) {
   console.warn(`[api] EXPO_PUBLIC_API_BASE_URL이 설정되지 않아 기본값을 사용합니다: ${API_BASE_URL}`);
@@ -44,19 +44,23 @@ type RequestInit = {
   body?: unknown;
 };
 
-async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+function buildFetchInit(init: RequestInit = {}): globalThis.RequestInit {
+  const isFormData = init.body instanceof FormData;
+  return {
     method: init.method ?? "GET",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init.headers,
     },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
+    body: init.body === undefined ? undefined : isFormData ? (init.body as BodyInit) : JSON.stringify(init.body),
+  };
+}
 
+async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, buildFetchInit(init));
   const json = (await response.json()) as ApiEnvelope<T>;
   if (!json.isSuccess) {
-    throw new ApiError(response.status, json.code, json.message);
+    throw new ApiError(response.status, json.code, json.message ?? "요청 처리 중 오류가 발생했습니다.");
   }
   return json.result;
 }
@@ -87,6 +91,10 @@ function reissueOnce(refreshToken: string): Promise<AuthTokens | null> {
   return pendingReissue;
 }
 
+function shouldReissue(error: ApiError) {
+  return error.status === 401 || error.code?.startsWith("SEC401_") || error.code === "COMMON401";
+}
+
 async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const tokens = await getTokens();
   const headers = {
@@ -97,7 +105,7 @@ async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T
   try {
     return await rawRequest<T>(path, { ...init, headers });
   } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 401 || !tokens) throw error;
+    if (!(error instanceof ApiError) || !shouldReissue(error) || !tokens) throw error;
 
     const refreshed = await reissueOnce(tokens.refreshToken);
     if (!refreshed) {
@@ -129,6 +137,36 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return authedRequest<T>(path, { method: "POST", body });
 }
 
+export function apiMultipartPost<T>(path: string, formData: FormData): Promise<T> {
+  return authedRequest<T>(path, { method: "POST", body: formData });
+}
+
 export function apiDelete<T>(path: string): Promise<T> {
   return authedRequest<T>(path, { method: "DELETE" });
+}
+
+export async function getAuthHeaders(): Promise<Record<string, string> | undefined> {
+  const tokens = await getTokens();
+  return tokens ? { Authorization: `Bearer ${tokens.accessToken}` } : undefined;
+}
+
+// For non-fetch consumers (e.g. RN <Image> headers) that never go through
+// authedRequest's automatic 401 → reissue → retry path, so a stale token
+// would otherwise fail forever with no self-healing.
+export async function refreshAuthHeaders(): Promise<Record<string, string> | undefined> {
+  const tokens = await getTokens();
+  if (!tokens) return undefined;
+
+  const refreshed = await reissueOnce(tokens.refreshToken);
+  if (!refreshed) {
+    await clearTokens();
+    unauthorizedListener?.();
+    return undefined;
+  }
+  return { Authorization: `Bearer ${refreshed.accessToken}` };
+}
+
+export function toApiUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//.test(pathOrUrl)) return pathOrUrl;
+  return `${API_BASE_URL}${pathOrUrl}`;
 }
