@@ -16,6 +16,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { getAuthHeaders, refreshAuthHeaders, toApiUrl } from "@/lib/api/client";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
+import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route";
 
 // Figma's "앨범" list (node 0:1079) only ever shows entries it has real
 // content for — it doesn't define a locked/"?" card style the way "도감"
@@ -33,7 +34,7 @@ function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
 
   useEffect(() => {
     const spotId = LOCATION_ID_TO_SPOT_ID[locationId];
-    if (!spotId) {
+    if (spotId == null) {
       setRemotePhotos([]);
       setImageHeaders(undefined);
       return;
@@ -394,6 +395,33 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
+  const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
+  const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
+
+  useEffect(() => {
+    let isActive = true;
+    setIsSelfieRouteLoading(true);
+    getSelfieRouteParams(locationId, locale, {
+      collectionItemId: remotePhoto?.collectionItemId,
+      requireAcquired: true,
+    })
+      .then((params) => {
+        if (isActive) setSelfieRouteParams(params);
+      })
+      .catch((error) => {
+        console.error("[album] selfie route params failed", error);
+        if (isActive) setSelfieRouteParams({});
+      })
+      .finally(() => {
+        if (isActive) setIsSelfieRouteLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, locationId, remotePhoto?.collectionItemId]);
+
+  const canOpenPersonCamera = !isSelfieRouteLoading && !!selfieRouteParams.collectionItemId;
 
   const handleShare = () => {
     const label = captured?.poseLabel || remotePhoto?.collectionItemName;
@@ -444,8 +472,9 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         </Pressable>
 
         <Pressable
-          style={styles.viewerSideButton}
-          onPress={() => router.push({ pathname: "/person-camera", params: { locationId } })}>
+          style={[styles.viewerSideButton, !canOpenPersonCamera && styles.viewerSideButtonDisabled]}
+          disabled={!canOpenPersonCamera}
+          onPress={() => router.push({ pathname: "/person-camera", params: { locationId, ...selfieRouteParams } })}>
           <View style={styles.viewerSideCircle}>
             <FontAwesome5 name="camera" size={16} color="#1b1b1b" solid />
           </View>
@@ -788,6 +817,9 @@ const styles = StyleSheet.create({
   viewerSideButton: {
     alignItems: "center",
     gap: 8,
+  },
+  viewerSideButtonDisabled: {
+    opacity: 0.45,
   },
   viewerSideCircle: {
     width: 48,

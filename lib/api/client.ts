@@ -5,8 +5,8 @@ import { clearTokens, getTokens, saveTokens, type AuthTokens } from "@/lib/token
 // 판정은 HTTP status가 아니라 isSuccess로 해야 한다.
 type ApiEnvelope<T> = {
   isSuccess: boolean;
-  code: string;
-  message: string;
+  code?: string;
+  message?: string;
   result: T;
 };
 
@@ -14,11 +14,11 @@ export class ApiError extends Error {
   status: number;
   code: string;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string | undefined, message: string | undefined) {
     super(message);
     this.name = "ApiError";
     this.status = status;
-    this.code = code;
+    this.code = code ?? "";
   }
 }
 
@@ -60,7 +60,7 @@ async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, buildFetchInit(init));
   const json = (await response.json()) as ApiEnvelope<T>;
   if (!json.isSuccess) {
-    throw new ApiError(response.status, json.code, json.message);
+    throw new ApiError(response.status, json.code, json.message ?? "요청 처리 중 오류가 발생했습니다.");
   }
   return json.result;
 }
@@ -92,7 +92,7 @@ function reissueOnce(refreshToken: string): Promise<AuthTokens | null> {
 }
 
 function shouldReissue(error: ApiError) {
-  return error.status === 401 || error.code.startsWith("SEC401_") || error.code === "COMMON401";
+  return error.status === 401 || error.code?.startsWith("SEC401_") || error.code === "COMMON401";
 }
 
 async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {

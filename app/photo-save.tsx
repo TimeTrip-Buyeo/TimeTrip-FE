@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -61,7 +61,6 @@ export default function PhotoSaveScreen() {
   const collectionItemId = resolveNumberParam(params.collectionItemId);
 
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
@@ -69,7 +68,12 @@ export default function PhotoSaveScreen() {
   const entry = ALBUM_ENTRIES[locationId];
   const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
   const compositeRef = useRef<View>(null);
-  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const compositePhotoUriRef = useRef<string | null>(null);
+  const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
+  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const handlePhotoWrapperLayout = (event: LayoutChangeEvent) => {
+    setPhotoWrapperHeight(event.nativeEvent.layout.height);
+  };
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -79,13 +83,16 @@ export default function PhotoSaveScreen() {
   const [showShareUnavailableToast, setShowShareUnavailableToast] = useState(false);
 
   const captureCompositePhoto = async () => {
+    if (compositePhotoUriRef.current) return compositePhotoUriRef.current;
     if (!compositeRef.current) return uri;
     try {
-      return await captureRef(compositeRef.current, {
+      const compositeUri = await captureRef(compositeRef.current, {
         format: "jpg",
         quality: 0.9,
         result: "tmpfile",
       });
+      compositePhotoUriRef.current = compositeUri;
+      return compositeUri;
     } catch (error) {
       // e.g. an old dev client running before react-native-view-shot's
       // native module was linked — fall back to the raw frame instead of
@@ -179,7 +186,7 @@ export default function PhotoSaveScreen() {
         </View>
       </View>
 
-      <View style={styles.photoWrapper}>
+      <View style={styles.photoWrapper} onLayout={handlePhotoWrapperLayout}>
         <View ref={compositeRef} style={styles.compositePhoto} collapsable={false}>
           {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
           {pose && (

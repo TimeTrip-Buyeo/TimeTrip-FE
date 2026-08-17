@@ -13,7 +13,7 @@ import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { arCameraText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItems, type CollectionItem } from "@/lib/api/collections";
-import { resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
+import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 // Placeholder — no real audio guide asset is wired up yet, so pressing play
 // simulates a few seconds of playback to demonstrate the finished-gating
@@ -22,8 +22,7 @@ import { resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
 const AUDIO_GUIDE_PLACEHOLDER_DURATION_MS = 3000;
 
 function resolveSpotTitle(raw: string | string[] | undefined) {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value || null;
+  return resolveSingleParam(raw) || null;
 }
 
 export default function ArCameraScreen() {
