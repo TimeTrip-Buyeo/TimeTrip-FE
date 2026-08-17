@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,17 +13,19 @@ import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import type { LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
+import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-import {
-  getAlbumPhotoDetail,
-  getAlbumPhotos,
-  getAlbums,
-  type AlbumPhotoDetailResponse,
-  type AlbumPhotoListResponse,
-  type AlbumResponse,
-} from "@/lib/api/album";
-import { ApiError } from "@/lib/api/client";
+import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
+
+// Deep-link IDs are untrusted strings — a hand-edited or stale link (e.g.
+// "?collectionItemId=abc") must fall back to the list instead of sending
+// Number.NaN into a request URL like /api/albums/NaN/photos.
+function parseId(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
 
 export default function AlbumScreen() {
   const params = useLocalSearchParams<{
@@ -34,17 +36,19 @@ export default function AlbumScreen() {
   }>();
   const locationId = Array.isArray(params.locationId) ? params.locationId[0] : params.locationId;
   const photo = Array.isArray(params.photo) ? params.photo[0] : params.photo;
-  const collectionItemId = Array.isArray(params.collectionItemId) ? params.collectionItemId[0] : params.collectionItemId;
-  const selfiePhotoId = Array.isArray(params.selfiePhotoId) ? params.selfiePhotoId[0] : params.selfiePhotoId;
+  const rawCollectionItemId = Array.isArray(params.collectionItemId) ? params.collectionItemId[0] : params.collectionItemId;
+  const rawSelfiePhotoId = Array.isArray(params.selfiePhotoId) ? params.selfiePhotoId[0] : params.selfiePhotoId;
+  const collectionItemId = parseId(rawCollectionItemId);
+  const selfiePhotoId = parseId(rawSelfiePhotoId);
 
   if (locationId && photo !== undefined) {
     return <PhotoViewer locationId={locationId as LocationId} photoParam={photo} />;
   }
   if (locationId) return <AlbumDetail locationId={locationId as LocationId} />;
-  if (collectionItemId && selfiePhotoId) {
-    return <AlbumServerPhotoViewer selfiePhotoId={Number(selfiePhotoId)} />;
+  if (collectionItemId !== undefined && selfiePhotoId !== undefined) {
+    return <AlbumServerPhotoViewer selfiePhotoId={selfiePhotoId} />;
   }
-  if (collectionItemId) return <AlbumServerDetail collectionItemId={Number(collectionItemId)} />;
+  if (collectionItemId !== undefined) return <AlbumServerDetail collectionItemId={collectionItemId} />;
   return <AlbumList />;
 }
 
@@ -56,35 +60,38 @@ function BuyeoCutFab({ bottom }: { bottom: number }) {
   );
 }
 
+// Locations with a real ALBUM_ENTRIES entry — used only as a fallback below,
+// for locations the server doesn't know about as an album yet (see
+// fallbackLocationIds in AlbumList).
+const ALBUM_LOCATION_IDS = Object.keys(ALBUM_ENTRIES) as LocationId[];
+
 function AlbumList() {
   const insets = useSafeAreaInsets();
   const { locale, setLocale } = useLanguage();
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const [albums, setAlbums] = useState<AlbumResponse[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const { photosByLocation } = useCapturedPhotos();
+  const { data: albums, loadError } = useApiResource(
+    () => getAlbums(locale).then((response) => response.albums),
+    [locale],
+    "[album] failed to load albums",
+  );
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    setAlbums(null);
-    setLoadError(false);
-    getAlbums()
-      .then((response) => {
-        if (!cancelled) setAlbums(response.albums);
-      })
-      .catch((error) => {
-        console.error("[album] failed to load albums", error instanceof ApiError ? error.message : error);
-        if (!cancelled) setLoadError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // A photo captured for a location the server hasn't registered as an album
+  // yet (selfie upload isn't wired up — see photo-save.tsx) would otherwise
+  // vanish from this list entirely once the server list replaces it, with no
+  // way back to AlbumDetail(locationId) for that photo.
+  const knownServerNames = new Set((albums ?? []).map((album) => album.name));
+  const fallbackLocationIds = ALBUM_LOCATION_IDS.filter((id) => {
+    const entry = ALBUM_ENTRIES[id];
+    const hasCapturedPhotos = (photosByLocation[id]?.length ?? 0) > 0;
+    return !!entry && hasCapturedPhotos && !knownServerNames.has(entry.name[locale]);
+  });
 
   return (
     <View style={styles.container}>
@@ -117,16 +124,8 @@ function AlbumList() {
           </View>
         ) : (
           <View style={styles.list}>
-            {albums.map((album) => (
-              <Pressable
-                key={album.collectionItemId}
-                style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/album",
-                    params: { collectionItemId: String(album.collectionItemId) },
-                  })
-                }>
+            {albums.map((album) => {
+              const thumb = (
                 <View style={styles.cardThumb}>
                   {!!album.thumbnailUrl && (
                     <Image source={{ uri: album.thumbnailUrl }} style={styles.cardThumbImage} resizeMode="cover" />
@@ -138,6 +137,8 @@ function AlbumList() {
                     </Text>
                   </View>
                 </View>
+              );
+              const textColumn = (
                 <View style={styles.cardTextColumn}>
                   <Text style={styles.cardTitle}>{album.name}</Text>
                   <View style={styles.cardLocationRow}>
@@ -145,13 +146,67 @@ function AlbumList() {
                     <Text style={styles.cardLocation}>{album.spotName}</Text>
                   </View>
                 </View>
-                {album.isLocked ? (
-                  <FontAwesome5 name="lock" size={14} color="#d1d5db" solid />
-                ) : (
+              );
+
+              // Locked albums have no unlocked content behind them yet — rendered as a
+              // plain View (no Pressable) so tapping can't reach AlbumServerDetail and
+              // call getAlbumPhotos for a still-locked collectionItemId. Matches the
+              // locked-item convention in collection.tsx's CollectionThemeList.
+              if (album.isLocked) {
+                return (
+                  <View key={album.collectionItemId} style={styles.card}>
+                    {thumb}
+                    {textColumn}
+                    <FontAwesome5 name="lock" size={14} color="#d1d5db" solid />
+                  </View>
+                );
+              }
+
+              return (
+                <Pressable
+                  key={album.collectionItemId}
+                  style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/album",
+                      params: { collectionItemId: String(album.collectionItemId) },
+                    })
+                  }>
+                  {thumb}
+                  {textColumn}
                   <FontAwesome5 name="chevron-right" size={12} color="#d1d5db" solid />
-                )}
-              </Pressable>
-            ))}
+                </Pressable>
+              );
+            })}
+            {fallbackLocationIds.map((id) => {
+              const entry = ALBUM_ENTRIES[id]!;
+              return (
+                <Pressable
+                  key={id}
+                  style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+                  onPress={() => router.push({ pathname: "/album", params: { locationId: id } })}>
+                  <View style={styles.cardThumb}>
+                    {entry.thumbnail && (
+                      <Image source={entry.thumbnail} style={styles.cardThumbImage} resizeMode="cover" />
+                    )}
+                    <View style={styles.cardPhotoCountBadge}>
+                      <Text style={styles.cardPhotoCountText}>
+                        {entry.photoCount}
+                        {t.photoCountSuffix}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.cardTextColumn}>
+                    <Text style={styles.cardTitle}>{entry.name[locale]}</Text>
+                    <View style={styles.cardLocationRow}>
+                      <FontAwesome5 name="medal" size={11} color="#b8860b" solid />
+                      <Text style={styles.cardLocation}>{entry.locationCaption[locale]}</Text>
+                    </View>
+                  </View>
+                  <FontAwesome5 name="chevron-right" size={12} color="#d1d5db" solid />
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -177,29 +232,15 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const [data, setData] = useState<AlbumPhotoListResponse | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const { data, loadError } = useApiResource(
+    () => getAlbumPhotos(collectionItemId, locale),
+    [collectionItemId, locale],
+    "[album] failed to load album photos",
+  );
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    setData(null);
-    setLoadError(false);
-    getAlbumPhotos(collectionItemId)
-      .then((response) => {
-        if (!cancelled) setData(response);
-      })
-      .catch((error) => {
-        console.error("[album] failed to load album photos", error instanceof ApiError ? error.message : error);
-        if (!cancelled) setLoadError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [collectionItemId]);
 
   return (
     <View style={styles.container}>
@@ -269,25 +310,11 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
   const t = albumScreenText[locale];
-  const [photo, setPhoto] = useState<AlbumPhotoDetailResponse | null>(null);
-  const [loadError, setLoadError] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setPhoto(null);
-    setLoadError(false);
-    getAlbumPhotoDetail(selfiePhotoId)
-      .then((response) => {
-        if (!cancelled) setPhoto(response);
-      })
-      .catch((error) => {
-        console.error("[album] failed to load photo detail", error instanceof ApiError ? error.message : error);
-        if (!cancelled) setLoadError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selfiePhotoId]);
+  const { data: photo, loadError } = useApiResource(
+    () => getAlbumPhotoDetail(selfiePhotoId, locale),
+    [selfiePhotoId, locale],
+    "[album] failed to load photo detail",
+  );
 
   const handleShare = () => {
     if (!photo) return;
