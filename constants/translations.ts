@@ -762,6 +762,7 @@ export const collectibleAcquiredText: Record<Locale, CollectibleAcquiredText> = 
 type AlbumScreenText = {
   subtitle: string;
   photoCountSuffix: string;
+  loadErrorText: string;
   themeLabel: string;
   buyeoCutLabel: string;
   personCameraLabel: string;
@@ -776,6 +777,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
   ko: {
     subtitle: '부여의 유서 깊은 유적지에서 모아둔 소중한 흔적들을 모아보시오.',
     photoCountSuffix: '장',
+    loadErrorText: '앨범을 불러오지 못했어요. 다시 시도해주세요.',
     themeLabel: '테마',
     buyeoCutLabel: '부여세컷',
     personCameraLabel: '인물 카메라',
@@ -788,6 +790,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
   en: {
     subtitle: "Gather the precious traces you've collected from Buyeo's storied heritage sites.",
     photoCountSuffix: ' photos',
+    loadErrorText: "Couldn't load the album. Please try again.",
     themeLabel: 'Theme',
     buyeoCutLabel: 'Buyeo 4-Cut',
     personCameraLabel: 'Portrait Camera',
@@ -800,6 +803,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
   zh: {
     subtitle: '收集在扶余悠久遗迹中留下的珍贵痕迹吧。',
     photoCountSuffix: '张',
+    loadErrorText: '相册加载失败，请重试。',
     themeLabel: '主题',
     buyeoCutLabel: '扶余四格',
     personCameraLabel: '人物相机',
@@ -812,6 +816,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
   ja: {
     subtitle: '扶余の由緒ある遺跡地で集めた大切な痕跡を集めてみよう。',
     photoCountSuffix: '枚',
+    loadErrorText: 'アルバムを読み込めませんでした。もう一度お試しください。',
     themeLabel: 'テーマ',
     buyeoCutLabel: '扶余フォーカット',
     personCameraLabel: '人物カメラ',
