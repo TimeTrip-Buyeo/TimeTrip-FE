@@ -651,6 +651,13 @@ type CollectionScreenText = {
   takePhotoWithFigure: string;
   comingSoonTitle: string;
   comingSoonMessage: string;
+  loadingMessage: string;
+  emptyTopicMessage: string;
+  emptyItemMessage: string;
+  lockedItemMessage: string;
+  detailUnavailableMessage: string;
+  personTypeLabel: string;
+  artifactTypeLabel: string;
 };
 
 export const collectionScreenText: Record<Locale, CollectionScreenText> = {
@@ -664,6 +671,13 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: '인물과 사진 찍기',
     comingSoonTitle: '준비 중이에요',
     comingSoonMessage: '이 장소의 컬렉션은 곧 공개될 예정이에요.',
+    loadingMessage: '불러오는 중이에요.',
+    emptyTopicMessage: '아직 확인할 수 있는 도감 주제가 없어요.',
+    emptyItemMessage: '이야기에 연결된 도감 아이템이 없어요.',
+    lockedItemMessage: 'AR카메라에서 먼저 만나보세요.',
+    detailUnavailableMessage: '획득한 아이템만 상세 정보를 볼 수 있어요.',
+    personTypeLabel: '인물',
+    artifactTypeLabel: '유물',
   },
   en: {
     listTitle: 'Buyeo Baekje Almanac',
@@ -675,6 +689,13 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: 'Take a Photo Together',
     comingSoonTitle: 'Coming Soon',
     comingSoonMessage: "This location's collectible hasn't been revealed yet.",
+    loadingMessage: 'Loading...',
+    emptyTopicMessage: 'No collection topics are available yet.',
+    emptyItemMessage: 'No collection items are linked to this story.',
+    lockedItemMessage: 'Meet it in AR Camera first.',
+    detailUnavailableMessage: 'Only acquired items can be viewed in detail.',
+    personTypeLabel: 'Figure',
+    artifactTypeLabel: 'Artifact',
   },
   zh: {
     listTitle: '扶余百济图鉴',
@@ -686,6 +707,13 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: '与人物合影',
     comingSoonTitle: '即将开放',
     comingSoonMessage: '该地点的收藏内容尚未公开。',
+    loadingMessage: '加载中。',
+    emptyTopicMessage: '暂无可查看的图鉴主题。',
+    emptyItemMessage: '该故事暂无图鉴项目。',
+    lockedItemMessage: '请先在 AR 相机中遇见它。',
+    detailUnavailableMessage: '只有已获得的项目可以查看详情。',
+    personTypeLabel: '人物',
+    artifactTypeLabel: '文物',
   },
   ja: {
     listTitle: '扶余百済図鑑',
@@ -697,6 +725,13 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: '人物と写真を撮る',
     comingSoonTitle: '準備中です',
     comingSoonMessage: 'この場所のコレクションはまもなく公開されます。',
+    loadingMessage: '読み込み中です。',
+    emptyTopicMessage: '表示できる図鑑テーマはまだありません。',
+    emptyItemMessage: 'このストーリーに紐づく図鑑アイテムはありません。',
+    lockedItemMessage: '先にARカメラで出会ってください。',
+    detailUnavailableMessage: '獲得済みアイテムのみ詳細を表示できます。',
+    personTypeLabel: '人物',
+    artifactTypeLabel: '遺物',
   },
 };
 

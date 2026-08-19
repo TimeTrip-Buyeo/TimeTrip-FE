@@ -10,7 +10,7 @@ type CollectibleAcquiredModalProps = {
   type: "person" | "artifact";
   name: string;
   description: string;
-  image: ImageSourcePropType;
+  image?: ImageSourcePropType;
   onClose: () => void;
   onViewCollection: () => void;
   /** Person acquisitions only — Figma has no "사진 찍기" button on the artifact variant. */
@@ -78,7 +78,13 @@ export function CollectibleAcquiredModal({
           </View>
 
           <View style={styles.itemCard}>
-            <Image source={image} style={styles.itemImage} resizeMode="cover" />
+            {image ? (
+              <Image source={image} style={styles.itemImage} resizeMode="cover" />
+            ) : (
+              <View style={[styles.itemImage, styles.itemImageFallback]}>
+                <FontAwesome5 name={isPerson ? "user" : "gem"} size={26} color="#b8860b" solid />
+              </View>
+            )}
             <View style={styles.itemTextColumn}>
               <Text style={styles.itemName}>{name}</Text>
               <Text style={styles.itemDescription}>{description}</Text>
@@ -180,6 +186,10 @@ const styles = StyleSheet.create({
     height: 95,
     borderRadius: 6,
     backgroundColor: "#e5e7eb",
+  },
+  itemImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   itemTextColumn: {
     flex: 1,

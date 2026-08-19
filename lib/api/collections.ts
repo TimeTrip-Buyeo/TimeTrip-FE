@@ -1,5 +1,5 @@
 import type { Locale } from "@/constants/translations";
-import { apiGet } from "@/lib/api/client";
+import { apiGet, apiPost } from "@/lib/api/client";
 
 export type CollectionItemType = "CHARACTER" | "ARTIFACT";
 
@@ -14,6 +14,47 @@ export type CollectionItem = {
   beforeImageUrl: string | null;
   isAcquired: boolean;
   acquiredAt: string | null;
+};
+
+export type CollectionItemDetail = {
+  collectionItemId: number;
+  storyId: number;
+  spotId: number;
+  spotName: string;
+  name: string;
+  type: CollectionItemType;
+  isCharacter: boolean;
+  cardImageUrl: string | null;
+  detailImageUrl: string | null;
+  description: string;
+  sourceCredit: string | null;
+  audioFiles: {
+    language: string;
+    filePath: string;
+    durationSec: number;
+  }[];
+  isAcquired: boolean;
+  acquiredAt: string | null;
+};
+
+export type CollectionItemAcquireResponse = {
+  userCollectionId: number;
+  collectionItemId: number;
+  name: string;
+  type: CollectionItemType | string;
+  isCharacter: boolean;
+  cardImageUrl: string | null;
+  acquiredAt: string;
+  popupTitle: string;
+  popupMessage: string;
+};
+
+export type CollectionItemPose = {
+  id: number;
+  name: string;
+  poseImageUrl: string | null;
+  thumbnailUrl: string | null;
+  sortOrder: number | null;
 };
 
 export type StoryTopic = {
@@ -33,6 +74,11 @@ type StoryTopicListResponse = {
 
 type CollectionItemListResponse = {
   items: CollectionItem[];
+};
+
+type CollectionItemPoseListResponse = {
+  collectionItemId: number;
+  poses: CollectionItemPose[];
 };
 
 export function getStoryTopics(options: {
@@ -59,4 +105,24 @@ export function getCollectionItems(
   if (options.type) params.set("type", options.type);
 
   return apiGet<CollectionItemListResponse>(`/api/collections/${storyId}?${params.toString()}`);
+}
+
+export function getCollectionItemDetail(
+  collectionItemId: number,
+  options: { locale: Locale },
+): Promise<CollectionItemDetail> {
+  const params = new URLSearchParams({ language: options.locale });
+  return apiGet<CollectionItemDetail>(`/api/collections/items/${collectionItemId}?${params.toString()}`);
+}
+
+export function acquireCollectionItem(collectionItemId: number): Promise<CollectionItemAcquireResponse> {
+  return apiPost<CollectionItemAcquireResponse>(`/api/collections/items/${collectionItemId}/acquire`);
+}
+
+export function getCollectionItemPoses(
+  collectionItemId: number,
+  options: { locale: Locale },
+): Promise<CollectionItemPoseListResponse> {
+  const params = new URLSearchParams({ language: options.locale });
+  return apiGet<CollectionItemPoseListResponse>(`/api/collection-items/${collectionItemId}/poses?${params.toString()}`);
 }

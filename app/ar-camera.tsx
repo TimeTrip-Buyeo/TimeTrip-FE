@@ -3,16 +3,17 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CollectibleAcquiredModal } from "@/components/collectible-acquired-modal";
 import { LanguageLegendModal } from "@/components/onboarding/language-legend-modal";
-import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { arCameraText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { getCollectionItems, type CollectionItem } from "@/lib/api/collections";
+import { ApiError } from "@/lib/api/client";
+import { acquireCollectionItem, type CollectionItemAcquireResponse } from "@/lib/api/collections";
+import { getTimeslipOverlay, type TimeslipOverlay } from "@/lib/api/timeslip";
 import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 // Placeholder — no real audio guide asset is wired up yet, so pressing play
@@ -30,7 +31,6 @@ export default function ArCameraScreen() {
   const locationId = resolveLocationId(params.locationId, params.spotId, "busosanseong");
   const spotTitle = resolveSpotTitle(params.spotName);
   const spotId = resolveNumberParam(params.spotId);
-  const storyId = resolveNumberParam(params.storyId);
   const insets = useSafeAreaInsets();
 
   const { locale, setLocale } = useLanguage();
@@ -43,8 +43,8 @@ export default function ArCameraScreen() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isAudioFinished, setIsAudioFinished] = useState(false);
   const [isAcquiredModalVisible, setIsAcquiredModalVisible] = useState(false);
-  const [collectionItem, setCollectionItem] = useState<CollectionItem | null>(null);
-  const collectible = COLLECTIBLES[locationId];
+  const [timeslip, setTimeslip] = useState<TimeslipOverlay | null>(null);
+  const [acquiredItem, setAcquiredItem] = useState<CollectionItemAcquireResponse | null>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -55,26 +55,33 @@ export default function ArCameraScreen() {
   }, [permission, requestPermission]);
 
   useEffect(() => {
-    if (collectible?.type !== "person" || spotId === null || storyId === null) {
-      setCollectionItem(null);
+    if (spotId === null) {
+      setTimeslip(null);
+      setAcquiredItem(null);
+      setIsAcquiredModalVisible(false);
+      setIsAudioPlaying(false);
+      setIsAudioFinished(false);
       return;
     }
 
     let isActive = true;
-    getCollectionItems(storyId, { spotId, locale, type: "CHARACTER" })
-      .then(({ items }) => {
-        if (!isActive) return;
-        setCollectionItem(items[0] ?? null);
+    setAcquiredItem(null);
+    setIsAcquiredModalVisible(false);
+    setIsAudioPlaying(false);
+    setIsAudioFinished(false);
+    getTimeslipOverlay(spotId, { locale })
+      .then((overlay) => {
+        if (isActive) setTimeslip(overlay);
       })
       .catch((error) => {
-        console.error("[ar-camera] collection item lookup failed", error);
-        if (isActive) setCollectionItem(null);
+        console.error("[ar-camera] timeslip overlay lookup failed", error);
+        if (isActive) setTimeslip(null);
       });
 
     return () => {
       isActive = false;
     };
-  }, [collectible?.type, locale, spotId, storyId]);
+  }, [locale, spotId]);
 
   const mapT = mapScreenText[locale];
   const t = arCameraText[locale];
@@ -90,12 +97,28 @@ export default function ArCameraScreen() {
     setIsLegendVisible(false);
   };
 
+  const finishAudioGuide = async () => {
+    setIsAudioPlaying(false);
+    setIsAudioFinished(true);
+
+    const collectionItemId = timeslip?.collectionItem.collectionItemId;
+    if (!collectionItemId || timeslip.collectionItem.isAcquired) return;
+
+    try {
+      const nextAcquiredItem = await acquireCollectionItem(collectionItemId);
+      setAcquiredItem(nextAcquiredItem);
+      setIsAcquiredModalVisible(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "COLLECTION4091") return;
+      console.error("[ar-camera] collection item acquire failed", error);
+    }
+  };
+
   const handlePlayAudio = () => {
     if (isAudioPlaying || isAudioFinished) return;
     setIsAudioPlaying(true);
     setTimeout(() => {
-      setIsAudioPlaying(false);
-      setIsAudioFinished(true);
+      finishAudioGuide();
     }, AUDIO_GUIDE_PLACEHOLDER_DURATION_MS);
   };
 
@@ -135,7 +158,11 @@ export default function ArCameraScreen() {
           asset pipeline exists. */}
       <View style={styles.guideBoxWrapper} pointerEvents="none">
         <View style={styles.guideBox}>
-          <FontAwesome5 name="expand" size={60} color="rgba(255,255,255,0.3)" solid />
+          {timeslip?.overlayImageUrl ? (
+            <Image source={{ uri: timeslip.overlayImageUrl }} style={styles.guideOverlayImage} resizeMode="contain" />
+          ) : (
+            <FontAwesome5 name="expand" size={60} color="rgba(255,255,255,0.3)" solid />
+          )}
           <View style={styles.guideCaption}>
             <Text style={styles.guideCaptionText}>{t.alignInstructionText}</Text>
           </View>
@@ -170,17 +197,22 @@ export default function ArCameraScreen() {
           <>
             <View style={styles.characterCard}>
               <View style={styles.characterAvatar}>
-                <FontAwesome5 name="user" size={26} color="#800000" solid />
+                {timeslip?.collectionItem.cardImageUrl ? (
+                  <Image
+                    source={{ uri: timeslip.collectionItem.cardImageUrl }}
+                    style={styles.characterAvatarImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <FontAwesome5 name="user" size={26} color="#800000" solid />
+                )}
               </View>
               <View style={styles.characterBody}>
-                <Text style={styles.characterName}>{t.characterName}</Text>
-                <Text style={styles.characterDescription}>{t.collectibleHint}</Text>
+                <Text style={styles.characterName}>{timeslip?.collectionItem.name ?? t.characterName}</Text>
+                <Text style={styles.characterDescription}>{timeslip?.guideText ?? t.collectibleHint}</Text>
               </View>
             </View>
 
-            {/* Placeholder trigger — later this unlocks automatically once
-                GPS confirms the visitor is physically at this location,
-                instead of being manually tappable. */}
             <View style={styles.audioRow}>
               <Pressable
                 style={styles.audioPlayButton}
@@ -195,7 +227,7 @@ export default function ArCameraScreen() {
               </Pressable>
               <View style={styles.audioTextColumn}>
                 <Text style={styles.audioLabel}>{t.audioGuideLabel}</Text>
-                <Text style={styles.audioTitle}>{t.audioGuideTitle}</Text>
+                <Text style={styles.audioTitle}>{timeslip?.storyTitle ?? t.audioGuideTitle}</Text>
               </View>
               <Pressable
                 style={[styles.langBadge, isLegendVisible && styles.langBadgeActive]}
@@ -213,40 +245,36 @@ export default function ArCameraScreen() {
               )}
             </View>
 
-            {/* Hidden until the audio guide finishes playing. */}
-            {isAudioFinished && (
-              <Pressable style={styles.findButton} onPress={() => setIsAcquiredModalVisible(true)}>
-                <Text style={styles.findButtonText}>{t.findCollectibleButtonLabel}</Text>
-              </Pressable>
-            )}
-
             <View style={styles.navIndicator} />
           </>
         )}
       </View>
 
-      {isAcquiredModalVisible && collectible && (
+      {isAcquiredModalVisible && acquiredItem && timeslip && (
         <CollectibleAcquiredModal
-          type={collectible.type}
-          name={collectible.name[locale]}
-          description={collectible.description[locale]}
-          image={collectible.image}
+          type={acquiredItem.isCharacter ? "person" : "artifact"}
+          name={acquiredItem.name}
+          description={acquiredItem.popupMessage}
+          image={acquiredItem.cardImageUrl ? { uri: acquiredItem.cardImageUrl } : undefined}
           onClose={() => setIsAcquiredModalVisible(false)}
           onViewCollection={() => {
             setIsAcquiredModalVisible(false);
-            router.push({ pathname: "/collection", params: { locationId } });
+            router.push({
+              pathname: "/collection",
+              params: { itemId: String(acquiredItem.collectionItemId) },
+            });
           }}
           onTakePhoto={
-            collectible.type === "person"
+            acquiredItem.isCharacter
               ? () => {
                   setIsAcquiredModalVisible(false);
                   router.push({
                     pathname: "/person-camera",
                     params: {
                       locationId,
-                      ...(spotId !== null ? { spotId: String(spotId) } : {}),
-                      ...(storyId !== null ? { storyId: String(storyId) } : {}),
-                      ...(collectionItem ? { collectionItemId: String(collectionItem.collectionItemId) } : {}),
+                      spotId: String(timeslip.spotId),
+                      storyId: String(timeslip.storyId),
+                      collectionItemId: String(acquiredItem.collectionItemId),
                     },
                   });
                 }
@@ -343,6 +371,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
   },
+  guideOverlayImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+  },
   guideCaption: {
     backgroundColor: "rgba(0,0,0,0.4)",
     borderRadius: 20,
@@ -412,6 +447,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  characterAvatarImage: {
+    width: "100%",
+    height: "100%",
   },
   characterBody: {
     flex: 1,
