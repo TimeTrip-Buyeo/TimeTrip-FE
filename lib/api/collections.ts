@@ -1,5 +1,5 @@
 import type { Locale } from "@/constants/translations";
-import { apiGet, apiPost } from "@/lib/api/client";
+import { apiGet } from "@/lib/api/client";
 
 export type CollectionItemType = "CHARACTER" | "ARTIFACT";
 
@@ -37,26 +37,6 @@ export type CollectionItemDetail = {
   acquiredAt: string | null;
 };
 
-export type CollectionItemAcquireResponse = {
-  userCollectionId: number;
-  collectionItemId: number;
-  name: string;
-  type: CollectionItemType | string;
-  isCharacter: boolean;
-  cardImageUrl: string | null;
-  acquiredAt: string;
-  popupTitle: string;
-  popupMessage: string;
-};
-
-export type CollectionItemPose = {
-  id: number;
-  name: string;
-  poseImageUrl: string | null;
-  thumbnailUrl: string | null;
-  sortOrder: number | null;
-};
-
 export type StoryTopic = {
   storyId: number;
   spotId: number;
@@ -74,11 +54,6 @@ type StoryTopicListResponse = {
 
 type CollectionItemListResponse = {
   items: CollectionItem[];
-};
-
-type CollectionItemPoseListResponse = {
-  collectionItemId: number;
-  poses: CollectionItemPose[];
 };
 
 export function getStoryTopics(options: {
@@ -113,16 +88,4 @@ export function getCollectionItemDetail(
 ): Promise<CollectionItemDetail> {
   const params = new URLSearchParams({ language: options.locale });
   return apiGet<CollectionItemDetail>(`/api/collections/items/${collectionItemId}?${params.toString()}`);
-}
-
-export function acquireCollectionItem(collectionItemId: number): Promise<CollectionItemAcquireResponse> {
-  return apiPost<CollectionItemAcquireResponse>(`/api/collections/items/${collectionItemId}/acquire`);
-}
-
-export function getCollectionItemPoses(
-  collectionItemId: number,
-  options: { locale: Locale },
-): Promise<CollectionItemPoseListResponse> {
-  const params = new URLSearchParams({ language: options.locale });
-  return apiGet<CollectionItemPoseListResponse>(`/api/collection-items/${collectionItemId}/poses?${params.toString()}`);
 }
