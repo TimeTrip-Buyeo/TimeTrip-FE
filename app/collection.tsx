@@ -115,27 +115,27 @@ function CollectionTopicList() {
               <Pressable
                 key={topic.storyId}
                 style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/collection",
-                      params: { storyId: String(topic.storyId), title: topic.title },
-                    })
-                  }>
-                  {topic.thumbnailUrl ? (
-                    <Image
-                      source={{ uri: toApiUrl(topic.thumbnailUrl) }}
-                      style={styles.listItemThumb}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.listItemThumb} />
-                  )}
-                  <View style={styles.listItemTextColumn}>
-                    <Text style={styles.listItemTitle}>{topic.title}</Text>
-                    <Text style={styles.listItemProgress}>
-                      {topic.acquiredCollectionCount}/{topic.totalCollectionCount}
-                    </Text>
-                  </View>
+                onPress={() =>
+                  router.push({
+                    pathname: "/collection",
+                    params: { storyId: String(topic.storyId), title: topic.title },
+                  })
+                }>
+                {topic.thumbnailUrl ? (
+                  <Image
+                    source={{ uri: toApiUrl(topic.thumbnailUrl) }}
+                    style={styles.listItemThumb}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={styles.listItemThumb} />
+                )}
+                <View style={styles.listItemTextColumn}>
+                  <Text style={styles.listItemTitle}>{topic.title}</Text>
+                  <Text style={styles.listItemProgress}>
+                    {topic.acquiredCollectionCount}/{topic.totalCollectionCount}
+                  </Text>
+                </View>
                 <FontAwesome5 name="chevron-right" size={12} color="#d1d5db" solid />
               </Pressable>
             ))
@@ -214,7 +214,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
                     })
                   }>
                   <View style={styles.gridCardImageWrapper}>
-                    <Image source={{ uri: toApiUrl(item.cardImageUrl) }} style={styles.gridCardImage} resizeMode="cover" />
+                    <Image source={{ uri: toApiUrl(item.cardImageUrl) }} style={styles.gridCardImage} resizeMode="contain" />
                     <View style={styles.gridCardBadge}>
                       <FontAwesome5 name="check" size={9} color="#fff" solid />
                     </View>
@@ -321,7 +321,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={styles.heroFrame}>
           {imageUrl ? (
-            <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="cover" />
+            <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="contain" />
           ) : (
             <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
           )}
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 12,
-    backgroundColor: "#f5f5f4",
+    backgroundColor: "#f8f6f0",
   },
   listItemTextColumn: {
     flex: 1,
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 1,
     borderRadius: 8,
-    backgroundColor: "#f1f1f1",
+    backgroundColor: "#f8f6f0",
     overflow: "hidden",
   },
   gridCardImage: {
@@ -631,13 +631,11 @@ const styles = StyleSheet.create({
   detailScrollContent: {
     flexGrow: 1,
   },
-  // Full-bleed edge to edge (no side margins) for both types — a person's
-  // art floats on Figma's blurred-gradient colors via `contain`, an
-  // artifact's photo fills the frame via `cover`. Either way the bottom
-  // fades into the page background instead of cutting off hard.
+  // Keep collection artwork fully visible even when the source image ratio
+  // differs from the device frame.
   heroFrame: {
     height: HERO_HEIGHT,
-    backgroundColor: "#1b1b1b",
+    backgroundColor: "#f8f6f0",
     overflow: "hidden",
   },
   personHeroImage: {
