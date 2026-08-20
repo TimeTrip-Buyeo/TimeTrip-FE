@@ -20,6 +20,8 @@ import {
   type StoryTopic,
 } from "@/lib/api/collections";
 
+type AcquiredCollectionItem = CollectionItem & { cardImageUrl: string };
+
 export default function CollectionScreen() {
   const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
   const storyId = resolveNumberParam(params.storyId);
@@ -42,6 +44,14 @@ function resolveNumberParam(raw: string | string[] | undefined) {
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
+function hasAcquiredCollection(topic: StoryTopic) {
+  return topic.acquiredCollectionCount > 0;
+}
+
+function isAcquiredItem(item: CollectionItem): item is AcquiredCollectionItem {
+  return item.isAcquired && item.cardImageUrl !== null;
+}
+
 function CollectionTopicList() {
   const insets = useSafeAreaInsets();
   const { locale, setLocale } = useLanguage();
@@ -58,9 +68,9 @@ function CollectionTopicList() {
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
-    getStoryTopics({ locale })
+    getStoryTopics({ locale, storyType: "special" })
       .then((nextTopics) => {
-        if (isActive) setTopics(nextTopics);
+        if (isActive) setTopics(nextTopics.filter(hasAcquiredCollection));
       })
       .catch((error) => {
         console.error("[collection] topics failed", error);
@@ -146,7 +156,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
   const { locale } = useLanguage();
   const mapT = mapScreenText[locale];
   const t = collectionScreenText[locale];
-  const [items, setItems] = useState<CollectionItem[]>([]);
+  const [items, setItems] = useState<AcquiredCollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -154,7 +164,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
     setIsLoading(true);
     getCollectionItems(storyId, { locale })
       .then(({ items: nextItems }) => {
-        if (isActive) setItems(nextItems);
+        if (isActive) setItems(nextItems.filter(isAcquiredItem));
       })
       .catch((error) => {
         console.error("[collection] items failed", error);
@@ -188,16 +198,6 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
             items.map((item) => {
               const locationId = SPOT_ID_TO_LOCATION_ID[item.spotId];
               const locationLabel = locationId ? mapT.pins[locationId] : "";
-              if (!item.isAcquired || !item.cardImageUrl) {
-                return (
-                  <View key={item.collectionItemId} style={styles.gridCard}>
-                    <View style={styles.gridCardImageLocked} />
-                    <Text style={styles.gridCardNameLocked}>?</Text>
-                    <Text style={styles.gridCardLocationLocked}>{t.lockedItemMessage}</Text>
-                  </View>
-                );
-              }
-
               return (
                 <Pressable
                   key={item.collectionItemId}
