@@ -11,6 +11,7 @@ import { GUNGSEO_FONT, GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
 import { collectionScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { toApiUrl } from "@/lib/api/client";
 import {
   getCollectionItemDetail,
   getCollectionItems,
@@ -121,7 +122,11 @@ function CollectionTopicList() {
                     })
                   }>
                   {topic.thumbnailUrl ? (
-                    <Image source={{ uri: topic.thumbnailUrl }} style={styles.listItemThumb} resizeMode="cover" />
+                    <Image
+                      source={{ uri: toApiUrl(topic.thumbnailUrl) }}
+                      style={styles.listItemThumb}
+                      resizeMode="cover"
+                    />
                   ) : (
                     <View style={styles.listItemThumb} />
                   )}
@@ -209,7 +214,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
                     })
                   }>
                   <View style={styles.gridCardImageWrapper}>
-                    <Image source={{ uri: item.cardImageUrl }} style={styles.gridCardImage} resizeMode="cover" />
+                    <Image source={{ uri: toApiUrl(item.cardImageUrl) }} style={styles.gridCardImage} resizeMode="cover" />
                     <View style={styles.gridCardBadge}>
                       <FontAwesome5 name="check" size={9} color="#fff" solid />
                     </View>
@@ -316,7 +321,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={styles.heroFrame}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.artifactHeroImage} resizeMode="cover" />
+            <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="cover" />
           ) : (
             <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
           )}
