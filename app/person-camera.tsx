@@ -2,35 +2,33 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, LayoutAnimation, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Animated, Image, LayoutAnimation, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { MAP_LOCATIONS, type LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-
-const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
-
-function resolveLocationId(raw: string | string[] | undefined): LocationId {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value && KNOWN_LOCATION_IDS.has(value) ? (value as LocationId) : "pagoda";
-}
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveSingleParam } from "@/lib/selfie-route";
 
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
 
-// Matches Figma "인물 카메라 (포즈 선택 가능)", node 0:1000. The person cutout is
-// composited live over the real camera feed (not baked into a single photo
-// file — this project has no view-shot/native compositing module installed
-// yet), and capture uses expo-camera's own takePictureAsync.
+// Matches Figma "인물 카메라 (포즈 선택 가능)", node 0:1000. This screen
+// captures the camera frame first; photo-save then captures the composed
+// camera + person overlay image for local/server album storage.
 export default function PersonCameraScreen() {
-  const params = useLocalSearchParams<{ locationId?: string }>();
+  const params = useLocalSearchParams<{
+    locationId?: string;
+    spotId?: string;
+    storyId?: string;
+    collectionItemId?: string;
+  }>();
   const locationId = resolveLocationId(params.locationId);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
 
   const mapT = mapScreenText[locale];
@@ -97,8 +95,6 @@ export default function PersonCameraScreen() {
   // here is what let the two silently overlap and swallow the collapse
   // toggle's taps once the section shrank.
   const actionBarHeight = ACTION_BAR_CONTENT_HEIGHT + insets.bottom;
-  const poseAreaBottom = actionBarHeight;
-
   // The person overlay's own floor: it must clear whatever opaque panel is
   // currently stacked above the action bar (the pose section, in either its
   // expanded or collapsed height), or the panel paints over — "잘리는" —
@@ -106,6 +102,9 @@ export default function PersonCameraScreen() {
   // back to 0 before the first layout pass and whenever there's no pose
   // section to render at all (poses.length <= 1).
   const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const visibleCameraFrameHeight = Math.max(1, windowHeight - personFloor);
+  const personOverlayFrameRatio = personOverlayHeight / visibleCameraFrameHeight;
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -119,6 +118,12 @@ export default function PersonCameraScreen() {
           poseId: selectedPose?.id ?? "",
           poseLabel: selectedPose?.label[locale] ?? "",
           uri: photo.uri,
+          personOverlayFrameRatio: String(personOverlayFrameRatio),
+          ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
+          ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
+          ...(resolveSingleParam(params.collectionItemId)
+            ? { collectionItemId: resolveSingleParam(params.collectionItemId)! }
+            : {}),
         },
       });
     } finally {
@@ -191,7 +196,7 @@ export default function PersonCameraScreen() {
         <View
           style={[
             styles.personOverlay,
-            { aspectRatio: selectedPose.aspectRatio, bottom: personFloor },
+            { aspectRatio: selectedPose.aspectRatio, bottom: personFloor, height: personOverlayHeight },
           ]}
           pointerEvents="none">
           <Image source={selectedPose.image} style={styles.personOverlayImage} resizeMode="cover" />
@@ -365,7 +370,6 @@ const styles = StyleSheet.create({
   personOverlay: {
     position: "absolute",
     right: -24,
-    height: "40%",
   },
   personOverlayImage: {
     width: "100%",
