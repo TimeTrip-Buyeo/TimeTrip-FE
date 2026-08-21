@@ -820,7 +820,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   cardCollapsed: {
-    marginTop: 190,
+    marginTop: -84,
+    paddingTop: 18,
+    paddingBottom: 18,
   },
   cardDragHandle: {
     alignSelf: "center",
