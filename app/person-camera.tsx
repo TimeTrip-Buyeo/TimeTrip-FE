@@ -103,6 +103,8 @@ export default function PersonCameraScreen() {
   // section to render at all (poses.length <= 1).
   const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
   const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const visibleCameraFrameHeight = Math.max(1, windowHeight - personFloor);
+  const personOverlayFrameRatio = personOverlayHeight / visibleCameraFrameHeight;
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -116,6 +118,7 @@ export default function PersonCameraScreen() {
           poseId: selectedPose?.id ?? "",
           poseLabel: selectedPose?.label[locale] ?? "",
           uri: photo.uri,
+          personOverlayFrameRatio: String(personOverlayFrameRatio),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)

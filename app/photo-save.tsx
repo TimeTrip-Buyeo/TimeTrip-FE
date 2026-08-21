@@ -48,6 +48,7 @@ export default function PhotoSaveScreen() {
     poseId?: string;
     poseLabel?: string;
     uri?: string;
+    personOverlayFrameRatio?: string;
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
@@ -56,6 +57,11 @@ export default function PhotoSaveScreen() {
   const poseId = params.poseId ?? "";
   const poseLabel = params.poseLabel ?? "";
   const uri = params.uri ?? "";
+  const parsedPersonOverlayFrameRatio = Number(params.personOverlayFrameRatio);
+  const personOverlayFrameRatio =
+    Number.isFinite(parsedPersonOverlayFrameRatio) && parsedPersonOverlayFrameRatio > 0
+      ? parsedPersonOverlayFrameRatio
+      : PERSON_OVERLAY_HEIGHT_RATIO;
   const spotId = resolveNumberParam(params.spotId);
   const storyId = resolveNumberParam(params.storyId);
   const collectionItemId = resolveNumberParam(params.collectionItemId);
@@ -70,7 +76,7 @@ export default function PhotoSaveScreen() {
   const compositeRef = useRef<View>(null);
   const compositePhotoUriRef = useRef<string | null>(null);
   const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
-  const personOverlayHeight = photoWrapperHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const personOverlayHeight = photoWrapperHeight * personOverlayFrameRatio;
   const handlePhotoWrapperLayout = (event: LayoutChangeEvent) => {
     setPhotoWrapperHeight(event.nativeEvent.layout.height);
   };
