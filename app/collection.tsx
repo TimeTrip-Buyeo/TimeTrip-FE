@@ -337,11 +337,13 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
   );
 }
 
+const MIN_HERO_HEIGHT = 360;
 const FALLBACK_HERO_HEIGHT = 420;
+const MAX_HERO_HEIGHT_RATIO = 0.58;
 
 function CollectionDetail({ itemId }: { itemId: number }) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
 
   const t = collectionScreenText[locale];
@@ -383,7 +385,9 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const sourceDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
   const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
-  const heroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
+  const rawHeroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
+  const maxHeroHeight = windowHeight * MAX_HERO_HEIGHT_RATIO;
+  const heroHeight = Math.min(Math.max(rawHeroHeight, MIN_HERO_HEIGHT), maxHeroHeight);
 
   useEffect(() => {
     if (!hasImageUrl(imageUrl)) {
