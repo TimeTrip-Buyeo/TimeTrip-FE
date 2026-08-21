@@ -21,24 +21,14 @@ import {
   type StoryTopic,
 } from "@/lib/api/collections";
 
-type StoryTopicGroup = {
-  id: string;
-  storyIds: number[];
-  title: string;
-  thumbnailUrl: string | null;
-  totalCollectionCount: number;
-  acquiredCollectionCount: number;
-};
-
 export default function CollectionScreen() {
-  const params = useLocalSearchParams<{ storyId?: string; storyIds?: string; itemId?: string; title?: string }>();
+  const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
   const storyId = resolveNumberParam(params.storyId);
-  const storyIds = resolveNumberListParam(params.storyIds) ?? (storyId !== null ? [storyId] : null);
   const itemId = resolveNumberParam(params.itemId);
   const title = resolveSingleParam(params.title);
 
   if (itemId !== null) return <CollectionDetail itemId={itemId} />;
-  if (storyIds !== null) return <CollectionItemGrid storyIds={storyIds} title={title} />;
+  if (storyId !== null) return <CollectionItemGrid storyId={storyId} title={title} />;
   return <CollectionTopicList />;
 }
 
@@ -53,45 +43,8 @@ function resolveNumberParam(raw: string | string[] | undefined) {
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
-function resolveNumberListParam(raw: string | string[] | undefined) {
-  const value = resolveSingleParam(raw);
-  if (value === undefined || value === "") return null;
-  const numbers = value
-    .split(",")
-    .map((item) => Number(item))
-    .filter(Number.isFinite);
-  return numbers.length > 0 ? numbers : null;
-}
-
 function hasAcquiredCollection(topic: StoryTopic) {
   return topic.acquiredCollectionCount > 0;
-}
-
-function groupStoryTopics(topics: StoryTopic[]): StoryTopicGroup[] {
-  const groups = new Map<string, StoryTopicGroup>();
-
-  topics.forEach((topic) => {
-    const key = topic.title.trim();
-    const group = groups.get(key);
-    if (!group) {
-      groups.set(key, {
-        id: key,
-        storyIds: [topic.storyId],
-        title: topic.title,
-        thumbnailUrl: topic.thumbnailUrl,
-        totalCollectionCount: topic.totalCollectionCount,
-        acquiredCollectionCount: topic.acquiredCollectionCount,
-      });
-      return;
-    }
-
-    group.storyIds.push(topic.storyId);
-    group.totalCollectionCount += topic.totalCollectionCount;
-    group.acquiredCollectionCount += topic.acquiredCollectionCount;
-    if (!group.thumbnailUrl && topic.thumbnailUrl) group.thumbnailUrl = topic.thumbnailUrl;
-  });
-
-  return Array.from(groups.values()).filter((group) => group.acquiredCollectionCount > 0);
 }
 
 function CollectionTopicList() {
@@ -100,7 +53,7 @@ function CollectionTopicList() {
   const mapT = mapScreenText[locale];
   const t = collectionScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const [topics, setTopics] = useState<StoryTopicGroup[]>([]);
+  const [topics, setTopics] = useState<StoryTopic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -112,7 +65,19 @@ function CollectionTopicList() {
     setIsLoading(true);
     getStoryTopics({ locale, storyType: "special" })
       .then((nextTopics) => {
-        if (isActive) setTopics(groupStoryTopics(nextTopics.filter(hasAcquiredCollection)));
+        if (__DEV__) {
+          console.log(
+            "[collection] topics",
+            nextTopics.map((topic) => ({
+              storyId: topic.storyId,
+              title: topic.title,
+              total: topic.totalCollectionCount,
+              acquired: topic.acquiredCollectionCount,
+              thumbnailUrl: topic.thumbnailUrl,
+            })),
+          );
+        }
+        if (isActive) setTopics(nextTopics.filter(hasAcquiredCollection));
       })
       .catch((error) => {
         console.error("[collection] topics failed", error);
@@ -154,12 +119,12 @@ function CollectionTopicList() {
           ) : (
             topics.map((topic) => (
               <Pressable
-                key={topic.id}
+                key={topic.storyId}
                 style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
                 onPress={() =>
                   router.push({
                     pathname: "/collection",
-                    params: { storyIds: topic.storyIds.join(","), title: topic.title },
+                    params: { storyId: String(topic.storyId), title: topic.title },
                   })
                 }>
                 {topic.thumbnailUrl ? (
@@ -197,33 +162,35 @@ function CollectionTopicList() {
   );
 }
 
-function uniqueCollectionItems(items: CollectionItem[]) {
-  const byId = new Map<number, CollectionItem>();
-  items.forEach((item) => {
-    byId.set(item.collectionItemId, item);
-  });
-  return Array.from(byId.values());
-}
-
-function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: string }) {
+function CollectionItemGrid({ storyId, title }: { storyId: number; title?: string }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
   const mapT = mapScreenText[locale];
   const t = collectionScreenText[locale];
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const storyIdsKey = storyIds.join(",");
 
   useEffect(() => {
     let isActive = true;
-    const nextStoryIds = storyIdsKey
-      .split(",")
-      .map((item) => Number(item))
-      .filter(Number.isFinite);
     setIsLoading(true);
-    Promise.all(nextStoryIds.map((nextStoryId) => getCollectionItems(nextStoryId, { locale })))
-      .then((responses) => {
-        if (isActive) setItems(uniqueCollectionItems(responses.flatMap((response) => response.items)));
+    getCollectionItems(storyId, { locale })
+      .then(({ items: nextItems }) => {
+        if (__DEV__) {
+          console.log(
+            "[collection] items",
+            nextItems.map((item) => ({
+              collectionItemId: item.collectionItemId,
+              storyId: item.storyId,
+              spotId: item.spotId,
+              name: item.name,
+              type: item.type,
+              isAcquired: item.isAcquired,
+              cardImageUrl: item.cardImageUrl,
+              beforeImageUrl: item.beforeImageUrl,
+            })),
+          );
+        }
+        if (isActive) setItems(nextItems);
       })
       .catch((error) => {
         console.error("[collection] items failed", error);
@@ -236,7 +203,7 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
     return () => {
       isActive = false;
     };
-  }, [locale, storyIdsKey]);
+  }, [locale, storyId]);
 
   return (
     <View style={styles.container}>
