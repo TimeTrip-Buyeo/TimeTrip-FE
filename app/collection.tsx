@@ -789,8 +789,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   artifactHeroImageLowered: {
-    height: "92%",
-    marginTop: 28,
+    transform: [{ translateY: 28 }],
   },
   detailImageDisclosureText: {
     position: "absolute",
