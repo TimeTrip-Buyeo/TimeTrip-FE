@@ -431,7 +431,6 @@ function CollectionDetail({ itemId }: { itemId: number }) {
             <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
           )}
           {imageDisclosure && <Text style={styles.detailImageDisclosureText}>{imageDisclosure}</Text>}
-          <LinearGradient colors={["rgba(253,252,248,0)", "#fdfcf8"]} style={styles.heroFade} />
         </View>
 
         <View style={[styles.card, !isDetailCardExpanded && styles.cardCollapsed]}>
@@ -747,13 +746,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  heroFade: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 140,
-  },
   detailImageDisclosureText: {
     position: "absolute",
     right: 24,
@@ -767,7 +759,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   card: {
-    marginTop: -40,
+    marginTop: 0,
     marginHorizontal: 24,
     backgroundColor: "#fff",
     borderWidth: 1,
