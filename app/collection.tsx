@@ -11,7 +11,7 @@ import { GUNGSEO_FONT, GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
 import { collectionScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { toApiUrl } from "@/lib/api/client";
+import { ApiError, toApiUrl } from "@/lib/api/client";
 import {
   getCollectionItemDetail,
   getCollectionItems,
@@ -20,6 +20,7 @@ import {
   type CollectionItemDetail,
   type StoryTopic,
 } from "@/lib/api/collections";
+import { resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 export default function CollectionScreen() {
   const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
@@ -32,19 +33,16 @@ export default function CollectionScreen() {
   return <CollectionTopicList />;
 }
 
-function resolveSingleParam(raw: string | string[] | undefined) {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
-
-function resolveNumberParam(raw: string | string[] | undefined) {
-  const value = resolveSingleParam(raw);
-  if (value === undefined || value === "") return null;
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : null;
-}
-
 function hasAcquiredCollection(topic: StoryTopic) {
   return topic.acquiredCollectionCount > 0;
+}
+
+function hasImageUrl(imageUrl: string | null | undefined): imageUrl is string {
+  return typeof imageUrl === "string" && imageUrl.trim().length > 0;
+}
+
+function firstImageUrl(...imageUrls: (string | null | undefined)[]) {
+  return imageUrls.find(hasImageUrl);
 }
 
 function CollectionTopicList() {
@@ -55,6 +53,7 @@ function CollectionTopicList() {
   const [isLegendVisible, setIsLegendVisible] = useState(false);
   const [topics, setTopics] = useState<StoryTopic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
@@ -63,6 +62,7 @@ function CollectionTopicList() {
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
+    setLoadError(false);
     getStoryTopics({ locale, storyType: "special" })
       .then((nextTopics) => {
         if (__DEV__) {
@@ -81,7 +81,10 @@ function CollectionTopicList() {
       })
       .catch((error) => {
         console.error("[collection] topics failed", error);
-        if (isActive) setTopics([]);
+        if (isActive) {
+          setTopics([]);
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (isActive) setIsLoading(false);
@@ -114,6 +117,8 @@ function CollectionTopicList() {
         <View style={styles.list}>
           {isLoading ? (
             <StatusMessage message={t.loadingMessage} />
+          ) : loadError ? (
+            <StatusMessage message={t.loadErrorMessage} />
           ) : topics.length === 0 ? (
             <StatusMessage message={t.emptyTopicMessage} />
           ) : (
@@ -127,7 +132,7 @@ function CollectionTopicList() {
                     params: { storyId: String(topic.storyId), title: topic.title },
                   })
                 }>
-                {topic.thumbnailUrl ? (
+                {hasImageUrl(topic.thumbnailUrl) ? (
                   <Image
                     source={{ uri: toApiUrl(topic.thumbnailUrl) }}
                     style={styles.listItemThumb}
@@ -169,10 +174,12 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
   const t = collectionScreenText[locale];
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
+    setLoadError(false);
     getCollectionItems(storyId, { locale })
       .then(({ items: nextItems }) => {
         if (__DEV__) {
@@ -194,7 +201,10 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
       })
       .catch((error) => {
         console.error("[collection] items failed", error);
-        if (isActive) setItems([]);
+        if (isActive) {
+          setItems([]);
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (isActive) setIsLoading(false);
@@ -218,17 +228,19 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
         <View style={styles.grid}>
           {isLoading ? (
             <StatusMessage message={t.loadingMessage} />
+          ) : loadError ? (
+            <StatusMessage message={t.loadErrorMessage} />
           ) : items.length === 0 ? (
             <StatusMessage message={t.emptyItemMessage} />
           ) : (
             items.map((item) => {
               const locationId = SPOT_ID_TO_LOCATION_ID[item.spotId];
-              const locationLabel = locationId ? mapT.pins[locationId] : "";
+              const locationLabel = locationId ? mapT.pins[locationId] : item.spotName ?? "";
               const imageUrl = item.isAcquired ? item.cardImageUrl : item.beforeImageUrl;
               const cardContent = (
                 <>
                   <View style={styles.gridCardImageWrapper}>
-                    {imageUrl ? (
+                    {hasImageUrl(imageUrl) ? (
                       <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.gridCardImage} resizeMode="contain" />
                     ) : (
                       <View style={styles.gridCardImageLocked}>
@@ -303,17 +315,23 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const mapT = mapScreenText[locale];
   const [detail, setDetail] = useState<CollectionItemDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
+    setLoadError(false);
     getCollectionItemDetail(itemId, { locale })
       .then((nextDetail) => {
         if (isActive) setDetail(nextDetail);
       })
       .catch((error) => {
         console.error("[collection] item detail failed", error);
-        if (isActive) setDetail(null);
+        const isLockedItem = error instanceof ApiError && error.code === "COLLECTION4031";
+        if (isActive) {
+          setDetail(null);
+          setLoadError(!isLockedItem);
+        }
       })
       .finally(() => {
         if (isActive) setIsLoading(false);
@@ -326,7 +344,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
 
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
   const locationLabel = locationId ? mapT.pins[locationId] : detail?.spotName;
-  const imageUrl = detail?.detailImageUrl ?? detail?.cardImageUrl;
+  const imageUrl = firstImageUrl(detail?.detailImageUrl, detail?.cardImageUrl);
 
   const handleShare = () => {
     if (!detail) return;
@@ -354,15 +372,19 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   );
 
   if (isLoading || !detail) {
+    const statusIcon = isLoading ? "spinner" : loadError ? "exclamation-circle" : "lock";
+    const statusTitle = isLoading ? t.loadingMessage : loadError ? t.loadErrorMessage : t.lockedItemMessage;
+    const statusMessage = isLoading ? t.loadingMessage : loadError ? t.loadErrorMessage : t.detailUnavailableMessage;
+
     return (
       <View style={styles.container}>
         {topBar}
         <View style={styles.comingSoonWrapper}>
           <View style={styles.comingSoonIcon}>
-            <FontAwesome5 name={isLoading ? "spinner" : "lock"} size={22} color="#b8860b" solid />
+            <FontAwesome5 name={statusIcon} size={22} color="#b8860b" solid />
           </View>
-          <Text style={styles.comingSoonTitle}>{isLoading ? t.loadingMessage : t.lockedItemMessage}</Text>
-          <Text style={styles.comingSoonMessage}>{isLoading ? t.loadingMessage : t.detailUnavailableMessage}</Text>
+          <Text style={styles.comingSoonTitle}>{statusTitle}</Text>
+          <Text style={styles.comingSoonMessage}>{statusMessage}</Text>
         </View>
       </View>
     );
@@ -372,7 +394,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={styles.heroFrame}>
-          {imageUrl ? (
+          {hasImageUrl(imageUrl) ? (
             <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="contain" />
           ) : (
             <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
@@ -513,11 +535,6 @@ const styles = StyleSheet.create({
   listItemPressed: {
     opacity: 0.7,
   },
-  listItemLocked: {
-    backgroundColor: "#fafaf9",
-    borderColor: "#f5f5f4",
-    opacity: 0.6,
-  },
   listItemThumb: {
     width: 80,
     height: 80,
@@ -528,14 +545,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
-  listItemThumbLocked: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: "#e7e5e4",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   listItemTitle: {
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 15,
@@ -545,12 +554,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#b8860b",
-  },
-  listItemTitleLocked: {
-    flex: 1,
-    fontFamily: GUNGSEO_FONT_BOLD,
-    fontSize: 15,
-    color: "#9ca3af",
   },
   gridScrollContent: {
     flexGrow: 1,
@@ -708,10 +711,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f6f0",
     overflow: "hidden",
   },
-  personHeroImage: {
-    width: "100%",
-    height: "100%",
-  },
   artifactHeroImage: {
     width: "100%",
     height: "100%",
@@ -801,9 +800,6 @@ const styles = StyleSheet.create({
     height: 52,
     backgroundColor: "#800000",
     borderRadius: 16,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.5,
   },
   primaryButtonText: {
     fontFamily: "serif",

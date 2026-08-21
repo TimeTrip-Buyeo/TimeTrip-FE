@@ -45,8 +45,14 @@ export async function getSelfieRouteParams(
   if (spotId == null) return {};
 
   const stories = await getStoryTopics({ locale, spotId, storyType: "special" });
-  for (const story of stories) {
-    const { items } = await getCollectionItems(story.storyId, { locale, spotId, type: "CHARACTER" });
+  const storiesWithItems = await Promise.all(
+    stories.map(async (story) => ({
+      story,
+      ...(await getCollectionItems(story.storyId, { locale, spotId, type: "CHARACTER" })),
+    })),
+  );
+
+  for (const { story, items } of storiesWithItems) {
     const item = options.collectionItemId
       ? items.find((candidate) => candidate.collectionItemId === options.collectionItemId)
       : items[0];

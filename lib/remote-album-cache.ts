@@ -9,20 +9,31 @@ export type RemoteAlbumPhoto = SelfiePhotoOption & {
 
 type RemoteAlbumPhotoCacheEntry = {
   photos: RemoteAlbumPhoto[];
+  cachedAt: number;
 };
 
 const cache = new Map<string, RemoteAlbumPhotoCacheEntry>();
+const REMOTE_ALBUM_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function cacheKey(locationId: LocationId, locale: Locale) {
   return `${locationId}:${locale}`;
 }
 
 export function getCachedRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
-  return cache.get(cacheKey(locationId, locale));
+  const key = cacheKey(locationId, locale);
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+
+  if (Date.now() - entry.cachedAt > REMOTE_ALBUM_CACHE_TTL_MS) {
+    cache.delete(key);
+    return undefined;
+  }
+
+  return entry;
 }
 
 export function setCachedRemoteAlbumPhotos(locationId: LocationId, locale: Locale, photos: RemoteAlbumPhoto[]) {
-  cache.set(cacheKey(locationId, locale), { photos });
+  cache.set(cacheKey(locationId, locale), { photos, cachedAt: Date.now() });
 }
 
 // Called on logout so a different account signing in during the same app

@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -15,7 +15,7 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
-import { getAuthHeaders, refreshAuthHeaders, toApiUrl } from "@/lib/api/client";
+import { toApiUrl } from "@/lib/api/client";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
 import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route";
@@ -24,9 +24,9 @@ import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route
 // "?collectionItemId=abc") must fall back to the list instead of sending
 // Number.NaN into a request URL like /api/albums/NaN/photos.
 function parseId(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined || value === "") return undefined;
   const parsed = Number(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function getTakenAtMillis(takenAt: number | string): number {
@@ -35,37 +35,26 @@ function getTakenAtMillis(takenAt: number | string): number {
 
 function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
   const [remotePhotos, setRemotePhotos] = useState<RemoteAlbumPhoto[]>([]);
-  const [imageHeaders, setImageHeaders] = useState<Record<string, string> | undefined>();
-  const hasRetriedHeaders = useRef(false);
 
   useEffect(() => {
     const spotId = LOCATION_ID_TO_SPOT_ID[locationId];
     if (spotId == null) {
       setRemotePhotos([]);
-      setImageHeaders(undefined);
       return;
     }
 
-    hasRetriedHeaders.current = false;
     let isActive = true;
 
     const cached = getCachedRemoteAlbumPhotos(locationId, locale);
     if (cached) {
       setRemotePhotos(cached.photos);
-      getAuthHeaders()
-        .then((headers) => {
-          if (isActive) setImageHeaders(headers);
-        })
-        .catch(() => {
-          if (isActive) setImageHeaders(undefined);
-        });
       return () => {
         isActive = false;
       };
     }
 
-    Promise.all([getSelfiePhotoOptions({ locale, spotId }), getAuthHeaders()])
-      .then(([{ selfiePhotos }, headers]) => {
+    getSelfiePhotoOptions({ locale, spotId })
+      .then(({ selfiePhotos }) => {
         const nextPhotos = selfiePhotos.map((photo) => ({
           ...photo,
           id: `remote-${photo.selfiePhotoId}`,
@@ -74,13 +63,11 @@ function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
         if (!isActive) return;
         setCachedRemoteAlbumPhotos(locationId, locale, nextPhotos);
         setRemotePhotos(nextPhotos);
-        setImageHeaders(headers);
       })
       .catch((error) => {
         console.error("[album] selfie photos failed", error);
         if (isActive) {
           setRemotePhotos([]);
-          setImageHeaders(undefined);
         }
       });
 
@@ -89,21 +76,7 @@ function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
     };
   }, [locale, locationId]);
 
-  // A stale access token makes remote thumbnails 401 with no retry from RN's
-  // <Image> (unlike the JSON API path, which auto-reissues via
-  // authedRequest) — give each mount a single chance to refresh the token
-  // and retry once an image actually fails to load.
-  const retryImageHeaders = useCallback(() => {
-    if (hasRetriedHeaders.current) return;
-    hasRetriedHeaders.current = true;
-    refreshAuthHeaders()
-      .then((headers) => {
-        if (headers) setImageHeaders(headers);
-      })
-      .catch(() => {});
-  }, []);
-
-  return { remotePhotos, imageHeaders, retryImageHeaders };
+  return { remotePhotos };
 }
 
 export default function AlbumScreen() {
@@ -450,7 +423,7 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
   const entry = ALBUM_ENTRIES[locationId];
   const { photosByLocation, removePhoto } = useCapturedPhotos();
   const capturedPhotos = photosByLocation[locationId] ?? [];
-  const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
+  const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const [isEditMode, setIsEditMode] = useState(false);
   const [sortOldestFirst, setSortOldestFirst] = useState(false);
   const [isLegendVisible, setIsLegendVisible] = useState(false);
@@ -573,10 +546,9 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
                     : router.push({ pathname: "/album", params: { locationId, photo: captured.id } })
                 }>
                 <Image
-                  source={{ uri: captured.uri, ...(isRemote && imageHeaders ? { headers: imageHeaders } : {}) }}
+                  source={{ uri: captured.uri }}
                   style={styles.photoImage}
                   resizeMode="cover"
-                  onError={isRemote ? retryImageHeaders : undefined}
                 />
                 {isEditMode && canDelete && (
                   <View style={styles.deleteBadge}>
@@ -611,7 +583,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
   const { photosByLocation } = useCapturedPhotos();
-  const { remotePhotos, imageHeaders, retryImageHeaders } = useRemoteAlbumPhotos(locationId, locale);
+  const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
@@ -664,12 +636,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         {captured ? (
           <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
         ) : remotePhoto ? (
-          <Image
-            source={{ uri: remotePhoto.uri, ...(imageHeaders ? { headers: imageHeaders } : {}) }}
-            style={styles.viewerPhoto}
-            resizeMode="cover"
-            onError={retryImageHeaders}
-          />
+          <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
         ) : null}
         {(captured?.poseLabel || remotePhoto?.collectionItemName) && (
           <View style={styles.viewerCaptionPill}>

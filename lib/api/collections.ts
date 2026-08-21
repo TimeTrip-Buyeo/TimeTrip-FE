@@ -7,6 +7,7 @@ export type CollectionItem = {
   collectionItemId: number;
   storyId: number;
   spotId: number;
+  spotName?: string | null;
   name: string;
   type: CollectionItemType;
   isCharacter: boolean;
