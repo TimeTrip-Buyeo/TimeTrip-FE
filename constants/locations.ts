@@ -38,6 +38,14 @@ export const SPOT_ID_TO_LOCATION_ID: Partial<Record<number, LocationId>> = {
   9: "museum",
 };
 
+export const LOCATION_ID_TO_SPOT_ID: Partial<Record<LocationId, number>> = {
+  busosanseong: 1,
+  pagoda: 3,
+  royalTombs: 4,
+  gungnamji: 6,
+  museum: 9,
+};
+
 // Gold pin color for whichever locations currently offer the special guide —
 // exact Figma color.
 export const SPECIAL_GUIDE_COLOR = "#b8860b";

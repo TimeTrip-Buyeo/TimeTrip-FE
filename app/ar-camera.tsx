@@ -10,9 +10,10 @@ import { CollectibleAcquiredModal } from "@/components/collectible-acquired-moda
 import { LanguageLegendModal } from "@/components/onboarding/language-legend-modal";
 import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { MAP_LOCATIONS, SPOT_ID_TO_LOCATION_ID, type LocationId } from "@/constants/locations";
 import { arCameraText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { getCollectionItems, type CollectionItem } from "@/lib/api/collections";
+import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 // Placeholder — no real audio guide asset is wired up yet, so pressing play
 // simulates a few seconds of playback to demonstrate the finished-gating
@@ -20,29 +21,16 @@ import { useLanguage } from "@/hooks/use-language";
 // guide ships.
 const AUDIO_GUIDE_PLACEHOLDER_DURATION_MS = 3000;
 
-const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
-
-function resolveSingleParam(raw: string | string[] | undefined) {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
-
-function resolveLocationId(rawLocationId: string | string[] | undefined, rawSpotId: string | string[] | undefined): LocationId {
-  const value = resolveSingleParam(rawLocationId);
-  if (value && KNOWN_LOCATION_IDS.has(value)) return value as LocationId;
-
-  const spotId = Number(resolveSingleParam(rawSpotId));
-  return SPOT_ID_TO_LOCATION_ID[spotId] ?? "busosanseong";
-}
-
 function resolveSpotTitle(raw: string | string[] | undefined) {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value || null;
+  return resolveSingleParam(raw) || null;
 }
 
 export default function ArCameraScreen() {
   const params = useLocalSearchParams<{ locationId?: string; spotId?: string; storyId?: string; spotName?: string }>();
-  const locationId = resolveLocationId(params.locationId, params.spotId);
+  const locationId = resolveLocationId(params.locationId, params.spotId, "busosanseong");
   const spotTitle = resolveSpotTitle(params.spotName);
+  const spotId = resolveNumberParam(params.spotId);
+  const storyId = resolveNumberParam(params.storyId);
   const insets = useSafeAreaInsets();
 
   const { locale, setLocale } = useLanguage();
@@ -55,6 +43,7 @@ export default function ArCameraScreen() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isAudioFinished, setIsAudioFinished] = useState(false);
   const [isAcquiredModalVisible, setIsAcquiredModalVisible] = useState(false);
+  const [collectionItem, setCollectionItem] = useState<CollectionItem | null>(null);
   const collectible = COLLECTIBLES[locationId];
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -64,6 +53,28 @@ export default function ArCameraScreen() {
       requestPermission();
     }
   }, [permission, requestPermission]);
+
+  useEffect(() => {
+    if (collectible?.type !== "person" || spotId === null || storyId === null) {
+      setCollectionItem(null);
+      return;
+    }
+
+    let isActive = true;
+    getCollectionItems(storyId, { spotId, locale, type: "CHARACTER" })
+      .then(({ items }) => {
+        if (!isActive) return;
+        setCollectionItem(items[0] ?? null);
+      })
+      .catch((error) => {
+        console.error("[ar-camera] collection item lookup failed", error);
+        if (isActive) setCollectionItem(null);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [collectible?.type, locale, spotId, storyId]);
 
   const mapT = mapScreenText[locale];
   const t = arCameraText[locale];
@@ -229,7 +240,15 @@ export default function ArCameraScreen() {
             collectible.type === "person"
               ? () => {
                   setIsAcquiredModalVisible(false);
-                  router.push({ pathname: "/person-camera", params: { locationId } });
+                  router.push({
+                    pathname: "/person-camera",
+                    params: {
+                      locationId,
+                      ...(spotId !== null ? { spotId: String(spotId) } : {}),
+                      ...(storyId !== null ? { storyId: String(storyId) } : {}),
+                      ...(collectionItem ? { collectionItemId: String(collectionItem.collectionItemId) } : {}),
+                    },
+                  });
                 }
               : undefined
           }

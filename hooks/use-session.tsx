@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import * as authApi from '@/lib/api/auth';
 import { setUnauthorizedListener } from '@/lib/api/client';
+import { clearRemoteAlbumPhotoCache } from '@/lib/remote-album-cache';
 import { clearTokens, getTokens, saveTokens } from '@/lib/token-storage';
 
 type Account = { email: string; password: string };
@@ -49,6 +50,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     setUnauthorizedListener(() => {
+      clearRemoteAlbumPhotoCache();
       setIsLoggedIn(false);
       setCurrentEmail(null);
     });
@@ -67,6 +69,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       // Best-effort: still clear local state even if the network call fails.
     }
     await clearTokens();
+    clearRemoteAlbumPhotoCache();
     setIsLoggedIn(false);
     setCurrentEmail(null);
   }, []);

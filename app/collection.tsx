@@ -1,46 +1,99 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LangPill } from "@/components/lang-pill";
-import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT, GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import type { LocationId } from "@/constants/locations";
-import { COLLECTION_THEMES, type CollectionTheme } from "@/constants/themes";
+import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
 import { collectionScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { ApiError, toApiUrl } from "@/lib/api/client";
+import {
+  getCollectionItemDetail,
+  getCollectionItems,
+  getStoryTopics,
+  type CollectionItem,
+  type CollectionItemDetail,
+  type StoryTopic,
+} from "@/lib/api/collections";
+import { resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
-function themeTitle(theme: CollectionTheme, locale: Locale) {
-  return typeof theme.title === "string" ? theme.title : theme.title[locale];
-}
-
-// Three levels, matching Figma exactly: 도감 (theme list, node 0:1148) →
-// Screen 4: 컬렉션 (theme grid, node 0:901) → 컬렉션(인물/유물) (item detail,
-// node 0:851 / 0:788).
 export default function CollectionScreen() {
-  const params = useLocalSearchParams<{ locationId?: string; themeId?: string }>();
-  const locationId = Array.isArray(params.locationId) ? params.locationId[0] : params.locationId;
-  const themeId = Array.isArray(params.themeId) ? params.themeId[0] : params.themeId;
+  const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
+  const storyId = resolveNumberParam(params.storyId);
+  const itemId = resolveNumberParam(params.itemId);
+  const title = resolveSingleParam(params.title);
 
-  if (locationId) return <CollectionDetail locationId={locationId as LocationId} />;
-  if (themeId) return <CollectionThemeGrid themeId={themeId} />;
-  return <CollectionThemeList />;
+  if (itemId !== null) return <CollectionDetail itemId={itemId} />;
+  if (storyId !== null) return <CollectionItemGrid storyId={storyId} title={title} />;
+  return <CollectionTopicList />;
 }
 
-function CollectionThemeList() {
+function hasAcquiredCollection(topic: StoryTopic) {
+  return topic.acquiredCollectionCount > 0;
+}
+
+function hasImageUrl(imageUrl: string | null | undefined): imageUrl is string {
+  return typeof imageUrl === "string" && imageUrl.trim().length > 0;
+}
+
+function firstImageUrl(...imageUrls: (string | null | undefined)[]) {
+  return imageUrls.find(hasImageUrl);
+}
+
+function CollectionTopicList() {
   const insets = useSafeAreaInsets();
   const { locale, setLocale } = useLanguage();
   const mapT = mapScreenText[locale];
   const t = collectionScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
+  const [topics, setTopics] = useState<StoryTopic[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
+
+  useEffect(() => {
+    let isActive = true;
+    setIsLoading(true);
+    setLoadError(false);
+    getStoryTopics({ locale, storyType: "special" })
+      .then((nextTopics) => {
+        if (__DEV__) {
+          console.log(
+            "[collection] topics",
+            nextTopics.map((topic) => ({
+              storyId: topic.storyId,
+              title: topic.title,
+              total: topic.totalCollectionCount,
+              acquired: topic.acquiredCollectionCount,
+              thumbnailUrl: topic.thumbnailUrl,
+            })),
+          );
+        }
+        if (isActive) setTopics(nextTopics.filter(hasAcquiredCollection));
+      })
+      .catch((error) => {
+        console.error("[collection] topics failed", error);
+        if (isActive) {
+          setTopics([]);
+          setLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale]);
 
   return (
     <View style={styles.container}>
@@ -62,29 +115,42 @@ function CollectionThemeList() {
         <Text style={styles.listSubtitle}>{t.listSubtitle}</Text>
 
         <View style={styles.list}>
-          {COLLECTION_THEMES.map((theme) => {
-            if (theme.locked) {
-              return (
-                <View key={theme.id} style={[styles.listItem, styles.listItemLocked]}>
-                  <View style={styles.listItemThumbLocked}>
-                    <FontAwesome5 name="lock" size={18} color="#a8a29e" solid />
-                  </View>
-                  <Text style={styles.listItemTitleLocked}>?</Text>
-                  <FontAwesome5 name="lock" size={12} color="#d6d3d1" solid />
-                </View>
-              );
-            }
-            return (
+          {isLoading ? (
+            <StatusMessage message={t.loadingMessage} />
+          ) : loadError ? (
+            <StatusMessage message={t.loadErrorMessage} />
+          ) : topics.length === 0 ? (
+            <StatusMessage message={t.emptyTopicMessage} />
+          ) : (
+            topics.map((topic) => (
               <Pressable
-                key={theme.id}
+                key={topic.storyId}
                 style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
-                onPress={() => router.push({ pathname: "/collection", params: { themeId: theme.id } })}>
-                <View style={styles.listItemThumb} />
-                <Text style={styles.listItemTitle}>{themeTitle(theme, locale)}</Text>
+                onPress={() =>
+                  router.push({
+                    pathname: "/collection",
+                    params: { storyId: String(topic.storyId), title: topic.title },
+                  })
+                }>
+                {hasImageUrl(topic.thumbnailUrl) ? (
+                  <Image
+                    source={{ uri: toApiUrl(topic.thumbnailUrl) }}
+                    style={styles.listItemThumb}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={styles.listItemThumb} />
+                )}
+                <View style={styles.listItemTextColumn}>
+                  <Text style={styles.listItemTitle}>{topic.title}</Text>
+                  <Text style={styles.listItemProgress}>
+                    {topic.acquiredCollectionCount}/{topic.totalCollectionCount}
+                  </Text>
+                </View>
                 <FontAwesome5 name="chevron-right" size={12} color="#d1d5db" solid />
               </Pressable>
-            );
-          })}
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -101,12 +167,53 @@ function CollectionThemeList() {
   );
 }
 
-function CollectionThemeGrid({ themeId }: { themeId: string }) {
+function CollectionItemGrid({ storyId, title }: { storyId: number; title?: string }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
   const mapT = mapScreenText[locale];
-  const theme = COLLECTION_THEMES.find((candidate) => candidate.id === themeId);
-  const locationIds = theme?.locationIds ?? [];
+  const t = collectionScreenText[locale];
+  const [items, setItems] = useState<CollectionItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+    setIsLoading(true);
+    setLoadError(false);
+    getCollectionItems(storyId, { locale })
+      .then(({ items: nextItems }) => {
+        if (__DEV__) {
+          console.log(
+            "[collection] items",
+            nextItems.map((item) => ({
+              collectionItemId: item.collectionItemId,
+              storyId: item.storyId,
+              spotId: item.spotId,
+              name: item.name,
+              type: item.type,
+              isAcquired: item.isAcquired,
+              cardImageUrl: item.cardImageUrl,
+              beforeImageUrl: item.beforeImageUrl,
+            })),
+          );
+        }
+        if (isActive) setItems(nextItems);
+      })
+      .catch((error) => {
+        console.error("[collection] items failed", error);
+        if (isActive) {
+          setItems([]);
+          setLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, storyId]);
 
   return (
     <View style={styles.container}>
@@ -115,44 +222,73 @@ function CollectionThemeGrid({ themeId }: { themeId: string }) {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
           </Pressable>
-          <Text style={styles.gridTitle}>{theme && themeTitle(theme, locale)}</Text>
+          <Text style={styles.gridTitle}>{title ?? t.listTitle}</Text>
         </View>
 
         <View style={styles.grid}>
-          {locationIds.map((id) => {
-            const item = COLLECTIBLES[id];
-            const locationLabel = mapT.pins[id];
-            const handlePress = () => router.push({ pathname: "/collection", params: { locationId: id } });
+          {isLoading ? (
+            <StatusMessage message={t.loadingMessage} />
+          ) : loadError ? (
+            <StatusMessage message={t.loadErrorMessage} />
+          ) : items.length === 0 ? (
+            <StatusMessage message={t.emptyItemMessage} />
+          ) : (
+            items.map((item) => {
+              const locationId = SPOT_ID_TO_LOCATION_ID[item.spotId];
+              const locationLabel = locationId ? mapT.pins[locationId] : item.spotName ?? "";
+              const imageUrl = item.isAcquired ? item.cardImageUrl : item.beforeImageUrl;
+              const cardContent = (
+                <>
+                  <View style={styles.gridCardImageWrapper}>
+                    {hasImageUrl(imageUrl) ? (
+                      <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.gridCardImage} resizeMode="contain" />
+                    ) : (
+                      <View style={styles.gridCardImageLocked}>
+                        <Text style={styles.gridCardQuestionMark}>?</Text>
+                      </View>
+                    )}
+                    {item.isAcquired ? (
+                      <View style={styles.gridCardBadge}>
+                        <FontAwesome5 name="check" size={9} color="#fff" solid />
+                      </View>
+                    ) : (
+                      <View style={styles.gridCardLockBadge}>
+                        <FontAwesome5 name="lock" size={9} color="#fff" solid />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={item.isAcquired ? styles.gridCardName : styles.gridCardNameLocked}>
+                    {item.isAcquired ? item.name : "?"}
+                  </Text>
+                  <Text style={item.isAcquired ? styles.gridCardLocation : styles.gridCardLocationLocked}>
+                    {item.isAcquired ? locationLabel : t.lockedItemMessage}
+                  </Text>
+                </>
+              );
 
-            if (!item || !item.obtained) {
+              if (!item.isAcquired) {
+                return (
+                  <View key={item.collectionItemId} style={styles.gridCard}>
+                    {cardContent}
+                  </View>
+                );
+              }
+
               return (
                 <Pressable
-                  key={id}
+                  key={item.collectionItemId}
                   style={({ pressed }) => [styles.gridCard, pressed && styles.listItemPressed]}
-                  onPress={handlePress}>
-                  <View style={styles.gridCardImageLocked} />
-                  <Text style={styles.gridCardNameLocked}>?</Text>
-                  <Text style={styles.gridCardLocationLocked}>{locationLabel}</Text>
+                  onPress={() =>
+                    router.push({
+                      pathname: "/collection",
+                      params: { itemId: String(item.collectionItemId) },
+                    })
+                  }>
+                  {cardContent}
                 </Pressable>
               );
-            }
-
-            return (
-              <Pressable
-                key={id}
-                style={({ pressed }) => [styles.gridCard, pressed && styles.listItemPressed]}
-                onPress={handlePress}>
-                <View style={styles.gridCardImageWrapper}>
-                  <Image source={item.image} style={styles.gridCardImage} resizeMode="cover" />
-                  <View style={styles.gridCardBadge}>
-                    <FontAwesome5 name="check" size={9} color="#fff" solid />
-                  </View>
-                </View>
-                <Text style={styles.gridCardName}>{item.name[locale]}</Text>
-                <Text style={styles.gridCardLocation}>{locationLabel}</Text>
-              </Pressable>
-            );
-          })}
+            })
+          )}
         </View>
       </ScrollView>
 
@@ -171,27 +307,58 @@ function CollectionThemeGrid({ themeId }: { themeId: string }) {
 
 const HERO_HEIGHT = 420;
 
-function CollectionDetail({ locationId }: { locationId: LocationId }) {
+function CollectionDetail({ itemId }: { itemId: number }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
 
   const t = collectionScreenText[locale];
   const mapT = mapScreenText[locale];
-  const collectible = COLLECTIBLES[locationId];
+  const [detail, setDetail] = useState<CollectionItemDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+    setIsLoading(true);
+    setLoadError(false);
+    getCollectionItemDetail(itemId, { locale })
+      .then((nextDetail) => {
+        if (isActive) setDetail(nextDetail);
+      })
+      .catch((error) => {
+        console.error("[collection] item detail failed", error);
+        const isLockedItem = error instanceof ApiError && error.code === "COLLECTION4031";
+        if (isActive) {
+          setDetail(null);
+          setLoadError(!isLockedItem);
+        }
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [itemId, locale]);
+
+  const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
+  const locationLabel = locationId ? mapT.pins[locationId] : detail?.spotName;
+  const imageUrl = firstImageUrl(detail?.detailImageUrl, detail?.cardImageUrl);
 
   const handleShare = () => {
-    if (!collectible) return;
+    if (!detail) return;
     Share.share({
-      message: `${collectible.name[locale]} · ${mapT.pins[locationId]} ${shareSuffix[locale]}`,
+      message: `${detail.name} · ${locationLabel ?? ""} ${shareSuffix[locale]}`,
     });
   };
 
   const topBar = (
     <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
       <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backButton}>
-        <FontAwesome5 name="chevron-left" size={18} color={collectible ? "#fff" : "#1b1b1b"} solid />
+        <FontAwesome5 name="chevron-left" size={18} color={detail ? "#fff" : "#1b1b1b"} solid />
       </Pressable>
-      {collectible && (
+      {detail && (
         <View style={styles.topBarActions}>
           <Pressable style={styles.topBarActionButton} hitSlop={4} onPress={handleShare}>
             <FontAwesome5 name="share-alt" size={14} color="#fff" solid />
@@ -204,60 +371,50 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
     </View>
   );
 
-  if (!collectible) {
+  if (isLoading || !detail) {
+    const statusIcon = isLoading ? "spinner" : loadError ? "exclamation-circle" : "lock";
+    const statusTitle = isLoading ? t.loadingMessage : loadError ? t.loadErrorMessage : t.lockedItemMessage;
+    const statusMessage = isLoading ? t.loadingMessage : loadError ? t.loadErrorMessage : t.detailUnavailableMessage;
+
     return (
       <View style={styles.container}>
         {topBar}
         <View style={styles.comingSoonWrapper}>
           <View style={styles.comingSoonIcon}>
-            <FontAwesome5 name="hourglass-half" size={22} color="#b8860b" solid />
+            <FontAwesome5 name={statusIcon} size={22} color="#b8860b" solid />
           </View>
-          <Text style={styles.comingSoonTitle}>{t.comingSoonTitle}</Text>
-          <Text style={styles.comingSoonMessage}>{mapT.pins[locationId]}</Text>
-          <Text style={styles.comingSoonMessage}>{t.comingSoonMessage}</Text>
+          <Text style={styles.comingSoonTitle}>{statusTitle}</Text>
+          <Text style={styles.comingSoonMessage}>{statusMessage}</Text>
         </View>
       </View>
     );
   }
 
-  const isPerson = collectible.type === "person";
-  const secondaryLabel = collectible.secondaryLabelKey === "lifespan" ? t.lifespanLabel : t.productionPeriodLabel;
-
   return (
     <View style={styles.container}>
-      {/* Everything scrolls together — hero, card, buttons — so the card is
-          always free to grow to fit its content and the buttons simply
-          follow after it in normal flow. Nothing can ever overlap. */}
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={styles.heroFrame}>
-          {isPerson ? (
-            // 법왕/성왕's art has a transparent background, so it's composited
-            // onto Figma's own blurred-gradient backdrop colors instead of
-            // being cropped to fill — cropping a transparent-background
-            // portrait is what made these look wrong.
-            <>
-              <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
-              <Image source={collectible.image} style={styles.personHeroImage} resizeMode="contain" />
-            </>
+          {hasImageUrl(imageUrl) ? (
+            <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="contain" />
           ) : (
-            <Image source={collectible.image} style={styles.artifactHeroImage} resizeMode="cover" />
+            <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
           )}
           <LinearGradient colors={["rgba(253,252,248,0)", "#fdfcf8"]} style={styles.heroFade} />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{collectible.name[locale]}</Text>
+          <Text style={styles.cardTitle}>{detail.name}</Text>
 
           <View style={styles.cardRow}>
             <View style={[styles.cardRowBar, { backgroundColor: "#b8860b" }]} />
-            <Text style={styles.cardPrimaryValue}>{collectible.primaryLine[locale]}</Text>
+            <Text style={styles.cardPrimaryValue}>{locationLabel}</Text>
           </View>
 
           <View style={styles.cardRow}>
             <View style={[styles.cardRowBar, { backgroundColor: "#800000" }]} />
             <View>
-              <Text style={styles.cardFieldLabel}>{secondaryLabel}</Text>
-              <Text style={styles.cardSecondaryValue}>{collectible.secondaryLine[locale]}</Text>
+              <Text style={styles.cardFieldLabel}>{detail.isCharacter ? t.personTypeLabel : t.artifactTypeLabel}</Text>
+              <Text style={styles.cardSecondaryValue}>{detail.sourceCredit ?? detail.type}</Text>
             </View>
           </View>
 
@@ -265,7 +422,7 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
             <View style={styles.cardDivider} />
             <View style={styles.cardDescriptionColumn}>
               <Text style={styles.cardFieldLabel}>{t.keyFeaturesLabel}</Text>
-              <Text style={styles.cardDescription}>{collectible.description[locale]}</Text>
+              <Text style={styles.cardDescription}>{detail.description}</Text>
             </View>
           </View>
         </View>
@@ -273,14 +430,34 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
         <View style={[styles.actionButtons, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
             style={styles.primaryButton}
-            onPress={() => router.push({ pathname: "/ar-camera", params: { locationId } })}>
+            onPress={() =>
+              router.push({
+                pathname: "/ar-camera",
+                params: {
+                  ...(locationId ? { locationId } : {}),
+                  spotId: String(detail.spotId),
+                  storyId: String(detail.storyId),
+                  spotName: detail.spotName,
+                },
+              })
+            }>
             <FontAwesome5 name="headphones" size={16} color="#fff" solid />
             <Text style={styles.primaryButtonText}>{t.listenToAudioGuide}</Text>
           </Pressable>
-          {isPerson && (
+          {detail.isCharacter && locationId && (
             <Pressable
               style={styles.primaryButton}
-              onPress={() => router.push({ pathname: "/person-camera", params: { locationId } })}>
+              onPress={() =>
+                router.push({
+                  pathname: "/person-camera",
+                  params: {
+                    locationId,
+                    spotId: String(detail.spotId),
+                    storyId: String(detail.storyId),
+                    collectionItemId: String(detail.collectionItemId),
+                  },
+                })
+              }>
               <FontAwesome5 name="camera" size={16} color="#fff" solid />
               <Text style={styles.primaryButtonText}>{t.takePhotoWithFigure}</Text>
             </Pressable>
@@ -289,6 +466,14 @@ function CollectionDetail({ locationId }: { locationId: LocationId }) {
       </ScrollView>
 
       {topBar}
+    </View>
+  );
+}
+
+function StatusMessage({ message }: { message: string }) {
+  return (
+    <View style={styles.statusMessage}>
+      <Text style={styles.statusMessageText}>{message}</Text>
     </View>
   );
 }
@@ -350,36 +535,25 @@ const styles = StyleSheet.create({
   listItemPressed: {
     opacity: 0.7,
   },
-  listItemLocked: {
-    backgroundColor: "#fafaf9",
-    borderColor: "#f5f5f4",
-    opacity: 0.6,
-  },
   listItemThumb: {
     width: 80,
     height: 80,
     borderRadius: 12,
-    backgroundColor: "#f5f5f4",
+    backgroundColor: "#f8f6f0",
   },
-  listItemThumbLocked: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: "#e7e5e4",
-    alignItems: "center",
-    justifyContent: "center",
+  listItemTextColumn: {
+    flex: 1,
+    gap: 6,
   },
   listItemTitle: {
-    flex: 1,
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 15,
     color: "#1b1b1b",
   },
-  listItemTitleLocked: {
-    flex: 1,
-    fontFamily: GUNGSEO_FONT_BOLD,
-    fontSize: 15,
-    color: "#9ca3af",
+  listItemProgress: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#b8860b",
   },
   gridScrollContent: {
     flexGrow: 1,
@@ -403,6 +577,19 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 24,
   },
+  statusMessage: {
+    width: "100%",
+    minHeight: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  statusMessageText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#9ca3af",
+    textAlign: "center",
+  },
   gridCard: {
     width: "46%",
     backgroundColor: "#fff",
@@ -420,7 +607,7 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 1,
     borderRadius: 8,
-    backgroundColor: "#f1f1f1",
+    backgroundColor: "#f8f6f0",
     overflow: "hidden",
   },
   gridCardImage: {
@@ -432,6 +619,13 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 8,
     backgroundColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridCardQuestionMark: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#9ca3af",
   },
   gridCardBadge: {
     position: "absolute",
@@ -441,6 +635,17 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: "#b8860b",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridCardLockBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#9ca3af",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -499,18 +704,12 @@ const styles = StyleSheet.create({
   detailScrollContent: {
     flexGrow: 1,
   },
-  // Full-bleed edge to edge (no side margins) for both types — a person's
-  // art floats on Figma's blurred-gradient colors via `contain`, an
-  // artifact's photo fills the frame via `cover`. Either way the bottom
-  // fades into the page background instead of cutting off hard.
+  // Keep collection artwork fully visible even when the source image ratio
+  // differs from the device frame.
   heroFrame: {
     height: HERO_HEIGHT,
-    backgroundColor: "#1b1b1b",
+    backgroundColor: "#f8f6f0",
     overflow: "hidden",
-  },
-  personHeroImage: {
-    width: "100%",
-    height: "100%",
   },
   artifactHeroImage: {
     width: "100%",

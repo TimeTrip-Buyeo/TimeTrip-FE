@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -8,23 +8,75 @@ import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { LangPill } from "@/components/lang-pill";
 import { ALBUM_ENTRIES } from "@/constants/album";
-import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import type { LocationId } from "@/constants/locations";
-import { PERSON_POSES } from "@/constants/poses";
+import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
 import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
 import { useApiResource } from "@/hooks/use-api-resource";
-import { useCapturedPhotos } from "@/hooks/use-captured-photos";
+import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
+import { toApiUrl } from "@/lib/api/client";
+import { getSelfiePhotoOptions } from "@/lib/api/selfies";
+import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
+import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route";
 
 // Deep-link IDs are untrusted strings — a hand-edited or stale link (e.g.
 // "?collectionItemId=abc") must fall back to the list instead of sending
 // Number.NaN into a request URL like /api/albums/NaN/photos.
 function parseId(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined || value === "") return undefined;
   const parsed = Number(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function getTakenAtMillis(takenAt: number | string): number {
+  return typeof takenAt === "number" ? takenAt : new Date(takenAt).getTime();
+}
+
+function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
+  const [remotePhotos, setRemotePhotos] = useState<RemoteAlbumPhoto[]>([]);
+
+  useEffect(() => {
+    const spotId = LOCATION_ID_TO_SPOT_ID[locationId];
+    if (spotId == null) {
+      setRemotePhotos([]);
+      return;
+    }
+
+    let isActive = true;
+
+    const cached = getCachedRemoteAlbumPhotos(locationId, locale);
+    if (cached) {
+      setRemotePhotos(cached.photos);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    getSelfiePhotoOptions({ locale, spotId })
+      .then(({ selfiePhotos }) => {
+        const nextPhotos = selfiePhotos.map((photo) => ({
+          ...photo,
+          id: `remote-${photo.selfiePhotoId}`,
+          uri: toApiUrl(photo.photoUrl),
+        }));
+        if (!isActive) return;
+        setCachedRemoteAlbumPhotos(locationId, locale, nextPhotos);
+        setRemotePhotos(nextPhotos);
+      })
+      .catch((error) => {
+        console.error("[album] selfie photos failed", error);
+        if (isActive) {
+          setRemotePhotos([]);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, locationId]);
+
+  return { remotePhotos };
 }
 
 export default function AlbumScreen() {
@@ -369,14 +421,20 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const collectible = COLLECTIBLES[locationId];
-  const photo = collectible?.obtained ? collectible : undefined;
   const { photosByLocation, removePhoto } = useCapturedPhotos();
   const capturedPhotos = photosByLocation[locationId] ?? [];
+  const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const [isEditMode, setIsEditMode] = useState(false);
   const [sortOldestFirst, setSortOldestFirst] = useState(false);
   const [isLegendVisible, setIsLegendVisible] = useState(false);
-  const displayedCapturedPhotos = sortOldestFirst ? [...capturedPhotos].reverse() : capturedPhotos;
+  // Newest-first by actual capture time (server photos carry a real
+  // `takenAt` too) rather than just local-photos-then-remote-photos, so the
+  // sort toggle reflects true chronological order once both sources exist.
+  const mergedCapturedPhotos = [
+    ...capturedPhotos,
+    ...remotePhotos.filter((remote) => !capturedPhotos.some((photo) => photo.serverSelfiePhotoId === remote.selfiePhotoId)),
+  ].sort((a, b) => getTakenAtMillis(b.takenAt) - getTakenAtMillis(a.takenAt));
+  const displayedCapturedPhotos = sortOldestFirst ? [...mergedCapturedPhotos].reverse() : mergedCapturedPhotos;
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
@@ -397,7 +455,7 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
     </View>
   );
 
-  if (!photo && capturedPhotos.length === 0) {
+  if (mergedCapturedPhotos.length === 0) {
     // Matches Figma "앨범( 사진 없을때)", node 0:384, literally.
     return (
       <View style={styles.container}>
@@ -445,12 +503,9 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
         {header}
         <View style={styles.photoSectionHeader}>
           <Text style={styles.themeLabel}>{entry?.name[locale] ?? t.themeLabel}</Text>
-          {(capturedPhotos.length > 0 || photo) && (
+          {mergedCapturedPhotos.length > 0 && (
             <View style={styles.editControls}>
-              {/* Placeholder slots have no real timestamp, so reordering them
-                  is meaningless — only show sort once there's more than one
-                  real capture to reorder. */}
-              {capturedPhotos.length > 0 && (
+              {mergedCapturedPhotos.length > 0 && (
                 <Pressable
                   style={[styles.editControlButton, sortOldestFirst && styles.editControlButtonActive]}
                   onPress={() => setSortOldestFirst((current) => !current)}
@@ -473,30 +528,29 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
           )}
         </View>
         <View style={styles.photoGrid}>
-          {/* Real captures (from the person camera) lead the grid; the rest
-              is filled out to the entry's known photoCount (법왕: 6, 무왕: 3)
-              with the same placeholder illustration Figma's own photo-picker
-              screens (node 0:1418) reuse across every slot in a theme. */}
           {displayedCapturedPhotos.map((captured) => {
-            const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId);
+            const isRemote = captured.id.startsWith("remote-");
+            // A locally-captured photo that already synced to the server
+            // (serverSelfiePhotoId set) can't actually be deleted there —
+            // "deleting" it here only hid it until the next server fetch
+            // resurrected it. Treat it as non-deletable, same as isRemote.
+            const isSynced = !isRemote && (captured as CapturedPhoto).serverSelfiePhotoId !== undefined;
+            const canDelete = !isRemote && !isSynced;
             return (
               <Pressable
                 key={captured.id}
                 style={({ pressed }) => [styles.photoCard, pressed && styles.photoCardPressed]}
                 onPress={() =>
                   isEditMode
-                    ? removePhoto(locationId, captured.id)
+                    ? canDelete && removePhoto(locationId, captured.id)
                     : router.push({ pathname: "/album", params: { locationId, photo: captured.id } })
                 }>
-                <Image source={{ uri: captured.uri }} style={styles.photoImage} resizeMode="cover" />
-                {pose && (
-                  <Image
-                    source={pose.image}
-                    style={[styles.photoImagePersonOverlay, { aspectRatio: pose.aspectRatio }]}
-                    resizeMode="cover"
-                  />
-                )}
-                {isEditMode && (
+                <Image
+                  source={{ uri: captured.uri }}
+                  style={styles.photoImage}
+                  resizeMode="cover"
+                />
+                {isEditMode && canDelete && (
                   <View style={styles.deleteBadge}>
                     <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
                   </View>
@@ -504,27 +558,6 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
               </Pressable>
             );
           })}
-          {/* Placeholder-filled slots stay visible in edit mode too (previously
-              hidden whenever isEditMode was true) — with 0-1 real captures,
-              hiding them made the whole grid go blank the moment edit mode
-              was entered, which read as "delete is broken" even though
-              removePhoto itself worked fine. They're just not deletable
-              (nothing to delete — disabled instead of wired to remove), so
-              tapping into one mid-edit doesn't also navigate away. */}
-          {photo &&
-            Array.from({ length: Math.max((entry?.photoCount ?? 1) - capturedPhotos.length, 0) }).map((_, index) => (
-              <Pressable
-                key={index}
-                style={({ pressed }) => [
-                  styles.photoCard,
-                  pressed && styles.photoCardPressed,
-                  isEditMode && styles.photoCardDimmed,
-                ]}
-                disabled={isEditMode}
-                onPress={() => router.push({ pathname: "/album", params: { locationId, photo: String(index) } })}>
-                <Image source={photo.image} style={styles.photoImage} resizeMode="cover" />
-              </Pressable>
-            ))}
         </View>
       </ScrollView>
 
@@ -549,13 +582,40 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const collectible = COLLECTIBLES[locationId];
   const { photosByLocation } = useCapturedPhotos();
+  const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
-  const capturedPose = captured && PERSON_POSES[locationId]?.find((candidate) => candidate.id === captured.poseId);
+  const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
+  const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
+  const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
+
+  useEffect(() => {
+    let isActive = true;
+    setIsSelfieRouteLoading(true);
+    getSelfieRouteParams(locationId, locale, {
+      collectionItemId: remotePhoto?.collectionItemId,
+      requireAcquired: true,
+    })
+      .then((params) => {
+        if (isActive) setSelfieRouteParams(params);
+      })
+      .catch((error) => {
+        console.error("[album] selfie route params failed", error);
+        if (isActive) setSelfieRouteParams({});
+      })
+      .finally(() => {
+        if (isActive) setIsSelfieRouteLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [locale, locationId, remotePhoto?.collectionItemId]);
+
+  const canOpenPersonCamera = !isSelfieRouteLoading && !!selfieRouteParams.collectionItemId;
 
   const handleShare = () => {
-    const label = captured?.poseLabel || collectible?.name[locale];
+    const label = captured?.poseLabel || remotePhoto?.collectionItemName;
     if (!label) return;
     Share.share({ message: `${label} · ${mapT.pins[locationId]} ${shareSuffix[locale]}` });
   };
@@ -574,22 +634,13 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
 
       <View style={styles.viewerPhotoWrapper}>
         {captured ? (
-          <>
-            <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
-            {capturedPose && (
-              <Image
-                source={capturedPose.image}
-                style={[styles.viewerPersonOverlay, { aspectRatio: capturedPose.aspectRatio }]}
-                resizeMode="cover"
-              />
-            )}
-          </>
-        ) : (
-          collectible && <Image source={collectible.image} style={styles.viewerPhoto} resizeMode="cover" />
-        )}
-        {(captured?.poseLabel || entry) && (
+          <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
+        ) : remotePhoto ? (
+          <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
+        ) : null}
+        {(captured?.poseLabel || remotePhoto?.collectionItemName) && (
           <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || entry?.name[locale]}</Text>
+            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || remotePhoto?.collectionItemName}</Text>
           </View>
         )}
       </View>
@@ -607,8 +658,9 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         </Pressable>
 
         <Pressable
-          style={styles.viewerSideButton}
-          onPress={() => router.push({ pathname: "/person-camera", params: { locationId } })}>
+          style={[styles.viewerSideButton, !canOpenPersonCamera && styles.viewerSideButtonDisabled]}
+          disabled={!canOpenPersonCamera}
+          onPress={() => router.push({ pathname: "/person-camera", params: { locationId, ...selfieRouteParams } })}>
           <View style={styles.viewerSideCircle}>
             <FontAwesome5 name="camera" size={16} color="#1b1b1b" solid />
           </View>
@@ -899,18 +951,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     transform: [{ scale: 0.97 }],
   },
-  photoCardDimmed: {
-    opacity: 0.4,
-  },
   photoImage: {
     width: "100%",
     height: "100%",
-  },
-  photoImagePersonOverlay: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    height: "92%",
   },
   // Photo viewer (Figma "사진 개별 선택시", node 0:1630)
   viewerHeader: {
@@ -947,12 +990,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  viewerPersonOverlay: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    height: "92%",
-  },
   viewerCaptionPill: {
     position: "absolute",
     top: 16,
@@ -978,6 +1015,9 @@ const styles = StyleSheet.create({
   viewerSideButton: {
     alignItems: "center",
     gap: 8,
+  },
+  viewerSideButtonDisabled: {
+    opacity: 0.45,
   },
   viewerSideCircle: {
     width: 48,

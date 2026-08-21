@@ -12,7 +12,7 @@ export const LOCALES: LocaleMeta[] = [
   { code: 'ko', badgeLabel: 'KR', nativeLabel: '한국어' },
   { code: 'en', badgeLabel: 'EN', nativeLabel: 'English' },
   { code: 'zh', badgeLabel: 'CN', nativeLabel: '中文' },
-  { code: 'ja', badgeLabel: 'JP', nativeLabel: 'にほんご' },
+  { code: 'ja', badgeLabel: 'JP', nativeLabel: '日本語' },
 ];
 
 // Shared "— TimeTrip 부여" suffix appended to every Share.share() message
@@ -651,6 +651,14 @@ type CollectionScreenText = {
   takePhotoWithFigure: string;
   comingSoonTitle: string;
   comingSoonMessage: string;
+  loadingMessage: string;
+  emptyTopicMessage: string;
+  emptyItemMessage: string;
+  loadErrorMessage: string;
+  lockedItemMessage: string;
+  detailUnavailableMessage: string;
+  personTypeLabel: string;
+  artifactTypeLabel: string;
 };
 
 export const collectionScreenText: Record<Locale, CollectionScreenText> = {
@@ -664,6 +672,14 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: '인물과 사진 찍기',
     comingSoonTitle: '준비 중이에요',
     comingSoonMessage: '이 장소의 컬렉션은 곧 공개될 예정이에요.',
+    loadingMessage: '불러오는 중이에요.',
+    emptyTopicMessage: '아직 획득한 스페셜 도감이 없어요.',
+    emptyItemMessage: '아직 획득한 도감 아이템이 없어요.',
+    loadErrorMessage: '도감 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
+    lockedItemMessage: 'AR카메라에서 먼저 만나보세요.',
+    detailUnavailableMessage: '획득한 아이템만 상세 정보를 볼 수 있어요.',
+    personTypeLabel: '인물',
+    artifactTypeLabel: '유물',
   },
   en: {
     listTitle: 'Buyeo Baekje Almanac',
@@ -675,6 +691,14 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: 'Take a Photo Together',
     comingSoonTitle: 'Coming Soon',
     comingSoonMessage: "This location's collectible hasn't been revealed yet.",
+    loadingMessage: 'Loading...',
+    emptyTopicMessage: 'No acquired special collections yet.',
+    emptyItemMessage: 'No acquired collection items yet.',
+    loadErrorMessage: "Couldn't load collection data. Please try again later.",
+    lockedItemMessage: 'Meet it in AR Camera first.',
+    detailUnavailableMessage: 'Only acquired items can be viewed in detail.',
+    personTypeLabel: 'Figure',
+    artifactTypeLabel: 'Artifact',
   },
   zh: {
     listTitle: '扶余百济图鉴',
@@ -686,6 +710,14 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: '与人物合影',
     comingSoonTitle: '即将开放',
     comingSoonMessage: '该地点的收藏内容尚未公开。',
+    loadingMessage: '加载中。',
+    emptyTopicMessage: '暂无已获得的特别图鉴。',
+    emptyItemMessage: '暂无已获得的图鉴项目。',
+    loadErrorMessage: '无法加载图鉴信息。请稍后再试。',
+    lockedItemMessage: '请先在 AR 相机中遇见它。',
+    detailUnavailableMessage: '只有已获得的项目可以查看详情。',
+    personTypeLabel: '人物',
+    artifactTypeLabel: '文物',
   },
   ja: {
     listTitle: '扶余百済図鑑',
@@ -697,6 +729,14 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     takePhotoWithFigure: '人物と写真を撮る',
     comingSoonTitle: '準備中です',
     comingSoonMessage: 'この場所のコレクションはまもなく公開されます。',
+    loadingMessage: '読み込み中です。',
+    emptyTopicMessage: '獲得済みのスペシャル図鑑はまだありません。',
+    emptyItemMessage: '獲得済みの図鑑アイテムはまだありません。',
+    loadErrorMessage: '図鑑情報を読み込めませんでした。しばらくしてからもう一度お試しください。',
+    lockedItemMessage: '先にARカメラで出会ってください。',
+    detailUnavailableMessage: '獲得済みアイテムのみ詳細を表示できます。',
+    personTypeLabel: '人物',
+    artifactTypeLabel: '遺物',
   },
 };
 
@@ -968,6 +1008,8 @@ type PersonCameraText = {
   timerOptionLabel: (seconds: number) => string;
   photoSavedToastTitle: string;
   photoSavedToastBody: string;
+  shareUnavailableToastTitle: string;
+  shareUnavailableToastBody: string;
 };
 
 export const personCameraText: Record<Locale, PersonCameraText> = {
@@ -984,6 +1026,8 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}초`,
     photoSavedToastTitle: '앨범에 저장되었습니다',
     photoSavedToastBody: '확인해 보세요!',
+    shareUnavailableToastTitle: '공유할 수 없어요',
+    shareUnavailableToastBody: '잠시 후 다시 시도해 주세요.',
   },
   en: {
     posePickerLabel: 'Choose a Pose',
@@ -998,6 +1042,8 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}s`,
     photoSavedToastTitle: 'Saved to your album',
     photoSavedToastBody: 'Take a look!',
+    shareUnavailableToastTitle: "Can't share right now",
+    shareUnavailableToastBody: 'Please try again in a moment.',
   },
   zh: {
     posePickerLabel: '选择姿势',
@@ -1012,6 +1058,8 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}秒`,
     photoSavedToastTitle: '已保存到相册',
     photoSavedToastBody: '快去看看吧！',
+    shareUnavailableToastTitle: '暂时无法分享',
+    shareUnavailableToastBody: '请稍后再试一次。',
   },
   ja: {
     posePickerLabel: 'ポーズ設定',
@@ -1026,5 +1074,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     timerOptionLabel: (seconds) => `${seconds}秒`,
     photoSavedToastTitle: 'アルバムに保存しました',
     photoSavedToastBody: '確認してみてください！',
+    shareUnavailableToastTitle: '共有できませんでした',
+    shareUnavailableToastBody: 'しばらくしてからもう一度お試しください。',
   },
 };
