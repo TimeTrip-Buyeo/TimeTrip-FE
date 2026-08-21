@@ -892,6 +892,8 @@ type BuyeoCutScreenText = {
   shareButtonAccessibilityLabel: string;
   saveToastTitle: string;
   saveToastBody: string;
+  saveErrorToastTitle: string;
+  saveErrorToastBody: string;
 };
 
 // Note: "부여세컷" literally means "Buyeo 3-cut" (세 = three, as opposed to
@@ -922,6 +924,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     shareButtonAccessibilityLabel: '공유하기',
     saveToastTitle: '저장완료!',
     saveToastBody: '다른 사진조합으로도 만들어 보시오',
+    saveErrorToastTitle: '저장하지 못했어요',
+    saveErrorToastBody: '잠시 후 다시 시도해 주세요.',
   },
   en: {
     headerTitle: 'Select Buyeo 3-Cut',
@@ -947,6 +951,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     shareButtonAccessibilityLabel: 'Share',
     saveToastTitle: 'Saved!',
     saveToastBody: 'Try a different photo combination too',
+    saveErrorToastTitle: "Couldn't save",
+    saveErrorToastBody: 'Please try again in a moment.',
   },
   zh: {
     headerTitle: '选择扶余三格',
@@ -972,6 +978,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     shareButtonAccessibilityLabel: '分享',
     saveToastTitle: '保存完成！',
     saveToastBody: '也可以尝试其他照片组合',
+    saveErrorToastTitle: '保存失败',
+    saveErrorToastBody: '请稍后再试一次。',
   },
   ja: {
     headerTitle: '扶余三カットを選ぶ',
@@ -997,6 +1005,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     shareButtonAccessibilityLabel: '共有する',
     saveToastTitle: '保存完了！',
     saveToastBody: '他の写真の組み合わせも作ってみましょう',
+    saveErrorToastTitle: '保存できませんでした',
+    saveErrorToastBody: 'しばらくしてからもう一度お試しください。',
   },
 };
 

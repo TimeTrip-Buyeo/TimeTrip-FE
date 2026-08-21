@@ -14,7 +14,7 @@ import { buyeoCutScreenText, mapScreenText, type Locale } from "@/constants/tran
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-import { getFrames } from "@/lib/api/collage";
+import { createCollage, getFrames } from "@/lib/api/collage";
 
 // "부여세컷" = "Buyeo 3-cut" (세 = three), matching Figma's own progress
 // example ("2 / 3", node 0:1418) — not a 4-photo strip.
@@ -53,6 +53,10 @@ type PickerItem = {
   source: ImageSourcePropType;
   poseImage?: ImageSourcePropType;
   poseAspectRatio?: number;
+  /** Set only if the server upload in photo-save.tsx succeeded — undefined for
+      local-only captures (upload failed, or never attempted). Required to
+      create a collage; see canSaveCollage below. */
+  serverSelfiePhotoId?: number;
 };
 
 // Rebuilt to match Figma's "부여세컷 선택" → "콜라주 만들기" flow (nodes 0:1418,
@@ -79,6 +83,8 @@ export default function BuyeoCutScreen() {
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
 
   // Mirrors the old default of "frame visible on first render" — auto-picks
   // the first server frame once the list loads, but only once, so it doesn't
@@ -105,6 +111,7 @@ export default function BuyeoCutScreen() {
               source: { uri: photo.uri },
               poseImage: pose?.image,
               poseAspectRatio: pose?.aspectRatio,
+              serverSelfiePhotoId: photo.serverSelfiePhotoId,
             };
           }),
         ];
@@ -119,6 +126,11 @@ export default function BuyeoCutScreen() {
   );
 
   const isFull = selected.length >= SLOT_COUNT;
+  // createCollage needs real server IDs — placeholders are already excluded
+  // from the picker, but a capture whose upload failed (see photo-save.tsx's
+  // best-effort saveSelfiePhoto) still has no serverSelfiePhotoId.
+  const canSaveCollage =
+    selected.length === SLOT_COUNT && selected.every((item) => item.serverSelfiePhotoId !== undefined);
 
   const toggleSelect = (item: PickerItem) => {
     setSelected((current) => {
@@ -148,6 +160,12 @@ export default function BuyeoCutScreen() {
     return () => clearTimeout(timer);
   }, [showSaveToast]);
 
+  useEffect(() => {
+    if (!showSaveErrorToast) return;
+    const timer = setTimeout(() => setShowSaveErrorToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [showSaveErrorToast]);
+
   const handleGenerate = () => {
     if (selected.length !== SLOT_COUNT) return;
     setView("collage");
@@ -161,11 +179,22 @@ export default function BuyeoCutScreen() {
     router.back();
   };
 
-  // No persistent-storage module is wired up in this app yet (see
-  // use-captured-photos.tsx) — this mirrors that same in-memory-only scope
-  // and just surfaces the Figma "저장완료!" confirmation (node 0:612) rather
-  // than writing to the device's photo library.
-  const handleSave = () => setShowSaveToast(true);
+  const handleSave = async () => {
+    if (!canSaveCollage || isSaving) return;
+    setIsSaving(true);
+    try {
+      await createCollage(
+        selected.map((item) => item.serverSelfiePhotoId!),
+        selectedFrame?.frameId,
+      );
+      setShowSaveToast(true);
+    } catch (error) {
+      console.error("[buyeo-cut] failed to create collage", error);
+      setShowSaveErrorToast(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleShare = () => {
     Share.share({ message: `${t.collageCaption} · ${t.collageHeaderTitle}` });
@@ -214,7 +243,11 @@ export default function BuyeoCutScreen() {
             )}
           </View>
 
-          {showSaveToast && <SaveToast title={t.saveToastTitle} body={t.saveToastBody} />}
+          {showSaveToast ? (
+            <SaveToast title={t.saveToastTitle} body={t.saveToastBody} />
+          ) : (
+            showSaveErrorToast && <SaveToast title={t.saveErrorToastTitle} body={t.saveErrorToastBody} />
+          )}
         </View>
 
         <View style={[styles.collageBottom, { paddingBottom: insets.bottom > 0 ? insets.bottom : 32 }]}>
@@ -258,8 +291,15 @@ export default function BuyeoCutScreen() {
           </View>
 
           <View style={styles.collageActions}>
-            <Pressable style={styles.saveButton} onPress={handleSave}>
-              <FontAwesome5 name="download" size={14} color="#fdfcf8" solid />
+            <Pressable
+              style={[styles.saveButton, (!canSaveCollage || isSaving) && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={!canSaveCollage || isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#fdfcf8" size="small" />
+              ) : (
+                <FontAwesome5 name="download" size={14} color="#fdfcf8" solid />
+              )}
               <Text style={styles.saveButtonText}>{t.saveButtonLabel}</Text>
             </Pressable>
             <Pressable
@@ -943,6 +983,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     backgroundColor: "#800000",
+  },
+  saveButtonDisabled: {
+    backgroundColor: "rgba(128,0,0,0.5)",
   },
   saveButtonText: {
     fontSize: 12,
