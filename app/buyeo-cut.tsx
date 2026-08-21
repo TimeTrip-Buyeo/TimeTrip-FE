@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSourcePropType } from "react-native";
-import { Animated, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -12,8 +12,10 @@ import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import type { LocationId } from "@/constants/locations";
 import { PERSON_POSES } from "@/constants/poses";
 import { buyeoCutScreenText, mapScreenText, type Locale } from "@/constants/translations";
+import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
+import { getFrames } from "@/lib/api/collage";
 
 // "부여세컷" = "Buyeo 3-cut" (세 = three), matching Figma's own progress
 // example ("2 / 3", node 0:1418) — not a 4-photo strip.
@@ -21,12 +23,10 @@ const SLOT_COUNT = 3;
 const ALL_FILTER = "all" as const;
 type ThemeFilter = LocationId | typeof ALL_FILTER;
 
-// The exact frame graphic selected in Figma (node 0:580's "image 46"), with
-// its 3 photo windows punched fully transparent so real selected photos
-// composite in behind it — see the asset's own history for how the windows
-// were cut. Native size 887x1774 (an exact 1:2 ratio), so the frame
-// container below reuses that ratio verbatim rather than approximating it.
-const COLLAGE_FRAME = require("@/assets/images/buyeo-cut/collage-frame.png");
+// The frame box keeps the exact 1:2 ratio measured off Figma's original frame
+// graphic (node 0:580's "image 46", native 887x1774) — GET /collages/frames
+// doesn't return per-frame aspect-ratio or photo-window metadata, so every
+// server frame image is stretched to fit this same fixed box instead.
 const COLLAGE_FRAME_RATIO = 887 / 1774;
 // The photo tiles are sized first — 150dp is a comfortable, non-cropped
 // display size (similar to this app's other photo cards) — and the frame is
@@ -75,11 +75,29 @@ export default function BuyeoCutScreen() {
   const { photosByLocation } = useCapturedPhotos();
   const [selected, setSelected] = useState<PickerItem[]>([]);
   const [view, setView] = useState<"pick" | "collage">("pick");
-  const [frameEnabled, setFrameEnabled] = useState(true);
+  const { data: framesData, loadError: framesLoadError } = useApiResource(
+    () => getFrames(),
+    [],
+    "[buyeo-cut] failed to load frames",
+  );
+  const frames = useMemo(() => framesData?.frames ?? [], [framesData]);
+  const [selectedFrameId, setSelectedFrameId] = useState<number | null>(null);
+  const selectedFrame = frames.find((frame) => frame.frameId === selectedFrameId) ?? null;
   const [themeFilter, setThemeFilter] = useState<ThemeFilter>(ALL_FILTER);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
+
+  // Mirrors the old default of "frame visible on first render" — auto-picks
+  // the first server frame once the list loads, but only once, so it doesn't
+  // stomp a later explicit "프레임 없음" choice (selectedFrameId back to null).
+  const hasAutoSelectedFrame = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSelectedFrame.current && frames.length > 0) {
+      hasAutoSelectedFrame.current = true;
+      setSelectedFrameId(frames[0].frameId);
+    }
+  }, [frames]);
 
   const allSections = useMemo(() => {
     return (Object.keys(ALBUM_ENTRIES) as LocationId[])
@@ -207,9 +225,9 @@ export default function BuyeoCutScreen() {
                 )}
               </View>
             ))}
-            {frameEnabled && (
+            {selectedFrame && (
               <Image
-                source={COLLAGE_FRAME}
+                source={{ uri: selectedFrame.frameImageUrl }}
                 style={{ position: "absolute", top: 0, left: 0, width: COLLAGE_FRAME_WIDTH, height: COLLAGE_FRAME_HEIGHT }}
                 resizeMode="stretch"
               />
@@ -222,34 +240,41 @@ export default function BuyeoCutScreen() {
         <View style={[styles.collageBottom, { paddingBottom: insets.bottom > 0 ? insets.bottom : 32 }]}>
           <View style={styles.frameSection}>
             <Text style={styles.frameSectionLabel}>{t.frameSectionLabel}</Text>
-            <View style={styles.frameOptionsRow}>
-              <Pressable
-                style={[styles.frameOptionButton, frameEnabled && styles.frameOptionButtonActive]}
-                onPress={() => setFrameEnabled(true)}>
-                <Text style={[styles.frameOptionText, frameEnabled && styles.frameOptionTextActive]}>
-                  {t.frameOnLabel}
-                </Text>
-                <FontAwesome5
-                  name="check"
-                  size={12}
-                  color={frameEnabled ? "#800000" : "transparent"}
-                  solid={frameEnabled}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.frameOptionButton, !frameEnabled && styles.frameOptionButtonActive]}
-                onPress={() => setFrameEnabled(false)}>
-                <Text style={[styles.frameOptionText, !frameEnabled && styles.frameOptionTextActive]}>
-                  {t.frameOffLabel}
-                </Text>
-                <FontAwesome5
-                  name="check"
-                  size={12}
-                  color={!frameEnabled ? "#800000" : "transparent"}
-                  solid={!frameEnabled}
-                />
-              </Pressable>
-            </View>
+            {framesLoadError ? (
+              <Text style={styles.frameLoadErrorText}>{t.frameLoadErrorText}</Text>
+            ) : framesData === null ? (
+              <ActivityIndicator color="#800000" />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.frameOptionsRow}>
+                <Pressable
+                  style={[styles.frameOptionButton, selectedFrame === null && styles.frameOptionButtonActive]}
+                  onPress={() => setSelectedFrameId(null)}>
+                  <Text style={[styles.frameOptionText, selectedFrame === null && styles.frameOptionTextActive]}>
+                    {t.frameOffLabel}
+                  </Text>
+                  <FontAwesome5
+                    name="check"
+                    size={12}
+                    color={selectedFrame === null ? "#800000" : "transparent"}
+                    solid={selectedFrame === null}
+                  />
+                </Pressable>
+                {frames.map((frame) => {
+                  const isActive = frame.frameId === selectedFrameId;
+                  return (
+                    <Pressable
+                      key={frame.frameId}
+                      style={[styles.frameOptionButton, isActive && styles.frameOptionButtonActive]}
+                      onPress={() => setSelectedFrameId(frame.frameId)}>
+                      <Text style={[styles.frameOptionText, isActive && styles.frameOptionTextActive]}>
+                        {frame.name}
+                      </Text>
+                      <FontAwesome5 name="check" size={12} color={isActive ? "#800000" : "transparent"} solid={isActive} />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
 
           <View style={styles.collageActions}>
@@ -884,23 +909,25 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: "#b8860b",
   },
-  // Reproduces Figma's own two-button frame-choice row (node 0:596-0:602),
-  // repurposed as an on/off pair (프레임 / 프레임 없음) instead of two frame
-  // styles. Figma's fixed 157-wide pills only fit its own ~396px canvas —
-  // on a narrower phone two 157s left no visible gap between them (and
-  // could even overlap), so this uses flex+gap instead, matching the same
-  // pattern as the save/share row directly below for a consistent, clean fit
-  // regardless of screen width.
+  frameLoadErrorText: {
+    fontSize: 12,
+    color: "#78716c",
+  },
+  // Reproduces Figma's own two-button frame-choice row (node 0:596-0:602) as
+  // a starting point, but now scrolls horizontally since GET /collages/frames
+  // can return any number of frames (not just the original on/off pair) —
+  // fixed-width pills in a horizontal ScrollView instead of flex+gap, which
+  // only worked for exactly two evenly-split buttons.
   frameOptionsRow: {
     flexDirection: "row",
     gap: 12,
   },
   frameOptionButton: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: "#fff",

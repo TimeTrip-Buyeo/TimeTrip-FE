@@ -846,6 +846,7 @@ type BuyeoCutScreenText = {
   frameSectionLabel: string;
   frameOnLabel: string;
   frameOffLabel: string;
+  frameLoadErrorText: string;
   collageCaption: string;
   saveButtonLabel: string;
   shareButtonAccessibilityLabel: string;
@@ -875,6 +876,7 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     frameSectionLabel: '프레임 선택',
     frameOnLabel: '프레임',
     frameOffLabel: '프레임 없음',
+    frameLoadErrorText: '프레임을 불러오지 못했어요.',
     collageCaption: 'TimeTrip 부여',
     saveButtonLabel: '세컷 저장하기',
     shareButtonAccessibilityLabel: '공유하기',
@@ -899,6 +901,7 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     frameSectionLabel: 'Choose a Frame',
     frameOnLabel: 'Frame',
     frameOffLabel: 'No Frame',
+    frameLoadErrorText: 'Could not load frames.',
     collageCaption: 'TimeTrip Buyeo',
     saveButtonLabel: 'Save 3-Cut',
     shareButtonAccessibilityLabel: 'Share',
@@ -923,6 +926,7 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     frameSectionLabel: '选择相框',
     frameOnLabel: '相框',
     frameOffLabel: '无相框',
+    frameLoadErrorText: '无法加载相框。',
     collageCaption: 'TimeTrip 扶余',
     saveButtonLabel: '保存三格',
     shareButtonAccessibilityLabel: '分享',
@@ -947,6 +951,7 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     frameSectionLabel: 'フレームを選ぶ',
     frameOnLabel: 'フレーム',
     frameOffLabel: 'フレームなし',
+    frameLoadErrorText: 'フレームを読み込めませんでした。',
     collageCaption: 'TimeTrip 扶余',
     saveButtonLabel: '三カットを保存',
     shareButtonAccessibilityLabel: '共有する',
