@@ -2,7 +2,17 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Image, LayoutAnimation, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  LayoutAnimation,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -327,10 +337,11 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
   );
 }
 
-const HERO_HEIGHT = 420;
+const FALLBACK_HERO_HEIGHT = 420;
 
 function CollectionDetail({ itemId }: { itemId: number }) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { locale } = useLanguage();
 
   const t = collectionScreenText[locale];
@@ -339,6 +350,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [isDetailCardExpanded, setIsDetailCardExpanded] = useState(true);
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -371,6 +383,29 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const sourceDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
   const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
+  const heroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
+
+  useEffect(() => {
+    if (!hasImageUrl(imageUrl)) {
+      setImageAspectRatio(null);
+      return;
+    }
+
+    let isActive = true;
+    Image.getSize(
+      toApiUrl(imageUrl),
+      (width, height) => {
+        if (isActive && width > 0 && height > 0) setImageAspectRatio(width / height);
+      },
+      () => {
+        if (isActive) setImageAspectRatio(null);
+      },
+    );
+
+    return () => {
+      isActive = false;
+    };
+  }, [imageUrl]);
 
   const toggleDetailCard = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -424,7 +459,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
-        <View style={styles.heroFrame}>
+        <View style={[styles.heroFrame, { height: heroHeight }]}>
           {hasImageUrl(imageUrl) ? (
             <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="contain" />
           ) : (
@@ -738,7 +773,6 @@ const styles = StyleSheet.create({
   // Keep collection artwork fully visible even when the source image ratio
   // differs from the device frame.
   heroFrame: {
-    height: HERO_HEIGHT,
     backgroundColor: "#f8f6f0",
     overflow: "hidden",
   },
