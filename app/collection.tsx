@@ -368,7 +368,9 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
   const locationLabel = locationId ? mapT.pins[locationId] : detail?.spotName;
   const imageUrl = firstImageUrl(detail?.detailImageUrl, detail?.cardImageUrl);
-  const imageDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
+  const sourceDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
+  const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
+  const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
 
   const toggleDetailCard = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -432,7 +434,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
           <LinearGradient colors={["rgba(253,252,248,0)", "#fdfcf8"]} style={styles.heroFade} />
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card, !isDetailCardExpanded && styles.cardCollapsed]}>
           <Pressable style={styles.cardDragHandle} onPress={toggleDetailCard} hitSlop={8}>
             <View style={[styles.cardDragHandleIcon, !isDetailCardExpanded && styles.cardDragHandleIconCollapsed]}>
               <FontAwesome5
@@ -447,10 +449,13 @@ function CollectionDetail({ itemId }: { itemId: number }) {
           <Text style={styles.cardTitle}>{detail.name}</Text>
 
           {isDetailCardExpanded && (
-            <View style={styles.cardDescriptionRow}>
-              <View style={styles.cardDivider} />
-              <Text style={styles.cardDescription}>{detail.description}</Text>
-            </View>
+            <>
+              <View style={styles.cardDescriptionRow}>
+                <View style={styles.cardDivider} />
+                <Text style={styles.cardDescription}>{detail.description}</Text>
+              </View>
+              {cardSourceDisclosure && <Text style={styles.cardSourceText}>{cardSourceDisclosure}</Text>}
+            </>
           )}
         </View>
 
@@ -775,6 +780,9 @@ const styles = StyleSheet.create({
     shadowRadius: 25,
     elevation: 6,
   },
+  cardCollapsed: {
+    marginTop: 190,
+  },
   cardDragHandle: {
     alignSelf: "center",
     marginTop: -18,
@@ -811,6 +819,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22.75,
     color: "#4b5563",
+  },
+  cardSourceText: {
+    marginTop: 18,
+    textAlign: "right",
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#9ca3af",
   },
   actionButtons: {
     paddingHorizontal: 24,
