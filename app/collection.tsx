@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
   },
   cardSourceText: {
     marginTop: 18,
-    textAlign: "right",
+    textAlign: "left",
     fontSize: 10,
     fontWeight: "600",
     color: "#9ca3af",
