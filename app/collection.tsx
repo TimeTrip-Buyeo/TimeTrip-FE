@@ -337,9 +337,9 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
   );
 }
 
-const MIN_HERO_HEIGHT = 360;
+const MIN_HERO_HEIGHT = 320;
 const FALLBACK_HERO_HEIGHT = 420;
-const MAX_HERO_HEIGHT_RATIO = 0.58;
+const MAX_HERO_HEIGHT_RATIO = 0.52;
 
 function CollectionDetail({ itemId }: { itemId: number }) {
   const insets = useSafeAreaInsets();
@@ -465,7 +465,11 @@ function CollectionDetail({ itemId }: { itemId: number }) {
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={[styles.heroFrame, { height: heroHeight }]}>
           {hasImageUrl(imageUrl) ? (
-            <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="contain" />
+            <Image
+              source={{ uri: toApiUrl(imageUrl) }}
+              style={[styles.artifactHeroImage, !isDetailCardExpanded && styles.artifactHeroImageLowered]}
+              resizeMode="contain"
+            />
           ) : (
             <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
           )}
@@ -783,6 +787,10 @@ const styles = StyleSheet.create({
   artifactHeroImage: {
     width: "100%",
     height: "100%",
+  },
+  artifactHeroImageLowered: {
+    height: "92%",
+    marginTop: 28,
   },
   detailImageDisclosureText: {
     position: "absolute",
