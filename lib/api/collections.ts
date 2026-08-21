@@ -29,6 +29,15 @@ export type CollectionItemDetail = {
   detailImageUrl: string | null;
   description: string;
   sourceCredit: string | null;
+  sourceInstitution?: string | null;
+  sourceAgency?: string | null;
+  institutionName?: string | null;
+  museumName?: string | null;
+  sourceSite?: string | null;
+  sourceSiteName?: string | null;
+  siteName?: string | null;
+  sourceName?: string | null;
+  sourceUrl?: string | null;
   audioFiles: {
     language: string;
     filePath: string;

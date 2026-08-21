@@ -140,6 +140,7 @@ export default function ArCameraScreen() {
             <Text style={styles.guideCaptionText}>{t.alignInstructionText}</Text>
           </View>
         </View>
+        <Text style={styles.imageDisclosureText}>{t.aiImageDisclosure}</Text>
       </View>
 
       {isLegendVisible && (
@@ -352,6 +353,17 @@ const styles = StyleSheet.create({
   guideCaptionText: {
     fontSize: 11.3,
     color: "#fff",
+  },
+  imageDisclosureText: {
+    width: 317,
+    marginTop: 8,
+    textAlign: "right",
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.9)",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   sheet: {
     position: "absolute",

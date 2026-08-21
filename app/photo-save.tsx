@@ -202,6 +202,7 @@ export default function PhotoSaveScreen() {
               <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
             </View>
           )}
+          {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
         </View>
 
         {poseLabel && (
@@ -317,6 +318,18 @@ const styles = StyleSheet.create({
   photoPersonOverlayImage: {
     width: "100%",
     height: "100%",
+  },
+  photoDisclosureText: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    zIndex: 3,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.92)",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   captionPill: {
     position: "absolute",

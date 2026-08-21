@@ -202,6 +202,11 @@ export default function PersonCameraScreen() {
           <Image source={selectedPose.image} style={styles.personOverlayImage} resizeMode="cover" />
         </View>
       )}
+      {selectedPose && (
+        <Text style={[styles.imageDisclosureText, { bottom: personFloor + 8 }]} pointerEvents="none">
+          {t.aiImageDisclosure}
+        </Text>
+      )}
 
       <View style={styles.guideFrame} pointerEvents="none">
         <View style={[styles.guideCorner, styles.guideCornerTL]} />
@@ -374,6 +379,17 @@ const styles = StyleSheet.create({
   personOverlayImage: {
     width: "100%",
     height: "100%",
+  },
+  imageDisclosureText: {
+    position: "absolute",
+    right: 12,
+    zIndex: 3,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.92)",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   flipButton: {
     position: "absolute",

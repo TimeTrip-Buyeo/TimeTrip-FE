@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { Image, LayoutAnimation, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -43,6 +43,28 @@ function hasImageUrl(imageUrl: string | null | undefined): imageUrl is string {
 
 function firstImageUrl(...imageUrls: (string | null | undefined)[]) {
   return imageUrls.find(hasImageUrl);
+}
+
+function firstText(...values: (string | null | undefined)[]) {
+  return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
+}
+
+function getCollectionImageDisclosure(detail: CollectionItemDetail, t: (typeof collectionScreenText)[Locale]) {
+  if (detail.isCharacter) return t.aiImageDisclosure;
+
+  const institution = firstText(
+    detail.sourceInstitution,
+    detail.sourceAgency,
+    detail.institutionName,
+    detail.museumName,
+  );
+  const site = firstText(detail.sourceSite, detail.sourceSiteName, detail.siteName, detail.sourceName);
+  const sourceParts = [institution, site].filter(Boolean);
+
+  if (sourceParts.length > 0) return `${t.sourceDisclosurePrefix}${sourceParts.join(", ")}`;
+
+  const sourceCredit = firstText(detail.sourceCredit);
+  return sourceCredit ? `${t.sourceDisclosurePrefix}${sourceCredit}` : null;
 }
 
 function CollectionTopicList() {
@@ -316,6 +338,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const [detail, setDetail] = useState<CollectionItemDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [isDetailCardExpanded, setIsDetailCardExpanded] = useState(true);
 
   useEffect(() => {
     let isActive = true;
@@ -345,6 +368,12 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
   const locationLabel = locationId ? mapT.pins[locationId] : detail?.spotName;
   const imageUrl = firstImageUrl(detail?.detailImageUrl, detail?.cardImageUrl);
+  const imageDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
+
+  const toggleDetailCard = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsDetailCardExpanded((expanded) => !expanded);
+  };
 
   const handleShare = () => {
     if (!detail) return;
@@ -399,32 +428,30 @@ function CollectionDetail({ itemId }: { itemId: number }) {
           ) : (
             <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
           )}
+          {imageDisclosure && <Text style={styles.detailImageDisclosureText}>{imageDisclosure}</Text>}
           <LinearGradient colors={["rgba(253,252,248,0)", "#fdfcf8"]} style={styles.heroFade} />
         </View>
 
         <View style={styles.card}>
+          <Pressable style={styles.cardDragHandle} onPress={toggleDetailCard} hitSlop={8}>
+            <View style={[styles.cardDragHandleIcon, !isDetailCardExpanded && styles.cardDragHandleIconCollapsed]}>
+              <FontAwesome5
+                name="chevron-left"
+                size={14}
+                color="#1b1b1b"
+                solid
+                style={{ transform: [{ rotate: "-90deg" }] }}
+              />
+            </View>
+          </Pressable>
           <Text style={styles.cardTitle}>{detail.name}</Text>
 
-          <View style={styles.cardRow}>
-            <View style={[styles.cardRowBar, { backgroundColor: "#b8860b" }]} />
-            <Text style={styles.cardPrimaryValue}>{locationLabel}</Text>
-          </View>
-
-          <View style={styles.cardRow}>
-            <View style={[styles.cardRowBar, { backgroundColor: "#800000" }]} />
-            <View>
-              <Text style={styles.cardFieldLabel}>{detail.isCharacter ? t.personTypeLabel : t.artifactTypeLabel}</Text>
-              <Text style={styles.cardSecondaryValue}>{detail.sourceCredit ?? detail.type}</Text>
-            </View>
-          </View>
-
-          <View style={styles.cardRow}>
-            <View style={styles.cardDivider} />
-            <View style={styles.cardDescriptionColumn}>
-              <Text style={styles.cardFieldLabel}>{t.keyFeaturesLabel}</Text>
+          {isDetailCardExpanded && (
+            <View style={styles.cardDescriptionRow}>
+              <View style={styles.cardDivider} />
               <Text style={styles.cardDescription}>{detail.description}</Text>
             </View>
-          </View>
+          )}
         </View>
 
         <View style={[styles.actionButtons, { paddingBottom: insets.bottom + 16 }]}>
@@ -722,6 +749,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 140,
   },
+  detailImageDisclosureText: {
+    position: "absolute",
+    right: 24,
+    bottom: 48,
+    zIndex: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.92)",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   card: {
     marginTop: -40,
     marginHorizontal: 24,
@@ -736,23 +775,29 @@ const styles = StyleSheet.create({
     shadowRadius: 25,
     elevation: 6,
   },
+  cardDragHandle: {
+    alignSelf: "center",
+    marginTop: -18,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  cardDragHandleIcon: {
+    transform: [{ rotate: "0deg" }],
+  },
+  cardDragHandleIconCollapsed: {
+    transform: [{ rotate: "180deg" }],
+  },
   cardTitle: {
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 24,
     color: "#1b1b1b",
     marginBottom: 20,
   },
-  cardRow: {
+  cardDescriptionRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 16,
-    marginBottom: 20,
-  },
-  cardRowBar: {
-    width: 4,
-    height: 32,
-    borderRadius: 2,
-    marginTop: 4,
   },
   cardDivider: {
     width: 1.6,
@@ -760,28 +805,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#1b1b1b",
     marginTop: 4,
   },
-  cardPrimaryValue: {
-    fontFamily: GUNGSEO_FONT,
-    fontSize: 14,
-    color: "#000",
-    marginTop: 4,
-  },
-  cardFieldLabel: {
-    fontFamily: GUNGSEO_FONT_BOLD,
-    fontSize: 10,
-    color: "#9ca3af",
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  cardSecondaryValue: {
-    fontFamily: GUNGSEO_FONT,
-    fontSize: 14,
-    color: "#000",
-  },
-  cardDescriptionColumn: {
-    flex: 1,
-  },
   cardDescription: {
+    flex: 1,
     fontFamily: GUNGSEO_FONT,
     fontSize: 14,
     lineHeight: 22.75,

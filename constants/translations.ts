@@ -588,6 +588,7 @@ type ArCameraText = {
   findCollectibleButtonLabel: string;
   cameraPermissionMessage: string;
   grantCameraAccessLabel: string;
+  aiImageDisclosure: string;
 };
 
 export const arCameraText: Record<Locale, ArCameraText> = {
@@ -602,6 +603,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     findCollectibleButtonLabel: '인물 또는 유물을 찾아 떠나보세요!',
     cameraPermissionMessage: 'AR 카메라를 사용하려면 카메라 권한이 필요해요.',
     grantCameraAccessLabel: '카메라 권한 허용하기',
+    aiImageDisclosure: '*AI로 생성된 이미지입니다.',
   },
   en: {
     arActiveLabel: 'AR ACTIVE',
@@ -614,6 +616,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     findCollectibleButtonLabel: 'Go find a figure or an artifact!',
     cameraPermissionMessage: 'Camera access is needed to use the AR camera.',
     grantCameraAccessLabel: 'Grant Camera Access',
+    aiImageDisclosure: '*AI-generated image.',
   },
   zh: {
     arActiveLabel: 'AR 已启用',
@@ -626,6 +629,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     findCollectibleButtonLabel: '快去寻找人物或文物吧！',
     cameraPermissionMessage: '使用AR相机需要相机权限。',
     grantCameraAccessLabel: '允许使用相机',
+    aiImageDisclosure: '*AI生成图像。',
   },
   ja: {
     arActiveLabel: 'AR起動中',
@@ -638,6 +642,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     findCollectibleButtonLabel: '人物や遺物を探しに行きましょう！',
     cameraPermissionMessage: 'ARカメラを使用するにはカメラへのアクセス許可が必要です。',
     grantCameraAccessLabel: 'カメラへのアクセスを許可',
+    aiImageDisclosure: '*AI生成画像です。',
   },
 };
 
@@ -659,6 +664,8 @@ type CollectionScreenText = {
   detailUnavailableMessage: string;
   personTypeLabel: string;
   artifactTypeLabel: string;
+  aiImageDisclosure: string;
+  sourceDisclosurePrefix: string;
 };
 
 export const collectionScreenText: Record<Locale, CollectionScreenText> = {
@@ -680,6 +687,8 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: '획득한 아이템만 상세 정보를 볼 수 있어요.',
     personTypeLabel: '인물',
     artifactTypeLabel: '유물',
+    aiImageDisclosure: '*AI로 생성된 이미지입니다.',
+    sourceDisclosurePrefix: '*출처 -',
   },
   en: {
     listTitle: 'Buyeo Baekje Almanac',
@@ -699,6 +708,8 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: 'Only acquired items can be viewed in detail.',
     personTypeLabel: 'Figure',
     artifactTypeLabel: 'Artifact',
+    aiImageDisclosure: '*AI-generated image.',
+    sourceDisclosurePrefix: '*Source -',
   },
   zh: {
     listTitle: '扶余百济图鉴',
@@ -718,6 +729,8 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: '只有已获得的项目可以查看详情。',
     personTypeLabel: '人物',
     artifactTypeLabel: '文物',
+    aiImageDisclosure: '*AI生成图像。',
+    sourceDisclosurePrefix: '*来源 -',
   },
   ja: {
     listTitle: '扶余百済図鑑',
@@ -737,6 +750,8 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: '獲得済みアイテムのみ詳細を表示できます。',
     personTypeLabel: '人物',
     artifactTypeLabel: '遺物',
+    aiImageDisclosure: '*AI生成画像です。',
+    sourceDisclosurePrefix: '*出典 -',
   },
 };
 
@@ -1010,6 +1025,7 @@ type PersonCameraText = {
   photoSavedToastBody: string;
   shareUnavailableToastTitle: string;
   shareUnavailableToastBody: string;
+  aiImageDisclosure: string;
 };
 
 export const personCameraText: Record<Locale, PersonCameraText> = {
@@ -1028,6 +1044,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: '확인해 보세요!',
     shareUnavailableToastTitle: '공유할 수 없어요',
     shareUnavailableToastBody: '잠시 후 다시 시도해 주세요.',
+    aiImageDisclosure: '*AI로 생성된 이미지입니다.',
   },
   en: {
     posePickerLabel: 'Choose a Pose',
@@ -1044,6 +1061,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: 'Take a look!',
     shareUnavailableToastTitle: "Can't share right now",
     shareUnavailableToastBody: 'Please try again in a moment.',
+    aiImageDisclosure: '*AI-generated image.',
   },
   zh: {
     posePickerLabel: '选择姿势',
@@ -1060,6 +1078,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: '快去看看吧！',
     shareUnavailableToastTitle: '暂时无法分享',
     shareUnavailableToastBody: '请稍后再试一次。',
+    aiImageDisclosure: '*AI生成图像。',
   },
   ja: {
     posePickerLabel: 'ポーズ設定',
@@ -1076,5 +1095,6 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: '確認してみてください！',
     shareUnavailableToastTitle: '共有できませんでした',
     shareUnavailableToastBody: 'しばらくしてからもう一度お試しください。',
+    aiImageDisclosure: '*AI生成画像です。',
   },
 };
