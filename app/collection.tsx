@@ -340,6 +340,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
 const MIN_HERO_HEIGHT = 320;
 const FALLBACK_HERO_HEIGHT = 420;
 const MAX_HERO_HEIGHT_RATIO = 0.52;
+const COLLAPSED_HERO_HEIGHT_RATIO = 0.78;
 
 function CollectionDetail({ itemId }: { itemId: number }) {
   const insets = useSafeAreaInsets();
@@ -387,7 +388,10 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
   const rawHeroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
   const maxHeroHeight = windowHeight * MAX_HERO_HEIGHT_RATIO;
-  const heroHeight = Math.min(Math.max(rawHeroHeight, MIN_HERO_HEIGHT), maxHeroHeight);
+  const imageFrameHeight = Math.min(Math.max(rawHeroHeight, MIN_HERO_HEIGHT), maxHeroHeight);
+  const collapsedHeroHeight = windowHeight * COLLAPSED_HERO_HEIGHT_RATIO;
+  const heroHeight = isDetailCardExpanded ? imageFrameHeight : collapsedHeroHeight;
+  const imageCenterOffset = isDetailCardExpanded ? 0 : Math.max(0, (collapsedHeroHeight - imageFrameHeight) / 2);
 
   useEffect(() => {
     if (!hasImageUrl(imageUrl)) {
@@ -464,15 +468,13 @@ function CollectionDetail({ itemId }: { itemId: number }) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={[styles.heroFrame, { height: heroHeight }]}>
-          {hasImageUrl(imageUrl) ? (
-            <Image
-              source={{ uri: toApiUrl(imageUrl) }}
-              style={[styles.artifactHeroImage, !isDetailCardExpanded && styles.artifactHeroImageLowered]}
-              resizeMode="contain"
-            />
-          ) : (
-            <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
-          )}
+          <View style={[styles.heroImageFrame, { height: imageFrameHeight, transform: [{ translateY: imageCenterOffset }] }]}>
+            {hasImageUrl(imageUrl) ? (
+              <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.artifactHeroImage} resizeMode="contain" />
+            ) : (
+              <LinearGradient colors={["#1b1b1b", "#7a7a7a", "#a3a1a0"]} style={StyleSheet.absoluteFill} />
+            )}
+          </View>
           {imageDisclosure && <Text style={styles.detailImageDisclosureText}>{imageDisclosure}</Text>}
         </View>
 
@@ -784,12 +786,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f6f0",
     overflow: "hidden",
   },
+  heroImageFrame: {
+    width: "100%",
+  },
   artifactHeroImage: {
     width: "100%",
     height: "100%",
-  },
-  artifactHeroImageLowered: {
-    transform: [{ translateY: 28 }],
   },
   detailImageDisclosureText: {
     position: "absolute",
