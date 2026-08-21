@@ -21,8 +21,6 @@ import {
   type StoryTopic,
 } from "@/lib/api/collections";
 
-type AcquiredCollectionItem = CollectionItem & { cardImageUrl: string };
-
 export default function CollectionScreen() {
   const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
   const storyId = resolveNumberParam(params.storyId);
@@ -47,10 +45,6 @@ function resolveNumberParam(raw: string | string[] | undefined) {
 
 function hasAcquiredCollection(topic: StoryTopic) {
   return topic.acquiredCollectionCount > 0;
-}
-
-function isAcquiredItem(item: CollectionItem): item is AcquiredCollectionItem {
-  return item.isAcquired && item.cardImageUrl !== null;
 }
 
 function CollectionTopicList() {
@@ -161,7 +155,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
   const { locale } = useLanguage();
   const mapT = mapScreenText[locale];
   const t = collectionScreenText[locale];
-  const [items, setItems] = useState<AcquiredCollectionItem[]>([]);
+  const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -169,7 +163,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
     setIsLoading(true);
     getCollectionItems(storyId, { locale })
       .then(({ items: nextItems }) => {
-        if (isActive) setItems(nextItems.filter(isAcquiredItem));
+        if (isActive) setItems(nextItems);
       })
       .catch((error) => {
         console.error("[collection] items failed", error);
@@ -203,6 +197,44 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
             items.map((item) => {
               const locationId = SPOT_ID_TO_LOCATION_ID[item.spotId];
               const locationLabel = locationId ? mapT.pins[locationId] : "";
+              const imageUrl = item.isAcquired ? item.cardImageUrl : item.beforeImageUrl;
+              const cardContent = (
+                <>
+                  <View style={styles.gridCardImageWrapper}>
+                    {imageUrl ? (
+                      <Image source={{ uri: toApiUrl(imageUrl) }} style={styles.gridCardImage} resizeMode="contain" />
+                    ) : (
+                      <View style={styles.gridCardImageLocked}>
+                        <Text style={styles.gridCardQuestionMark}>?</Text>
+                      </View>
+                    )}
+                    {item.isAcquired ? (
+                      <View style={styles.gridCardBadge}>
+                        <FontAwesome5 name="check" size={9} color="#fff" solid />
+                      </View>
+                    ) : (
+                      <View style={styles.gridCardLockBadge}>
+                        <FontAwesome5 name="lock" size={9} color="#fff" solid />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={item.isAcquired ? styles.gridCardName : styles.gridCardNameLocked}>
+                    {item.isAcquired ? item.name : "?"}
+                  </Text>
+                  <Text style={item.isAcquired ? styles.gridCardLocation : styles.gridCardLocationLocked}>
+                    {item.isAcquired ? locationLabel : t.lockedItemMessage}
+                  </Text>
+                </>
+              );
+
+              if (!item.isAcquired) {
+                return (
+                  <View key={item.collectionItemId} style={styles.gridCard}>
+                    {cardContent}
+                  </View>
+                );
+              }
+
               return (
                 <Pressable
                   key={item.collectionItemId}
@@ -213,14 +245,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
                       params: { itemId: String(item.collectionItemId) },
                     })
                   }>
-                  <View style={styles.gridCardImageWrapper}>
-                    <Image source={{ uri: toApiUrl(item.cardImageUrl) }} style={styles.gridCardImage} resizeMode="contain" />
-                    <View style={styles.gridCardBadge}>
-                      <FontAwesome5 name="check" size={9} color="#fff" solid />
-                    </View>
-                  </View>
-                  <Text style={styles.gridCardName}>{item.name}</Text>
-                  <Text style={styles.gridCardLocation}>{locationLabel}</Text>
+                  {cardContent}
                 </Pressable>
               );
             })
@@ -564,6 +589,13 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 8,
     backgroundColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridCardQuestionMark: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#9ca3af",
   },
   gridCardBadge: {
     position: "absolute",
@@ -573,6 +605,17 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: "#b8860b",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridCardLockBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#9ca3af",
     alignItems: "center",
     justifyContent: "center",
   },
