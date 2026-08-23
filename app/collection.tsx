@@ -1,13 +1,14 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Image,
   LayoutAnimation,
+  Modal,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -19,7 +20,7 @@ import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LangPill } from "@/components/lang-pill";
 import { GUNGSEO_FONT, GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
-import { collectionScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
+import { collectionScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 import { ApiError, toApiUrl } from "@/lib/api/client";
 import {
@@ -30,7 +31,7 @@ import {
   type CollectionItemDetail,
   type StoryTopic,
 } from "@/lib/api/collections";
-import { resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
+import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 export default function CollectionScreen() {
   const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
@@ -83,17 +84,118 @@ function CollectionDetailInfoRow({
   value,
 }: {
   accentColor: string;
-  label: string;
+  label?: string;
   value: string;
 }) {
   return (
     <View style={styles.cardInfoRow}>
       <View style={[styles.cardInfoBar, { backgroundColor: accentColor }]} />
       <View style={styles.cardInfoTextColumn}>
-        <Text style={styles.cardInfoLabel}>{label}</Text>
+        {label ? <Text style={styles.cardInfoLabel}>{label}</Text> : null}
         <Text style={styles.cardInfoValue}>{value}</Text>
       </View>
     </View>
+  );
+}
+
+function normalizeAudioLanguage(language: string) {
+  return language.toLowerCase() === "jp" ? "ja" : language.toLowerCase();
+}
+
+function selectAudioFile(detail: CollectionItemDetail | null, locale: Locale) {
+  if (!detail) return null;
+
+  const normalizedLocale = normalizeAudioLanguage(locale);
+  return (
+    detail.audioFiles.find((audioFile) => normalizeAudioLanguage(audioFile.language) === normalizedLocale) ??
+    detail.audioFiles[0] ??
+    null
+  );
+}
+
+function formatAudioTime(seconds: number) {
+  const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function AudioGuideModal({
+  audioFile,
+  title,
+  isVisible,
+  onClose,
+  t,
+}: {
+  audioFile: CollectionItemDetail["audioFiles"][number] | null;
+  title: string;
+  isVisible: boolean;
+  onClose: () => void;
+  t: (typeof collectionScreenText)[Locale];
+}) {
+  const player = useAudioPlayer(audioFile ? toApiUrl(audioFile.filePath) : null, { updateInterval: 250 });
+  const status = useAudioPlayerStatus(player);
+  const duration = status.duration || audioFile?.durationSec || 0;
+  const currentTime = Math.min(status.currentTime || 0, duration || status.currentTime || 0);
+  const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
+
+  useEffect(() => {
+    if (!isVisible) {
+      player.pause();
+      player.seekTo(0).catch(() => undefined);
+    }
+  }, [isVisible, player]);
+
+  const handleTogglePlay = () => {
+    if (!audioFile) return;
+    if (status.playing) {
+      player.pause();
+      return;
+    }
+    if (duration > 0 && currentTime >= duration) {
+      player.seekTo(0).catch(() => undefined);
+    }
+    player.play();
+  };
+
+  const handleClose = () => {
+    player.pause();
+    player.seekTo(0).catch(() => undefined);
+    onClose();
+  };
+
+  return (
+    <Modal visible={isVisible} transparent animationType="fade" onRequestClose={handleClose}>
+      <View style={styles.audioModalBackdrop}>
+        <View style={styles.audioModalSheet}>
+          <Pressable style={styles.audioModalCloseButton} onPress={handleClose} hitSlop={8}>
+            <FontAwesome5 name="times" size={16} color="#1b1b1b" solid />
+          </Pressable>
+          <Text style={styles.audioModalEyebrow}>{t.audioGuideModalTitle}</Text>
+          <Text style={styles.audioModalTitle}>{title}</Text>
+
+          {audioFile ? (
+            <>
+              <View style={styles.audioProgressTrack}>
+                <View style={[styles.audioProgressFill, { width: `${progress * 100}%` }]} />
+              </View>
+              <View style={styles.audioTimeRow}>
+                <Text style={styles.audioTimeText}>{formatAudioTime(currentTime)}</Text>
+                <Text style={styles.audioTimeText}>{formatAudioTime(duration)}</Text>
+              </View>
+              <Pressable style={styles.audioPlayButton} onPress={handleTogglePlay}>
+                <FontAwesome5 name={status.playing ? "pause" : "play"} size={16} color="#fff" solid />
+                <Text style={styles.audioPlayButtonText}>
+                  {status.playing ? t.audioGuidePauseLabel : t.audioGuidePlayLabel}
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.audioUnavailableText}>{t.audioGuideUnavailableMessage}</Text>
+          )}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -374,6 +476,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const [loadError, setLoadError] = useState(false);
   const [isDetailCardExpanded, setIsDetailCardExpanded] = useState(true);
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
+  const [isAudioGuideVisible, setIsAudioGuideVisible] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -401,15 +504,18 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   }, [itemId, locale]);
 
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
+  const cameraLocationId = detail ? resolveLocationId(undefined, String(detail.spotId)) : undefined;
   const locationLabel = locationId ? mapT.pins[locationId] : detail?.spotName;
   const imageUrl = firstImageUrl(detail?.detailImageUrl, detail?.cardImageUrl);
   const sourceDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
   const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
   const summary = firstText(detail?.shortDescription, detail?.summary, detail?.description);
+  const audioFile = selectAudioFile(detail, locale);
   const locationText = firstText(detail?.location, locationLabel);
   const periodText = firstText(detail?.period);
   const mainFeatureText = firstText(detail?.mainFeature, detail?.description);
+  const characterShortDescription = detail?.isCharacter ? firstText(detail.shortDescription, detail.summary) : null;
   const rawHeroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
   const maxHeroHeight = windowHeight * MAX_HERO_HEIGHT_RATIO;
   const imageFrameHeight = Math.min(Math.max(rawHeroHeight, MIN_HERO_HEIGHT), maxHeroHeight);
@@ -444,28 +550,11 @@ function CollectionDetail({ itemId }: { itemId: number }) {
     setIsDetailCardExpanded((expanded) => !expanded);
   };
 
-  const handleShare = () => {
-    if (!detail) return;
-    Share.share({
-      message: `${detail.name} · ${locationLabel ?? ""} ${shareSuffix[locale]}`,
-    });
-  };
-
   const topBar = (
     <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
       <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backButton}>
         <FontAwesome5 name="chevron-left" size={18} color={detail ? "#fff" : "#1b1b1b"} solid />
       </Pressable>
-      {detail && (
-        <View style={styles.topBarActions}>
-          <Pressable style={styles.topBarActionButton} hitSlop={4} onPress={handleShare}>
-            <FontAwesome5 name="share-alt" size={14} color="#fff" solid />
-          </Pressable>
-          <Pressable style={styles.topBarActionButton} hitSlop={4}>
-            <FontAwesome5 name="download" size={14} color="#fff" solid />
-          </Pressable>
-        </View>
-      )}
     </View>
   );
 
@@ -518,7 +607,13 @@ function CollectionDetail({ itemId }: { itemId: number }) {
 
           {isDetailCardExpanded ? (
             <>
-              {locationText && <CollectionDetailInfoRow accentColor="#b8860b" label={t.locationLabel} value={locationText} />}
+              {detail.isCharacter
+                ? characterShortDescription && (
+                    <CollectionDetailInfoRow accentColor="#b8860b" value={characterShortDescription} />
+                  )
+                : locationText && (
+                    <CollectionDetailInfoRow accentColor="#b8860b" label={t.locationLabel} value={locationText} />
+                  )}
               {periodText && (
                 <CollectionDetailInfoRow
                   accentColor="#800000"
@@ -539,30 +634,18 @@ function CollectionDetail({ itemId }: { itemId: number }) {
         </View>
 
         <View style={[styles.actionButtons, { paddingBottom: insets.bottom + 16 }]}>
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() =>
-              router.push({
-                pathname: "/ar-camera",
-                params: {
-                  ...(locationId ? { locationId } : {}),
-                  spotId: String(detail.spotId),
-                  storyId: String(detail.storyId),
-                  spotName: detail.spotName,
-                },
-              })
-            }>
+          <Pressable style={styles.primaryButton} onPress={() => setIsAudioGuideVisible(true)}>
             <FontAwesome5 name="headphones" size={16} color="#fff" solid />
             <Text style={styles.primaryButtonText}>{t.listenToAudioGuide}</Text>
           </Pressable>
-          {detail.isCharacter && locationId && (
+          {detail.isCharacter && cameraLocationId && (
             <Pressable
               style={styles.primaryButton}
               onPress={() =>
                 router.push({
                   pathname: "/person-camera",
                   params: {
-                    locationId,
+                    locationId: cameraLocationId,
                     spotId: String(detail.spotId),
                     storyId: String(detail.storyId),
                     collectionItemId: String(detail.collectionItemId),
@@ -577,6 +660,13 @@ function CollectionDetail({ itemId }: { itemId: number }) {
       </ScrollView>
 
       {topBar}
+      <AudioGuideModal
+        audioFile={audioFile}
+        title={detail.name}
+        isVisible={isAudioGuideVisible}
+        onClose={() => setIsAudioGuideVisible(false)}
+        t={t}
+      />
     </View>
   );
 }
@@ -800,18 +890,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 3,
   },
-  topBarActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  topBarActionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   detailScrollContent: {
     flexGrow: 1,
   },
@@ -961,6 +1039,94 @@ const styles = StyleSheet.create({
   },
   comingSoonMessage: {
     fontFamily: GUNGSEO_FONT,
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#6b7280",
+    textAlign: "center",
+  },
+  audioModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  audioModalSheet: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    paddingHorizontal: 28,
+    paddingTop: 56,
+    paddingBottom: 28,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  audioModalCloseButton: {
+    position: "absolute",
+    top: 18,
+    left: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioModalEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#b8860b",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  audioModalTitle: {
+    fontFamily: GUNGSEO_FONT_BOLD,
+    fontSize: 20,
+    lineHeight: 28,
+    color: "#1b1b1b",
+    textAlign: "center",
+    marginBottom: 28,
+  },
+  audioProgressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#f1f2f4",
+    overflow: "hidden",
+  },
+  audioProgressFill: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: "#800000",
+  },
+  audioTimeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  audioTimeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#9ca3af",
+  },
+  audioPlayButton: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#800000",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  audioPlayButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  audioUnavailableText: {
     fontSize: 13,
     lineHeight: 20,
     color: "#6b7280",

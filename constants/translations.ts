@@ -655,6 +655,10 @@ type CollectionScreenText = {
   keyFeaturesLabel: string;
   listenToAudioGuide: string;
   takePhotoWithFigure: string;
+  audioGuideModalTitle: string;
+  audioGuideUnavailableMessage: string;
+  audioGuidePlayLabel: string;
+  audioGuidePauseLabel: string;
   comingSoonTitle: string;
   comingSoonMessage: string;
   loadingMessage: string;
@@ -679,6 +683,10 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: '주요 특징',
     listenToAudioGuide: '오디오 가이드 듣기',
     takePhotoWithFigure: '인물과 사진 찍기',
+    audioGuideModalTitle: '기본 가이드',
+    audioGuideUnavailableMessage: '재생할 오디오 가이드가 없어요.',
+    audioGuidePlayLabel: '재생',
+    audioGuidePauseLabel: '멈춤',
     comingSoonTitle: '준비 중이에요',
     comingSoonMessage: '이 장소의 컬렉션은 곧 공개될 예정이에요.',
     loadingMessage: '불러오는 중이에요.',
@@ -701,6 +709,10 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: 'Key Features',
     listenToAudioGuide: 'Listen to Audio Guide',
     takePhotoWithFigure: 'Take a Photo Together',
+    audioGuideModalTitle: 'Basic Guide',
+    audioGuideUnavailableMessage: 'No audio guide is available.',
+    audioGuidePlayLabel: 'Play',
+    audioGuidePauseLabel: 'Pause',
     comingSoonTitle: 'Coming Soon',
     comingSoonMessage: "This location's collectible hasn't been revealed yet.",
     loadingMessage: 'Loading...',
@@ -723,6 +735,10 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: '主要特点',
     listenToAudioGuide: '收听语音导览',
     takePhotoWithFigure: '与人物合影',
+    audioGuideModalTitle: '基础导览',
+    audioGuideUnavailableMessage: '暂无可播放的语音导览。',
+    audioGuidePlayLabel: '播放',
+    audioGuidePauseLabel: '暂停',
     comingSoonTitle: '即将开放',
     comingSoonMessage: '该地点的收藏内容尚未公开。',
     loadingMessage: '加载中。',
@@ -745,6 +761,10 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: '主な特徴',
     listenToAudioGuide: '音声ガイドを聞く',
     takePhotoWithFigure: '人物と写真を撮る',
+    audioGuideModalTitle: '基本ガイド',
+    audioGuideUnavailableMessage: '再生できる音声ガイドがありません。',
+    audioGuidePlayLabel: '再生',
+    audioGuidePauseLabel: '停止',
     comingSoonTitle: '準備中です',
     comingSoonMessage: 'この場所のコレクションはまもなく公開されます。',
     loadingMessage: '読み込み中です。',

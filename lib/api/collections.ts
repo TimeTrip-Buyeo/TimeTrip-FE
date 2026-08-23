@@ -47,6 +47,7 @@ export type CollectionItemDetail = {
     language: string;
     filePath: string;
     durationSec: number;
+    script?: string | null;
   }[];
   isAcquired: boolean;
   acquiredAt: string | null;
