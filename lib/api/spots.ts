@@ -20,7 +20,7 @@ export type SpotDetail = Spot & {
   /** Canonical special/basic-guide flag for the current month — prefer this
       over deriving it from getSpotStory's storyType (that endpoint's story
       data can drift from this field). */
-  currentStoryType: "SPECIAL" | "NORMAL";
+  currentStoryType?: SpotStoryType | Uppercase<SpotStoryType> | null;
 };
 
 export type SpotStoryType = "special" | "normal";
@@ -61,6 +61,10 @@ export async function getSpotStory(spotId: number, locale: Locale, month?: numbe
     }
     throw error;
   }
+}
+
+export function isCurrentSpecialSpot(spot: SpotDetail | null | undefined) {
+  return spot?.currentStoryType?.toLowerCase() === "special";
 }
 
 export type SpotTimeslip = {
@@ -122,23 +126,6 @@ export async function getStoryAudioGuide(
     throw error;
   }
 }
-
-export async function getSpotSpecialMonths(spotId: number): Promise<number[]> {
-  return SPOT_SPECIAL_MONTHS[spotId] ?? [];
-}
-
-const SPOT_SPECIAL_MONTHS: Partial<Record<number, number[]>> = {
-  1: [1, 2, 3, 4, 7, 8, 9],
-  2: [8, 9, 10, 11, 12],
-  3: [1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12],
-  4: [5, 6, 10, 11, 12],
-  5: [3, 4, 7],
-  6: [1, 2, 3, 4, 5, 6],
-  7: [1, 2, 7],
-  8: [1, 2, 10, 11, 12],
-  12: [5, 6, 7, 8, 9],
-  13: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-};
 
 export function getLocalizedSpotName(spot: Spot | SpotDetail, locale: Locale) {
   if (locale === "en") return spot.nameEn || spot.nameKo;

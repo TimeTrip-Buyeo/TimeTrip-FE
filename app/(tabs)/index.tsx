@@ -16,9 +16,9 @@ import { toApiUrl } from "@/lib/api/client";
 import {
   getLocalizedSpotName,
   getSpotDetail,
-  getSpotSpecialMonths,
   getSpots,
   getSpotStory,
+  isCurrentSpecialSpot,
   type Spot,
   type SpotDetail,
   type SpotStory,
@@ -79,7 +79,6 @@ export default function MapScreen() {
   const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
   const [selectedSpotDetail, setSelectedSpotDetail] = useState<SpotDetail | null>(null);
   const [selectedSpotStory, setSelectedSpotStory] = useState<SpotStory | null>(null);
-  const [selectedSpotSpecialMonths, setSelectedSpotSpecialMonths] = useState<number[]>([]);
   const [isLoadingSpots, setIsLoadingSpots] = useState(true);
   const [hasMapError, setHasMapError] = useState(false);
 
@@ -88,19 +87,13 @@ export default function MapScreen() {
   const isTourSpot = selectedSpot?.spotType === "TOUR";
   // Canonical flag straight from the spot detail — not derived from
   // getSpotStory's storyType, which can drift from this field.
-  const isSelectedSpecial = !isTourSpot && selectedSpotDetail?.currentStoryType === "SPECIAL";
-  const nextSpecialMonth = getNextSpecialMonth(
-    selectedSpotSpecialMonths,
-    selectedSpotStory?.month ?? new Date().getMonth() + 1,
-  );
+  const isSelectedSpecial = !isTourSpot && isCurrentSpecialSpot(selectedSpotDetail);
   const selectedSpotMessage = selectedSpot
     ? isTourSpot
       ? t.tourBasicGuideMessage
       : isSelectedSpecial
       ? t.specialGuideMessage
-      : nextSpecialMonth
-        ? t.revisitWarning(nextSpecialMonth)
-        : t.visitInPersonMessage
+      : t.specialGuideFutureMessage
     : "";
 
   useEffect(() => {
@@ -130,13 +123,12 @@ export default function MapScreen() {
     if (selectedSpotId === null) {
       setSelectedSpotDetail(null);
       setSelectedSpotStory(null);
-      setSelectedSpotSpecialMonths([]);
       return;
     }
 
     let isActive = true;
+    setSelectedSpotDetail(null);
     setSelectedSpotStory(null);
-    setSelectedSpotSpecialMonths([]);
 
     const spotSummary = spots.find((spot) => spot.id === selectedSpotId);
     const isTourSummary = spotSummary?.spotType === "TOUR";
@@ -144,9 +136,8 @@ export default function MapScreen() {
     Promise.allSettled([
       getSpotDetail(selectedSpotId),
       isTourSummary ? Promise.resolve(null) : getSpotStory(selectedSpotId, locale),
-      isTourSummary ? Promise.resolve([]) : getSpotSpecialMonths(selectedSpotId),
     ])
-      .then(([detailResult, storyResult, monthsResult]) => {
+      .then(([detailResult, storyResult]) => {
         if (!isActive) return;
 
         if (detailResult.status === "fulfilled") {
@@ -161,13 +152,6 @@ export default function MapScreen() {
         } else {
           const message = storyResult.reason instanceof Error ? storyResult.reason.message : t.mapLoadError;
           console.error(`[map] spot story failed ${message}`);
-        }
-
-        if (monthsResult.status === "fulfilled") {
-          setSelectedSpotSpecialMonths(monthsResult.value);
-        } else {
-          const message = monthsResult.reason instanceof Error ? monthsResult.reason.message : t.mapLoadError;
-          console.error(`[map] spot special months failed ${message}`);
         }
       })
 
@@ -294,11 +278,6 @@ export default function MapScreen() {
       />
     </SafeAreaView>
   );
-}
-
-function getNextSpecialMonth(months: number[], currentMonth: number) {
-  const sortedMonths = [...new Set(months)].sort((a, b) => a - b);
-  return sortedMonths.find((month) => month > currentMonth) ?? sortedMonths[0] ?? null;
 }
 
 const styles = StyleSheet.create({

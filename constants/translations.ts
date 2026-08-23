@@ -461,28 +461,12 @@ type MapScreenText = {
   heritageTag: string;
   audioBasicGuideOnly: string;
   audioSpecialGuideAvailable: string;
-  /** "3월에 다시 방문하시면..." — month is 1-12. */
-  revisitWarning: (month: number) => string;
   specialGuideMessage: string;
+  specialGuideFutureMessage: string;
   tourBasicGuideMessage: string;
   /** Shown for locations that never rotate into the special guide (e.g. the museum). */
   visitInPersonMessage: string;
 };
-
-const EN_MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 export const mapScreenText: Record<Locale, MapScreenText> = {
   ko: {
@@ -502,8 +486,8 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     heritageTag: '백제 유적',
     audioBasicGuideOnly: '음성 기본가이드 전용',
     audioSpecialGuideAvailable: '스페셜 가이드 이용 가능',
-    revisitWarning: (month) => `⚠️ ${month}월에 다시 방문하시면 스페셜 가이드(AR,셀카, 컬렉션)를 들을 수 있어요!`,
     specialGuideMessage: 'AR, 셀카, 컬렉션으로 즐기는 스페셜 가이드를 지금 만나보세요!',
+    specialGuideFutureMessage: '스페셜 달에 방문하면 AR, 셀카, 컬렉션을 즐길 수 있어요!',
     tourBasicGuideMessage: '관광·전시 중심 장소입니다. 현장에서 기본 음성 가이드로 천천히 둘러보세요!',
     visitInPersonMessage: '해당 유적지에 직접 방문해 더 많은 가이드를 경험해보세요!',
   },
@@ -524,9 +508,8 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     heritageTag: 'Baekje Heritage',
     audioBasicGuideOnly: 'Audio Basic Guide Only',
     audioSpecialGuideAvailable: 'Special Guide Available',
-    revisitWarning: (month) =>
-      `⚠️ Come back in ${EN_MONTH_NAMES[month - 1]} to experience the special guide (AR, photo booth, collectibles)!`,
     specialGuideMessage: 'Enjoy the special guide now — AR, photo booth, and collectibles!',
+    specialGuideFutureMessage: 'Visit during a special month to enjoy AR, photo booth, and collectibles!',
     tourBasicGuideMessage: 'This is a tour-focused spot. Explore it with the basic audio guide on site.',
     visitInPersonMessage: 'Visit this heritage site in person to experience more guides!',
   },
@@ -547,8 +530,8 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     heritageTag: '百济遗迹',
     audioBasicGuideOnly: '仅限语音基础导览',
     audioSpecialGuideAvailable: '可使用特别导览',
-    revisitWarning: (month) => `⚠️ ${month}月再次来访即可体验特别导览(AR、拍照、收藏品)!`,
     specialGuideMessage: '现在就体验AR、拍照和收藏品特别导览吧!',
+    specialGuideFutureMessage: '在特别月份到访即可体验AR、拍照和收藏品!',
     tourBasicGuideMessage: '这里是观光与展示为主的地点。到现场使用基础语音导览慢慢参观吧!',
     visitInPersonMessage: '请直接前往该遗迹，体验更多导览内容!',
   },
@@ -569,8 +552,8 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
     heritageTag: '百済遺跡',
     audioBasicGuideOnly: '音声基本ガイド専用',
     audioSpecialGuideAvailable: 'スペシャルガイド利用可能',
-    revisitWarning: (month) => `⚠️ ${month}月に再訪すると、スペシャルガイド(AR、写真、コレクション)を楽しめます!`,
     specialGuideMessage: 'AR・フォト・コレクションで楽しむスペシャルガイドを今すぐ体験!',
+    specialGuideFutureMessage: 'スペシャル月に訪れると、AR・フォト・コレクションを楽しめます!',
     tourBasicGuideMessage: '観光・展示が中心のスポットです。現地で基本音声ガイドを聞きながら巡ってみてください!',
     visitInPersonMessage: 'この遺跡に直接訪れて、より多くのガイドを体験してみてください!',
   },
