@@ -114,14 +114,13 @@ export type StoryAudioGuide = {
 
 export async function getStoryAudioGuide(
   storyId: number,
-  options: { language?: string } = {},
+  options: { spotId: number; language?: string },
 ): Promise<StoryAudioGuide | null> {
   try {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ spotId: String(options.spotId) });
     if (options.language) params.set("language", options.language);
-    const query = params.toString();
 
-    return await publicGet<StoryAudioGuide>(`/api/stories/${storyId}/audio-guide${query ? `?${query}` : ""}`);
+    return await publicGet<StoryAudioGuide>(`/api/stories/${storyId}/audio-guide?${params.toString()}`);
   } catch (error) {
     if (error instanceof ApiError && (error.code === "AUDIO4041" || error.code === "STORY_404")) return null;
     throw error;
