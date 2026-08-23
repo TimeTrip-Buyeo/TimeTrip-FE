@@ -1,5 +1,5 @@
 import type { Locale } from "@/constants/translations";
-import { apiGet } from "@/lib/api/client";
+import { ApiError, apiGet, apiPost } from "@/lib/api/client";
 
 export type CollectionItemType = "CHARACTER" | "ARTIFACT";
 
@@ -96,6 +96,29 @@ export function getCollectionItems(
   if (options.type) params.set("type", options.type);
 
   return apiGet<CollectionItemListResponse>(`/api/collections/${storyId}?${params.toString()}`);
+}
+
+export type AcquireCollectionItemResult = {
+  userCollectionId: number;
+  collectionItemId: number;
+  name: string;
+  type: CollectionItemType;
+  isCharacter: boolean;
+  cardImageUrl: string | null;
+  acquiredAt: string;
+  popupTitle: string;
+  popupMessage: string;
+};
+
+// 409 COLLECTION4091 means "already acquired" — per spec this is silently
+// ignored (no error toast), so callers get null instead of a thrown error.
+export async function acquireCollectionItem(collectionItemId: number): Promise<AcquireCollectionItemResult | null> {
+  try {
+    return await apiPost<AcquireCollectionItemResult>(`/api/collections/items/${collectionItemId}/acquire`);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "COLLECTION4091") return null;
+    throw error;
+  }
 }
 
 export function getCollectionItemDetail(
