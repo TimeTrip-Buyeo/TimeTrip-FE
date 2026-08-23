@@ -16,7 +16,7 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { toApiUrl } from "@/lib/api/client";
-import { createCollage, downloadCollageFile, getFrames } from "@/lib/api/collage";
+import { getFrames } from "@/lib/api/collage";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getSharingModule } from "@/lib/sharing";
 
@@ -77,8 +77,12 @@ type PickerItem = {
   locationId: LocationId;
   source: ImageSourcePropType;
   /** Set only if the server upload in photo-save.tsx succeeded — undefined for
-      local-only captures (upload failed, or never attempted). Required to
-      create a collage; see canSaveCollage below. */
+      local-only captures (upload failed, or never attempted). Not read right
+      now (handleSave/handleShare capture the on-screen collage directly
+      instead of calling createCollage), but kept for when the server-quality
+      save path (createCollage + downloadCollageFile, still in
+      lib/api/collage.ts) can be re-enabled once collection-item acquisition
+      is wired up server-side. */
   serverSelfiePhotoId?: number;
 };
 
@@ -119,6 +123,9 @@ export default function BuyeoCutScreen() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Same split as the share toasts below: "gallery-save module isn't linked
+  // in this build yet" vs. "capture/save actually failed just now".
+  const [showSaveUnsupportedToast, setShowSaveUnsupportedToast] = useState(false);
   const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   // Distinguishes "the sharing native module isn't linked in this build yet"
@@ -184,11 +191,6 @@ export default function BuyeoCutScreen() {
   );
 
   const isFull = selected.length >= SLOT_COUNT;
-  // createCollage needs real server IDs — placeholders are already excluded
-  // from the picker, but a capture whose upload failed (see photo-save.tsx's
-  // best-effort saveSelfiePhoto) still has no serverSelfiePhotoId.
-  const canSaveCollage =
-    selected.length === SLOT_COUNT && selected.every((item) => item.serverSelfiePhotoId !== undefined);
 
   const toggleSelect = (item: PickerItem) => {
     setSelected((current) => {
@@ -217,6 +219,12 @@ export default function BuyeoCutScreen() {
     const timer = setTimeout(() => setShowSaveToast(false), 2200);
     return () => clearTimeout(timer);
   }, [showSaveToast]);
+
+  useEffect(() => {
+    if (!showSaveUnsupportedToast) return;
+    const timer = setTimeout(() => setShowSaveUnsupportedToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [showSaveUnsupportedToast]);
 
   useEffect(() => {
     if (!showSaveErrorToast) return;
@@ -249,18 +257,20 @@ export default function BuyeoCutScreen() {
     router.back();
   };
 
+  // Captures the on-screen collage directly (same react-native-view-shot
+  // approach as handleShare) instead of createCollage + downloadCollageFile's
+  // server round-trip — /selfie-photos requires a server-side "acquired"
+  // collection item that isn't wired up yet, so selected photos never have a
+  // real serverSelfiePhotoId to send. createCollage/downloadCollageFile are
+  // left in lib/api/collage.ts — swap back to them here for the higher-
+  // quality server-rendered original once acquisition is connected.
   const handleSave = async () => {
-    if (!canSaveCollage || isSaving) return;
+    if (isSaving) return;
     setIsSaving(true);
     try {
-      const collage = await createCollage(
-        selected.map((item) => item.serverSelfiePhotoId!),
-        selectedFrame?.frameId,
-      );
-
       const mediaLibrary = await getMediaLibraryModule();
       if (!mediaLibrary) {
-        setShowSaveErrorToast(true);
+        setShowSaveUnsupportedToast(true);
         return;
       }
       const permission = await mediaLibrary.requestPermissionsAsync(true);
@@ -268,10 +278,16 @@ export default function BuyeoCutScreen() {
         setShowSaveErrorToast(true);
         return;
       }
+      if (!collagePreviewRef.current) {
+        setShowSaveErrorToast(true);
+        return;
+      }
 
-      // The /download endpoint (not /file) — full-quality server original,
-      // per Content-Disposition: attachment.
-      const localUri = await downloadCollageFile(collage.collageId);
+      const localUri = await captureRef(collagePreviewRef.current, {
+        format: "jpg",
+        quality: 0.9,
+        result: "tmpfile",
+      });
       await mediaLibrary.saveToLibraryAsync(localUri);
       setShowSaveToast(true);
     } catch (error) {
@@ -356,6 +372,8 @@ export default function BuyeoCutScreen() {
 
             {showSaveToast ? (
               <SaveToast title={t.saveToastTitle} body={t.saveToastBody} />
+            ) : showSaveUnsupportedToast ? (
+              <SaveToast title={t.saveUnsupportedToastTitle} body={t.saveUnsupportedToastBody} />
             ) : showSaveErrorToast ? (
               <SaveToast title={t.saveErrorToastTitle} body={t.saveErrorToastBody} />
             ) : showShareUnsupportedToast ? (
@@ -409,9 +427,9 @@ export default function BuyeoCutScreen() {
 
           <View style={styles.collageActions}>
             <Pressable
-              style={[styles.saveButton, (!canSaveCollage || isSaving) && styles.saveButtonDisabled]}
+              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
               onPress={handleSave}
-              disabled={!canSaveCollage || isSaving}>
+              disabled={isSaving}>
               {isSaving ? (
                 <ActivityIndicator color="#fdfcf8" size="small" />
               ) : (

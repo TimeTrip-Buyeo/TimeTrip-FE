@@ -940,6 +940,8 @@ type BuyeoCutScreenText = {
   saveToastBody: string;
   saveErrorToastTitle: string;
   saveErrorToastBody: string;
+  saveUnsupportedToastTitle: string;
+  saveUnsupportedToastBody: string;
   unsyncedSelectionWarningText: string;
 };
 
@@ -979,6 +981,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     saveToastBody: '다른 사진조합으로도 만들어 보시오',
     saveErrorToastTitle: '저장하지 못했어요',
     saveErrorToastBody: '잠시 후 다시 시도해 주세요.',
+    saveUnsupportedToastTitle: '아직 저장 기능을 쓸 수 없어요',
+    saveUnsupportedToastBody: '앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.',
     unsyncedSelectionWarningText: '선택한 사진 중 서버에 저장되지 않은 사진이 있어요. 앨범/부여세컷 목록에서 서버에 저장된 사진으로 다시 선택해 주세요.',
   },
   en: {
@@ -1013,6 +1017,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     saveToastBody: 'Try a different photo combination too',
     saveErrorToastTitle: "Couldn't save",
     saveErrorToastBody: 'Please try again in a moment.',
+    saveUnsupportedToastTitle: 'Saving isn’t available yet',
+    saveUnsupportedToastBody: 'Please update the app to the latest version and try again.',
     unsyncedSelectionWarningText:
       "Some of the selected photos haven't finished saving to the server yet. Please choose photos from your album or Buyeo 3-cut list instead.",
   },
@@ -1048,6 +1054,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     saveToastBody: '也可以尝试其他照片组合',
     saveErrorToastTitle: '保存失败',
     saveErrorToastBody: '请稍后再试一次。',
+    saveUnsupportedToastTitle: '保存功能暂不可用',
+    saveUnsupportedToastBody: '请将应用更新到最新版本后重试。',
     unsyncedSelectionWarningText: '所选照片中有尚未保存到服务器的照片。请从相册/扶余三格列表中重新选择已保存的照片。',
   },
   ja: {
@@ -1082,6 +1090,8 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     saveToastBody: '他の写真の組み合わせも作ってみましょう',
     saveErrorToastTitle: '保存できませんでした',
     saveErrorToastBody: 'しばらくしてからもう一度お試しください。',
+    saveUnsupportedToastTitle: 'まだ保存機能が使えません',
+    saveUnsupportedToastBody: 'アプリを最新バージョンに更新してからもう一度お試しください。',
     unsyncedSelectionWarningText:
       '選択した写真の中にまだサーバーに保存されていないものがあります。アルバム/扶余三カット一覧から保存済みの写真を選び直してください。',
   },
