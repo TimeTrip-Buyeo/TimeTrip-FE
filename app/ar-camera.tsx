@@ -41,6 +41,11 @@ import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib
 // 보이는 동안만 5~10초 간격으로 위치 업데이트".
 const LOCATION_POLL_INTERVAL_MS = 7000;
 
+// TEST-ONLY: skips the GPS radius check entirely so the overlay always shows
+// as soon as this screen is entered, regardless of distance to the spot.
+// Flip back to false to restore the real 100m/90m enter/exit radius gate.
+const AR_TIMESLIP_TEST_BYPASS_RADIUS_CHECK = true;
+
 // SEARCHING → READY / EMPTY ↔ SEARCHING transitions only — never gates
 // screen entry (see lib/geo.ts for the enter/exit hysteresis values).
 type GeoState = "searching" | "loading" | "ready" | "empty";
@@ -145,6 +150,14 @@ export default function ArCameraScreen() {
 
   useEffect(() => {
     if (!locationPermission?.granted) return;
+
+    if (AR_TIMESLIP_TEST_BYPASS_RADIUS_CHECK) {
+      if (spotDetail !== null) {
+        setGeoState((prev) => (prev === "searching" ? "loading" : prev));
+      }
+      return;
+    }
+
     let isActive = true;
     let subscription: Location.LocationSubscription | null = null;
 
@@ -219,7 +232,7 @@ export default function ArCameraScreen() {
   // Language switch re-fetches only the audio guide, not the whole timeslip
   // response, per spec.
   useEffect(() => {
-    if (geoState !== "ready" || !timeslip || locale === timeslip.audioGuide.language) return;
+    if (geoState !== "ready" || !timeslip?.audioGuide || locale === timeslip.audioGuide.language) return;
     let isActive = true;
     getStoryAudioGuide(timeslip.storyId, { spotId: timeslip.spotId, language: locale })
       .then((guide) => {
@@ -311,12 +324,19 @@ export default function ArCameraScreen() {
           layout pass toggleSheet's LayoutAnimation already animates. */}
       <View style={styles.contentColumn} pointerEvents="box-none">
         <View style={styles.guideBoxWrapper} pointerEvents="none">
-          {geoState === "ready" && timeslip ? (
+          {geoState === "ready" && timeslip && timeslip.overlayImageUrl ? (
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
               style={styles.overlayImage}
               contentFit="contain"
             />
+          ) : geoState === "ready" && timeslip ? (
+            <View style={styles.guideBox}>
+              <FontAwesome5 name="image" size={52} color="rgba(255,255,255,0.3)" solid />
+              <View style={styles.guideCaption}>
+                <Text style={styles.guideCaptionText}>{timeslip.guideText}</Text>
+              </View>
+            </View>
           ) : geoState === "loading" ? (
             <View style={styles.guideBox}>
               <ActivityIndicator color="rgba(255,255,255,0.85)" />
