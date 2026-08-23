@@ -590,6 +590,7 @@ type ArCameraText = {
   emptyStateTitle: string;
   emptyStateMessage: string;
   audioGuideLabel: string;
+  aiImageDisclosure: string;
 };
 
 export const arCameraText: Record<Locale, ArCameraText> = {
@@ -607,6 +608,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: '이번 달은 준비 중이에요',
     emptyStateMessage: '이 장소는 이번 달엔 특별 테마가 없어요. 다음 달에 다시 찾아주세요!',
     audioGuideLabel: '오디오 가이드',
+    aiImageDisclosure: '*AI로 생성된 이미지입니다.',
   },
   en: {
     arActiveLabel: 'AR ACTIVE',
@@ -622,6 +624,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: 'Nothing special this month',
     emptyStateMessage: "This site doesn't have a special theme this month. Please check back next month!",
     audioGuideLabel: 'Audio Guide',
+    aiImageDisclosure: '*AI-generated image.',
   },
   zh: {
     arActiveLabel: 'AR 已启用',
@@ -637,6 +640,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: '本月暂无特别主题',
     emptyStateMessage: '该地点本月没有特别主题，请下个月再来看看！',
     audioGuideLabel: '语音导览',
+    aiImageDisclosure: '*AI生成图像。',
   },
   ja: {
     arActiveLabel: 'AR起動中',
@@ -652,6 +656,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: '今月は準備中です',
     emptyStateMessage: 'この場所は今月特別なテーマがありません。来月また訪れてください！',
     audioGuideLabel: '音声ガイド',
+    aiImageDisclosure: '*AI生成画像です。',
   },
 };
 
@@ -660,9 +665,14 @@ type CollectionScreenText = {
   listSubtitle: string;
   lifespanLabel: string;
   productionPeriodLabel: string;
+  locationLabel: string;
   keyFeaturesLabel: string;
   listenToAudioGuide: string;
   takePhotoWithFigure: string;
+  audioGuideModalTitle: string;
+  audioGuideUnavailableMessage: string;
+  audioGuidePlayLabel: string;
+  audioGuidePauseLabel: string;
   comingSoonTitle: string;
   comingSoonMessage: string;
   loadingMessage: string;
@@ -673,6 +683,8 @@ type CollectionScreenText = {
   detailUnavailableMessage: string;
   personTypeLabel: string;
   artifactTypeLabel: string;
+  aiImageDisclosure: string;
+  sourceDisclosurePrefix: string;
 };
 
 export const collectionScreenText: Record<Locale, CollectionScreenText> = {
@@ -681,9 +693,14 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     listSubtitle: '다양한 장소의 유물&인물을 수집해보시오',
     lifespanLabel: '생애',
     productionPeriodLabel: '제작 시기',
+    locationLabel: '발굴 위치',
     keyFeaturesLabel: '주요 특징',
     listenToAudioGuide: '오디오 가이드 듣기',
     takePhotoWithFigure: '인물과 사진 찍기',
+    audioGuideModalTitle: '기본 가이드',
+    audioGuideUnavailableMessage: '재생할 오디오 가이드가 없어요.',
+    audioGuidePlayLabel: '재생',
+    audioGuidePauseLabel: '멈춤',
     comingSoonTitle: '준비 중이에요',
     comingSoonMessage: '이 장소의 컬렉션은 곧 공개될 예정이에요.',
     loadingMessage: '불러오는 중이에요.',
@@ -694,15 +711,22 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: '획득한 아이템만 상세 정보를 볼 수 있어요.',
     personTypeLabel: '인물',
     artifactTypeLabel: '유물',
+    aiImageDisclosure: '*AI로 생성된 이미지입니다.',
+    sourceDisclosurePrefix: '*출처 -',
   },
   en: {
     listTitle: 'Buyeo Baekje Almanac',
     listSubtitle: 'Collect artifacts & figures from every location',
     lifespanLabel: 'Lifespan',
     productionPeriodLabel: 'Production Period',
+    locationLabel: 'Location',
     keyFeaturesLabel: 'Key Features',
     listenToAudioGuide: 'Listen to Audio Guide',
     takePhotoWithFigure: 'Take a Photo Together',
+    audioGuideModalTitle: 'Basic Guide',
+    audioGuideUnavailableMessage: 'No audio guide is available.',
+    audioGuidePlayLabel: 'Play',
+    audioGuidePauseLabel: 'Pause',
     comingSoonTitle: 'Coming Soon',
     comingSoonMessage: "This location's collectible hasn't been revealed yet.",
     loadingMessage: 'Loading...',
@@ -713,15 +737,22 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: 'Only acquired items can be viewed in detail.',
     personTypeLabel: 'Figure',
     artifactTypeLabel: 'Artifact',
+    aiImageDisclosure: '*AI-generated image.',
+    sourceDisclosurePrefix: '*Source -',
   },
   zh: {
     listTitle: '扶余百济图鉴',
     listSubtitle: '收集各地的文物与人物',
     lifespanLabel: '生平',
     productionPeriodLabel: '制作时期',
+    locationLabel: '发现地点',
     keyFeaturesLabel: '主要特点',
     listenToAudioGuide: '收听语音导览',
     takePhotoWithFigure: '与人物合影',
+    audioGuideModalTitle: '基础导览',
+    audioGuideUnavailableMessage: '暂无可播放的语音导览。',
+    audioGuidePlayLabel: '播放',
+    audioGuidePauseLabel: '暂停',
     comingSoonTitle: '即将开放',
     comingSoonMessage: '该地点的收藏内容尚未公开。',
     loadingMessage: '加载中。',
@@ -732,15 +763,22 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: '只有已获得的项目可以查看详情。',
     personTypeLabel: '人物',
     artifactTypeLabel: '文物',
+    aiImageDisclosure: '*AI生成图像。',
+    sourceDisclosurePrefix: '*来源 -',
   },
   ja: {
     listTitle: '扶余百済図鑑',
     listSubtitle: 'さまざまな場所の遺物と人物を集めよう',
     lifespanLabel: '生涯',
     productionPeriodLabel: '制作時期',
+    locationLabel: '発見場所',
     keyFeaturesLabel: '主な特徴',
     listenToAudioGuide: '音声ガイドを聞く',
     takePhotoWithFigure: '人物と写真を撮る',
+    audioGuideModalTitle: '基本ガイド',
+    audioGuideUnavailableMessage: '再生できる音声ガイドがありません。',
+    audioGuidePlayLabel: '再生',
+    audioGuidePauseLabel: '停止',
     comingSoonTitle: '準備中です',
     comingSoonMessage: 'この場所のコレクションはまもなく公開されます。',
     loadingMessage: '読み込み中です。',
@@ -751,6 +789,8 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     detailUnavailableMessage: '獲得済みアイテムのみ詳細を表示できます。',
     personTypeLabel: '人物',
     artifactTypeLabel: '遺物',
+    aiImageDisclosure: '*AI生成画像です。',
+    sourceDisclosurePrefix: '*出典 -',
   },
 };
 
@@ -903,14 +943,26 @@ type BuyeoCutScreenText = {
   filterAppliedToast: (themeLabel: string) => string;
   collageHeaderTitle: string;
   collageHeaderSubtitle: string;
+  aiGeneratedDisclaimerText: string;
   frameSectionLabel: string;
   frameOnLabel: string;
   frameOffLabel: string;
+  frameLoadErrorText: string;
+  selfiesLoadErrorText: string;
   collageCaption: string;
   saveButtonLabel: string;
   shareButtonAccessibilityLabel: string;
+  shareUnavailableToastTitle: string;
+  shareUnavailableToastBody: string;
+  shareUnsupportedToastTitle: string;
+  shareUnsupportedToastBody: string;
   saveToastTitle: string;
   saveToastBody: string;
+  saveErrorToastTitle: string;
+  saveErrorToastBody: string;
+  saveUnsupportedToastTitle: string;
+  saveUnsupportedToastBody: string;
+  unsyncedSelectionWarningText: string;
 };
 
 // Note: "부여세컷" literally means "Buyeo 3-cut" (세 = three, as opposed to
@@ -932,14 +984,26 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     filterAppliedToast: (themeLabel) => `${themeLabel} 테마만 보기`,
     collageHeaderTitle: '부여세컷 완성',
     collageHeaderSubtitle: '백제의 추억을 부여세컷으로 간직하십시오',
+    aiGeneratedDisclaimerText: '*AI로 생성된 이미지 입니다.',
     frameSectionLabel: '프레임 선택',
     frameOnLabel: '프레임',
     frameOffLabel: '프레임 없음',
+    frameLoadErrorText: '프레임을 불러오지 못했어요.',
+    selfiesLoadErrorText: '셀카 사진을 불러오지 못했어요.',
     collageCaption: 'TimeTrip 부여',
     saveButtonLabel: '세컷 저장하기',
     shareButtonAccessibilityLabel: '공유하기',
+    shareUnavailableToastTitle: '공유할 수 없어요',
+    shareUnavailableToastBody: '잠시 후 다시 시도해 주세요.',
+    shareUnsupportedToastTitle: '아직 공유 기능을 쓸 수 없어요',
+    shareUnsupportedToastBody: '앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.',
     saveToastTitle: '저장완료!',
     saveToastBody: '다른 사진조합으로도 만들어 보시오',
+    saveErrorToastTitle: '저장하지 못했어요',
+    saveErrorToastBody: '잠시 후 다시 시도해 주세요.',
+    saveUnsupportedToastTitle: '아직 저장 기능을 쓸 수 없어요',
+    saveUnsupportedToastBody: '앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.',
+    unsyncedSelectionWarningText: '선택한 사진 중 서버에 저장되지 않은 사진이 있어요. 앨범/부여세컷 목록에서 서버에 저장된 사진으로 다시 선택해 주세요.',
   },
   en: {
     headerTitle: 'Select Buyeo 3-Cut',
@@ -956,14 +1020,27 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     filterAppliedToast: (themeLabel) => `Showing ${themeLabel} only`,
     collageHeaderTitle: 'Your Buyeo 3-Cut',
     collageHeaderSubtitle: 'Keep your Baekje memories in a Buyeo 3-cut',
+    aiGeneratedDisclaimerText: '*This image was generated by AI.',
     frameSectionLabel: 'Choose a Frame',
     frameOnLabel: 'Frame',
     frameOffLabel: 'No Frame',
+    frameLoadErrorText: 'Could not load frames.',
+    selfiesLoadErrorText: 'Could not load selfie photos.',
     collageCaption: 'TimeTrip Buyeo',
     saveButtonLabel: 'Save 3-Cut',
     shareButtonAccessibilityLabel: 'Share',
+    shareUnavailableToastTitle: "Can't share right now",
+    shareUnavailableToastBody: 'Please try again in a moment.',
+    shareUnsupportedToastTitle: 'Sharing isn’t available yet',
+    shareUnsupportedToastBody: 'Please update the app to the latest version and try again.',
     saveToastTitle: 'Saved!',
     saveToastBody: 'Try a different photo combination too',
+    saveErrorToastTitle: "Couldn't save",
+    saveErrorToastBody: 'Please try again in a moment.',
+    saveUnsupportedToastTitle: 'Saving isn’t available yet',
+    saveUnsupportedToastBody: 'Please update the app to the latest version and try again.',
+    unsyncedSelectionWarningText:
+      "Some of the selected photos haven't finished saving to the server yet. Please choose photos from your album or Buyeo 3-cut list instead.",
   },
   zh: {
     headerTitle: '选择扶余三格',
@@ -980,14 +1057,26 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     filterAppliedToast: (themeLabel) => `仅显示 ${themeLabel}`,
     collageHeaderTitle: '完成的扶余三格',
     collageHeaderSubtitle: '将百济的回忆珍藏在扶余三格里',
+    aiGeneratedDisclaimerText: '*此图像由AI生成。',
     frameSectionLabel: '选择相框',
     frameOnLabel: '相框',
     frameOffLabel: '无相框',
+    frameLoadErrorText: '无法加载相框。',
+    selfiesLoadErrorText: '无法加载自拍照片。',
     collageCaption: 'TimeTrip 扶余',
     saveButtonLabel: '保存三格',
     shareButtonAccessibilityLabel: '分享',
+    shareUnavailableToastTitle: '暂时无法分享',
+    shareUnavailableToastBody: '请稍后再试一次。',
+    shareUnsupportedToastTitle: '分享功能暂不可用',
+    shareUnsupportedToastBody: '请将应用更新到最新版本后重试。',
     saveToastTitle: '保存完成！',
     saveToastBody: '也可以尝试其他照片组合',
+    saveErrorToastTitle: '保存失败',
+    saveErrorToastBody: '请稍后再试一次。',
+    saveUnsupportedToastTitle: '保存功能暂不可用',
+    saveUnsupportedToastBody: '请将应用更新到最新版本后重试。',
+    unsyncedSelectionWarningText: '所选照片中有尚未保存到服务器的照片。请从相册/扶余三格列表中重新选择已保存的照片。',
   },
   ja: {
     headerTitle: '扶余三カットを選ぶ',
@@ -1004,14 +1093,27 @@ export const buyeoCutScreenText: Record<Locale, BuyeoCutScreenText> = {
     filterAppliedToast: (themeLabel) => `${themeLabel}のみ表示`,
     collageHeaderTitle: '完成した扶余三カット',
     collageHeaderSubtitle: '百済の思い出を扶余三カットで残しましょう',
+    aiGeneratedDisclaimerText: '*この画像はAIによって生成されました。',
     frameSectionLabel: 'フレームを選ぶ',
     frameOnLabel: 'フレーム',
     frameOffLabel: 'フレームなし',
+    frameLoadErrorText: 'フレームを読み込めませんでした。',
+    selfiesLoadErrorText: 'セルフィー写真を読み込めませんでした。',
     collageCaption: 'TimeTrip 扶余',
     saveButtonLabel: '三カットを保存',
     shareButtonAccessibilityLabel: '共有する',
+    shareUnavailableToastTitle: '共有できませんでした',
+    shareUnavailableToastBody: 'しばらくしてからもう一度お試しください。',
+    shareUnsupportedToastTitle: 'まだ共有機能が使えません',
+    shareUnsupportedToastBody: 'アプリを最新バージョンに更新してからもう一度お試しください。',
     saveToastTitle: '保存完了！',
     saveToastBody: '他の写真の組み合わせも作ってみましょう',
+    saveErrorToastTitle: '保存できませんでした',
+    saveErrorToastBody: 'しばらくしてからもう一度お試しください。',
+    saveUnsupportedToastTitle: 'まだ保存機能が使えません',
+    saveUnsupportedToastBody: 'アプリを最新バージョンに更新してからもう一度お試しください。',
+    unsyncedSelectionWarningText:
+      '選択した写真の中にまだサーバーに保存されていないものがあります。アルバム/扶余三カット一覧から保存済みの写真を選び直してください。',
   },
 };
 
@@ -1030,6 +1132,7 @@ type PersonCameraText = {
   photoSavedToastBody: string;
   shareUnavailableToastTitle: string;
   shareUnavailableToastBody: string;
+  aiImageDisclosure: string;
 };
 
 export const personCameraText: Record<Locale, PersonCameraText> = {
@@ -1048,6 +1151,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: '확인해 보세요!',
     shareUnavailableToastTitle: '공유할 수 없어요',
     shareUnavailableToastBody: '잠시 후 다시 시도해 주세요.',
+    aiImageDisclosure: '*AI로 생성된 이미지입니다.',
   },
   en: {
     posePickerLabel: 'Choose a Pose',
@@ -1064,6 +1168,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: 'Take a look!',
     shareUnavailableToastTitle: "Can't share right now",
     shareUnavailableToastBody: 'Please try again in a moment.',
+    aiImageDisclosure: '*AI-generated image.',
   },
   zh: {
     posePickerLabel: '选择姿势',
@@ -1080,6 +1185,7 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: '快去看看吧！',
     shareUnavailableToastTitle: '暂时无法分享',
     shareUnavailableToastBody: '请稍后再试一次。',
+    aiImageDisclosure: '*AI生成图像。',
   },
   ja: {
     posePickerLabel: 'ポーズ設定',
@@ -1096,5 +1202,6 @@ export const personCameraText: Record<Locale, PersonCameraText> = {
     photoSavedToastBody: '確認してみてください！',
     shareUnavailableToastTitle: '共有できませんでした',
     shareUnavailableToastBody: 'しばらくしてからもう一度お試しください。',
+    aiImageDisclosure: '*AI生成画像です。',
   },
 };

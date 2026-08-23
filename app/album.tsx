@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -10,7 +10,7 @@ import { LangPill } from "@/components/lang-pill";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
-import { albumScreenText, mapScreenText, shareSuffix, type Locale } from "@/constants/translations";
+import { albumScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
@@ -19,6 +19,7 @@ import { toApiUrl } from "@/lib/api/client";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
 import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route";
+import { shareImageAsync } from "@/lib/share-image";
 
 // Deep-link IDs are untrusted strings — a hand-edited or stale link (e.g.
 // "?collectionItemId=abc") must fall back to the list instead of sending
@@ -368,9 +369,13 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
     "[album] failed to load photo detail",
   );
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!photo) return;
-    Share.share({ message: `${photo.personName} · ${photo.spotName} ${shareSuffix[locale]}` });
+    try {
+      await shareImageAsync(toApiUrl(photo.photoUrl), `${photo.personName} · ${photo.spotName}`);
+    } catch (error) {
+      console.error("[album] selfie photo share failed", error);
+    }
   };
 
   return (
@@ -614,10 +619,16 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
 
   const canOpenPersonCamera = !isSelfieRouteLoading && !!selfieRouteParams.collectionItemId;
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const label = captured?.poseLabel || remotePhoto?.collectionItemName;
-    if (!label) return;
-    Share.share({ message: `${label} · ${mapT.pins[locationId]} ${shareSuffix[locale]}` });
+    const imageUri = captured?.uri || remotePhoto?.uri;
+    if (!label || !imageUri) return;
+
+    try {
+      await shareImageAsync(imageUri, `${label} · ${mapT.pins[locationId]}`);
+    } catch (error) {
+      console.error("[album] selfie photo share failed", error);
+    }
   };
 
   return (
