@@ -1,4 +1,6 @@
-import { apiGet, apiPost } from "@/lib/api/client";
+import { File, Paths } from "expo-file-system";
+
+import { apiGet, apiPost, getAuthHeaders, toApiUrl } from "@/lib/api/client";
 
 export type CollageSummaryResponse = {
   collageId: number;
@@ -26,20 +28,6 @@ export type CollageDetailResponse = {
   shareable: boolean;
 };
 
-export type SelfiePhotoOptionResponse = {
-  selfiePhotoId: number;
-  photoUrl: string;
-  collectionItemId: number;
-  collectionItemName: string;
-  spotId: number;
-  spotName: string;
-  takenAt: string;
-};
-
-export type SelfiePhotoOptionListResponse = {
-  selfiePhotos: SelfiePhotoOptionResponse[];
-};
-
 export type FrameResponse = {
   frameId: number;
   name: string;
@@ -58,19 +46,6 @@ export function getCollageDetail(collageId: number): Promise<CollageDetailRespon
   return apiGet<CollageDetailResponse>(`/api/collages/${collageId}`);
 }
 
-export function getSelfiePhotoOptions(
-  collectionItemId?: number,
-  spotId?: number,
-  language?: string,
-): Promise<SelfiePhotoOptionListResponse> {
-  const params = new URLSearchParams();
-  if (collectionItemId !== undefined) params.set("collectionItemId", String(collectionItemId));
-  if (spotId !== undefined) params.set("spotId", String(spotId));
-  if (language) params.set("language", language);
-  const query = params.toString();
-  return apiGet<SelfiePhotoOptionListResponse>(`/api/collages/selfie-photos${query ? `?${query}` : ""}`);
-}
-
 export function getFrames(): Promise<FrameListResponse> {
   return apiGet<FrameListResponse>("/api/collages/frames");
 }
@@ -86,4 +61,29 @@ export type CollageCreateResponse = {
 
 export function createCollage(selfiePhotoIds: number[], frameId?: number): Promise<CollageCreateResponse> {
   return apiPost<CollageCreateResponse>("/api/collages", { selfiePhotoIds, frameId });
+}
+
+// /download and /file both respond with a raw binary image (no {isSuccess,...}
+// envelope, per Swagger — format: binary), so apiGet can't parse them. They're
+// downloaded straight to a local cache file instead, which is what
+// expo-sharing/expo-media-library need anyway (neither accepts a remote URL).
+// Swagger doesn't declare the image format; named .jpg to match this app's
+// other selfie/collage image handling (photo-save.tsx, selfies.ts), which is
+// JPEG throughout.
+async function downloadCollageBinary(collageId: number, endpoint: "download" | "file", filename: string): Promise<string> {
+  const headers = await getAuthHeaders();
+  const destination = new File(Paths.cache, filename);
+  const file = await File.downloadFileAsync(toApiUrl(`/api/collages/${collageId}/${endpoint}`), destination, {
+    headers,
+    idempotent: true,
+  });
+  return file.uri;
+}
+
+export function downloadCollageFile(collageId: number): Promise<string> {
+  return downloadCollageBinary(collageId, "download", `collage-${collageId}.jpg`);
+}
+
+export function getCollageFile(collageId: number): Promise<string> {
+  return downloadCollageBinary(collageId, "file", `collage-${collageId}-share.jpg`);
 }

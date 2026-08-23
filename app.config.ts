@@ -55,6 +55,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      "expo-media-library",
+      {
+        photosPermission: "TimeTrip이 완성된 부여세컷 콜라주를 갤러리에 저장하려면 사진 접근 권한이 필요해요.",
+        savePhotosPermission: "TimeTrip이 완성된 부여세컷 콜라주를 갤러리에 저장하려면 사진 저장 권한이 필요해요.",
+        granularPermissions: ["photo"],
+      },
+    ],
+    [
       "@react-native-seoul/kakao-login",
       {
         kakaoAppKey: process.env.KAKAO_NATIVE_APP_KEY ?? "",

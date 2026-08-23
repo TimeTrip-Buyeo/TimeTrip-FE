@@ -1,20 +1,45 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSourcePropType } from "react-native";
-import { ActivityIndicator, Animated, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { captureRef } from "react-native-view-shot";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { ALBUM_ENTRIES, type AlbumEntry } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import type { LocationId } from "@/constants/locations";
-import { PERSON_POSES } from "@/constants/poses";
+import { MAP_LOCATIONS, SPOT_ID_TO_LOCATION_ID, type LocationId } from "@/constants/locations";
 import { buyeoCutScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-import { createCollage, getFrames } from "@/lib/api/collage";
+import { toApiUrl } from "@/lib/api/client";
+import { createCollage, downloadCollageFile, getFrames } from "@/lib/api/collage";
+import { getSelfiePhotoOptions } from "@/lib/api/selfies";
+import { getSharingModule } from "@/lib/sharing";
+
+// Lazy-loaded the same way lib/sharing.ts loads expo-sharing — an old dev
+// client can run without the native ExpoMediaLibrary module until it's
+// rebuilt after installing expo-media-library.
+type ExpoMediaLibraryModule = {
+  requestPermissionsAsync: (writeOnly?: boolean) => Promise<{ granted: boolean }>;
+  saveToLibraryAsync: (localUri: string) => Promise<void>;
+};
+
+async function getMediaLibraryModule(): Promise<ExpoMediaLibraryModule | null> {
+  if (!requireOptionalNativeModule("ExpoMediaLibrary")) {
+    console.warn("[buyeo-cut] ExpoMediaLibrary native module is unavailable. Rebuild the dev client to enable gallery saving.");
+    return null;
+  }
+  try {
+    return (await import("expo-media-library")) as unknown as ExpoMediaLibraryModule;
+  } catch (error) {
+    console.error("[buyeo-cut] expo-media-library native module is unavailable", error);
+    return null;
+  }
+}
 
 // "부여세컷" = "Buyeo 3-cut" (세 = three), matching Figma's own progress
 // example ("2 / 3", node 0:1418) — not a 4-photo strip.
@@ -51,8 +76,6 @@ type PickerItem = {
   id: string;
   locationId: LocationId;
   source: ImageSourcePropType;
-  poseImage?: ImageSourcePropType;
-  poseAspectRatio?: number;
   /** Set only if the server upload in photo-save.tsx succeeded — undefined for
       local-only captures (upload failed, or never attempted). Required to
       create a collage; see canSaveCollage below. */
@@ -60,9 +83,10 @@ type PickerItem = {
 };
 
 // Rebuilt to match Figma's "부여세컷 선택" → "콜라주 만들기" flow (nodes 0:1418,
-// 0:1670, 0:580/0:612) directly. The picker grid only shows real captures
-// from the current app session; mock album/collectible artwork is intentionally
-// excluded so tests don't accidentally select placeholder photos.
+// 0:1670, 0:580/0:612) directly. The picker grid shows real captures only —
+// this session's local captures plus the user's uploaded selfies from the
+// server (GET /collages/selfie-photos) — mock album/collectible artwork is
+// intentionally excluded so tests don't accidentally select placeholder photos.
 export default function BuyeoCutScreen() {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
@@ -76,7 +100,18 @@ export default function BuyeoCutScreen() {
     [],
     "[buyeo-cut] failed to load frames",
   );
-  const frames = useMemo(() => framesData?.frames ?? [], [framesData]);
+  // No location filter — the picker shows every location's section on one
+  // screen, so this fetches the user's full selfie set once and groups it by
+  // spotId → LocationId below (same mapping album.tsx's remote photos use).
+  const { data: selfiesData, loadError: selfiesLoadError } = useApiResource(
+    () => getSelfiePhotoOptions({ locale }),
+    [locale],
+    "[buyeo-cut] failed to load selfie photos",
+  );
+  const remoteSelfies = useMemo(() => selfiesData?.selfiePhotos ?? [], [selfiesData]);
+  // Excludes the server's "기본" (plain/default) frame — only real 부여세컷
+  // frames should be selectable here.
+  const frames = useMemo(() => (framesData?.frames ?? []).filter((frame) => !frame.name.includes("기본")), [framesData]);
   const [selectedFrameId, setSelectedFrameId] = useState<number | null>(null);
   const selectedFrame = frames.find((frame) => frame.frameId === selectedFrameId) ?? null;
   const [themeFilter, setThemeFilter] = useState<ThemeFilter>(ALL_FILTER);
@@ -85,10 +120,21 @@ export default function BuyeoCutScreen() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveErrorToast, setShowSaveErrorToast] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  // Distinguishes "the sharing native module isn't linked in this build yet"
+  // (needs a rebuild — see getSharingModule) from "capture/share actually
+  // failed just now", since the two look identical from a plain error toast.
+  const [showShareUnsupportedToast, setShowShareUnsupportedToast] = useState(false);
+  const [showShareUnavailableToast, setShowShareUnavailableToast] = useState(false);
+  // Captured on demand in handleShare (same react-native-view-shot pattern as
+  // photo-save.tsx's compositeRef) — the on-screen collage is just layered
+  // <Image>s, not a real file, until this flattens it into one.
+  const collagePreviewRef = useRef<View>(null);
 
   // Mirrors the old default of "frame visible on first render" — auto-picks
-  // the first server frame once the list loads, but only once, so it doesn't
-  // stomp a later explicit "프레임 없음" choice (selectedFrameId back to null).
+  // the first (non-기본) server frame once the list loads, but only once, so
+  // it doesn't stomp a later explicit "프레임 없음" choice (selectedFrameId
+  // back to null).
   const hasAutoSelectedFrame = useRef(false);
   useEffect(() => {
     if (!hasAutoSelectedFrame.current && frames.length > 0) {
@@ -98,27 +144,39 @@ export default function BuyeoCutScreen() {
   }, [frames]);
 
   const allSections = useMemo(() => {
-    return (Object.keys(ALBUM_ENTRIES) as LocationId[])
+    // All real locations, not just the ones with an ALBUM_ENTRIES entry —
+    // ALBUM_ENTRIES only covers pagoda/gungnamji, so limiting to its keys was
+    // silently hiding every photo (local or server-synced) taken at museum/
+    // royalTombs/busosanseong.
+    return MAP_LOCATIONS.map((location) => location.id)
       .map((id) => {
-        const entry = ALBUM_ENTRIES[id]!;
+        const entry = ALBUM_ENTRIES[id];
         const capturedPhotos = photosByLocation[id] ?? [];
-        const items: PickerItem[] = [
-          ...capturedPhotos.map((photo) => {
-            const pose = PERSON_POSES[id]?.find((candidate) => candidate.id === photo.poseId);
-            return {
-              id: photo.id,
-              locationId: id,
-              source: { uri: photo.uri },
-              poseImage: pose?.image,
-              poseAspectRatio: pose?.aspectRatio,
-              serverSelfiePhotoId: photo.serverSelfiePhotoId,
-            };
-          }),
-        ];
-        return { id, entry, items };
+        // photo.uri is already a flattened composite (background + person
+        // cutout baked in by photo-save.tsx's captureRef) — no separate pose
+        // overlay here, same as album.tsx just rendering captured.uri as-is.
+        const localItems: PickerItem[] = capturedPhotos.map((photo) => ({
+          id: photo.id,
+          locationId: id,
+          source: { uri: photo.uri },
+          serverSelfiePhotoId: photo.serverSelfiePhotoId,
+        }));
+        // Same dedup rule as album.tsx's useRemoteAlbumPhotos merge: skip a
+        // remote entry if a local capture already synced to that same
+        // selfiePhotoId, so it doesn't show up twice in the grid.
+        const remoteItems: PickerItem[] = remoteSelfies
+          .filter((photo) => SPOT_ID_TO_LOCATION_ID[photo.spotId] === id)
+          .filter((photo) => !capturedPhotos.some((local) => local.serverSelfiePhotoId === photo.selfiePhotoId))
+          .map((photo) => ({
+            id: `remote-${photo.selfiePhotoId}`,
+            locationId: id,
+            source: { uri: toApiUrl(photo.photoUrl) },
+            serverSelfiePhotoId: photo.selfiePhotoId,
+          }));
+        return { id, entry, items: [...localItems, ...remoteItems] };
       })
       .filter((section) => section.items.length > 0);
-  }, [photosByLocation]);
+  }, [photosByLocation, remoteSelfies]);
 
   const sections = useMemo(
     () => (themeFilter === ALL_FILTER ? allSections : allSections.filter((section) => section.id === themeFilter)),
@@ -144,7 +202,7 @@ export default function BuyeoCutScreen() {
   const handleApplyFilter = (filter: ThemeFilter) => {
     setThemeFilter(filter);
     setIsFilterSheetOpen(false);
-    const label = filter === ALL_FILTER ? t.filterAllLabel : ALBUM_ENTRIES[filter]?.name[locale];
+    const label = filter === ALL_FILTER ? t.filterAllLabel : ALBUM_ENTRIES[filter]?.name[locale] ?? mapT.pins[filter];
     if (label) setToastMessage(t.filterAppliedToast(label));
   };
 
@@ -166,6 +224,18 @@ export default function BuyeoCutScreen() {
     return () => clearTimeout(timer);
   }, [showSaveErrorToast]);
 
+  useEffect(() => {
+    if (!showShareUnsupportedToast) return;
+    const timer = setTimeout(() => setShowShareUnsupportedToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [showShareUnsupportedToast]);
+
+  useEffect(() => {
+    if (!showShareUnavailableToast) return;
+    const timer = setTimeout(() => setShowShareUnavailableToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [showShareUnavailableToast]);
+
   const handleGenerate = () => {
     if (selected.length !== SLOT_COUNT) return;
     setView("collage");
@@ -183,21 +253,66 @@ export default function BuyeoCutScreen() {
     if (!canSaveCollage || isSaving) return;
     setIsSaving(true);
     try {
-      await createCollage(
+      const collage = await createCollage(
         selected.map((item) => item.serverSelfiePhotoId!),
         selectedFrame?.frameId,
       );
+
+      const mediaLibrary = await getMediaLibraryModule();
+      if (!mediaLibrary) {
+        setShowSaveErrorToast(true);
+        return;
+      }
+      const permission = await mediaLibrary.requestPermissionsAsync(true);
+      if (!permission.granted) {
+        setShowSaveErrorToast(true);
+        return;
+      }
+
+      // The /download endpoint (not /file) — full-quality server original,
+      // per Content-Disposition: attachment.
+      const localUri = await downloadCollageFile(collage.collageId);
+      await mediaLibrary.saveToLibraryAsync(localUri);
       setShowSaveToast(true);
     } catch (error) {
-      console.error("[buyeo-cut] failed to create collage", error);
+      console.error("[buyeo-cut] failed to save collage", error);
       setShowSaveErrorToast(true);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleShare = () => {
-    Share.share({ message: `${t.collageCaption} · ${t.collageHeaderTitle}` });
+  const handleShare = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const sharing = await getSharingModule();
+      if (!sharing) {
+        setShowShareUnsupportedToast(true);
+        return;
+      }
+      const isAvailable = await sharing.isAvailableAsync?.();
+      if (!isAvailable || !sharing.shareAsync) {
+        setShowShareUnsupportedToast(true);
+        return;
+      }
+      if (!collagePreviewRef.current) {
+        setShowShareUnavailableToast(true);
+        return;
+      }
+
+      const localUri = await captureRef(collagePreviewRef.current, {
+        format: "jpg",
+        quality: 0.9,
+        result: "tmpfile",
+      });
+      await sharing.shareAsync(localUri, { mimeType: "image/jpeg", dialogTitle: t.collageHeaderTitle });
+    } catch (error) {
+      console.error("[buyeo-cut] failed to share collage", error);
+      setShowShareUnavailableToast(true);
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   const navigate = (key: BottomNavKey) => {
@@ -221,17 +336,10 @@ export default function BuyeoCutScreen() {
         </View>
 
         <View style={styles.collagePreview}>
-          <View style={styles.frameBox}>
+          <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
             {selected.map((item, index) => (
               <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
-                <Image source={item.source} style={styles.frameSlotImage} resizeMode="contain" />
-                {item.poseImage && (
-                  <Image
-                    source={item.poseImage}
-                    style={[styles.stripPersonOverlay, { aspectRatio: item.poseAspectRatio }]}
-                    resizeMode="cover"
-                  />
-                )}
+                <Image source={item.source} style={styles.frameSlotImage} resizeMode="cover" />
               </View>
             ))}
             {selectedFrame && (
@@ -245,8 +353,14 @@ export default function BuyeoCutScreen() {
 
           {showSaveToast ? (
             <SaveToast title={t.saveToastTitle} body={t.saveToastBody} />
+          ) : showSaveErrorToast ? (
+            <SaveToast title={t.saveErrorToastTitle} body={t.saveErrorToastBody} />
+          ) : showShareUnsupportedToast ? (
+            <SaveToast title={t.shareUnsupportedToastTitle} body={t.shareUnsupportedToastBody} />
           ) : (
-            showSaveErrorToast && <SaveToast title={t.saveErrorToastTitle} body={t.saveErrorToastBody} />
+            showShareUnavailableToast && (
+              <SaveToast title={t.shareUnavailableToastTitle} body={t.shareUnavailableToastBody} />
+            )
           )}
         </View>
 
@@ -290,6 +404,8 @@ export default function BuyeoCutScreen() {
             )}
           </View>
 
+          {!canSaveCollage && <Text style={styles.unsyncedSelectionWarningText}>{t.unsyncedSelectionWarningText}</Text>}
+
           <View style={styles.collageActions}>
             <Pressable
               style={[styles.saveButton, (!canSaveCollage || isSaving) && styles.saveButtonDisabled]}
@@ -303,10 +419,15 @@ export default function BuyeoCutScreen() {
               <Text style={styles.saveButtonText}>{t.saveButtonLabel}</Text>
             </Pressable>
             <Pressable
-              style={styles.shareIconButton}
+              style={[styles.shareIconButton, isSharing && styles.shareIconButtonDisabled]}
               onPress={handleShare}
+              disabled={isSharing}
               accessibilityLabel={t.shareButtonAccessibilityLabel}>
-              <FontAwesome5 name="share-alt" size={14} color="#b8860b" solid />
+              {isSharing ? (
+                <ActivityIndicator color="#b8860b" size="small" />
+              ) : (
+                <FontAwesome5 name="share-alt" size={14} color="#b8860b" solid />
+              )}
             </Pressable>
           </View>
         </View>
@@ -346,13 +467,16 @@ export default function BuyeoCutScreen() {
 
         <View style={styles.separator} />
 
-        {sections.length === 0 ? (
+        {selfiesData === null && !selfiesLoadError && sections.length === 0 ? (
+          <ActivityIndicator color="#800000" style={styles.selfiesLoadingIndicator} />
+        ) : sections.length === 0 ? (
           <Text style={styles.emptyText}>{t.emptyTitle}</Text>
         ) : (
           <View style={styles.body}>
+            {selfiesLoadError && <Text style={styles.selfiesLoadErrorText}>{t.selfiesLoadErrorText}</Text>}
             {sections.map((section) => (
               <View key={section.id} style={styles.section}>
-                <Text style={styles.sectionLabel}>{section.entry.name[locale]}</Text>
+                <Text style={styles.sectionLabel}>{section.entry?.name[locale] ?? mapT.pins[section.id]}</Text>
                 <View style={styles.grid}>
                   {section.items.map((item) => {
                     const orderIndex = selected.findIndex((candidate) => candidate.id === item.id);
@@ -364,14 +488,7 @@ export default function BuyeoCutScreen() {
                         style={[styles.card, isSelected && styles.cardSelected, disabled && styles.cardDisabled]}
                         onPress={() => toggleSelect(item)}
                         disabled={disabled}>
-                        <Image source={item.source} style={styles.cardImage} resizeMode="contain" />
-                        {item.poseImage && (
-                          <Image
-                            source={item.poseImage}
-                            style={[styles.cardPersonOverlay, { aspectRatio: item.poseAspectRatio }]}
-                            resizeMode="cover"
-                          />
-                        )}
+                        <Image source={item.source} style={styles.cardImage} resizeMode="cover" />
                         {isSelected && (
                           <View style={styles.cardOverlay}>
                             <View style={styles.cardBadge}>
@@ -428,7 +545,7 @@ type FilterSheetProps = {
   closeLabel: string;
   allLabel: string;
   activeFilter: ThemeFilter;
-  sections: { id: LocationId; entry: AlbumEntry }[];
+  sections: { id: LocationId; entry?: AlbumEntry }[];
   locale: Locale;
   onSelect: (filter: ThemeFilter) => void;
   onClose: () => void;
@@ -466,7 +583,7 @@ function FilterSheet({ insetsBottom, title, closeLabel, allLabel, activeFilter, 
           {sections.map(({ id, entry }) => (
             <FilterOption
               key={id}
-              label={entry.name[locale]}
+              label={entry?.name[locale] ?? mapScreenText[locale].pins[id]}
               active={activeFilter === id}
               onPress={() => onSelect(id)}
             />
@@ -625,6 +742,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingTop: 48,
   },
+  selfiesLoadingIndicator: {
+    paddingTop: 48,
+  },
+  selfiesLoadErrorText: {
+    fontSize: 12,
+    color: "#78716c",
+    paddingHorizontal: 32,
+    paddingBottom: 12,
+  },
   section: {
     gap: 8,
   },
@@ -668,12 +794,6 @@ const styles = StyleSheet.create({
   cardImage: {
     width: "100%",
     height: "100%",
-  },
-  cardPersonOverlay: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    height: "92%",
   },
   cardOverlay: {
     position: "absolute",
@@ -875,12 +995,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  stripPersonOverlay: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    height: "92%",
-  },
   saveToast: {
     position: "absolute",
     width: 256,
@@ -939,8 +1053,10 @@ const styles = StyleSheet.create({
   // fixed-width pills in a horizontal ScrollView instead of flex+gap, which
   // only worked for exactly two evenly-split buttons.
   frameOptionsRow: {
+    flexGrow: 1,
     flexDirection: "row",
-    gap: 12,
+    justifyContent: "center",
+    gap: 24,
   },
   frameOptionButton: {
     flexDirection: "row",
@@ -970,6 +1086,11 @@ const styles = StyleSheet.create({
   frameOptionTextActive: {
     color: "#800000",
   },
+  unsyncedSelectionWarningText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#b91c1c",
+  },
   collageActions: {
     flexDirection: "row",
     gap: 12,
@@ -998,5 +1119,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 16,
     backgroundColor: "#f5f4f0",
+  },
+  shareIconButtonDisabled: {
+    opacity: 0.4,
   },
 });
