@@ -14,7 +14,7 @@ import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
 import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
-import { getSharingModule } from "@/lib/sharing";
+import { shareImageAsync } from "@/lib/share-image";
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
 // viewer, but the center action is "download/save" (not share) and there's
@@ -24,15 +24,20 @@ export default function PhotoSaveScreen() {
     locationId?: string;
     poseId?: string;
     poseLabel?: string;
+    poseImageUrl?: string;
+    poseAspectRatio?: string;
     uri?: string;
     personOverlayFrameRatio?: string;
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
   }>();
-  const locationId = resolveLocationId(params.locationId);
+  const locationId = resolveLocationId(params.locationId, params.spotId);
   const poseId = params.poseId ?? "";
+  const selectedPoseId = resolveNumberParam(params.poseId);
   const poseLabel = params.poseLabel ?? "";
+  const poseImageUrl = params.poseImageUrl ?? "";
+  const parsedPoseAspectRatio = Number(params.poseAspectRatio);
   const uri = params.uri ?? "";
   const parsedPersonOverlayFrameRatio = Number(params.personOverlayFrameRatio);
   const personOverlayFrameRatio =
@@ -49,7 +54,18 @@ export default function PhotoSaveScreen() {
   const albumT = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const fallbackPose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const pose = poseImageUrl
+    ? {
+        id: poseId,
+        label: { ko: poseLabel, en: poseLabel, zh: poseLabel, ja: poseLabel },
+        image: { uri: poseImageUrl },
+        aspectRatio:
+          Number.isFinite(parsedPoseAspectRatio) && parsedPoseAspectRatio > 0
+            ? parsedPoseAspectRatio
+            : fallbackPose?.aspectRatio ?? 0.55,
+      }
+    : fallbackPose;
   const compositeRef = useRef<View>(null);
   const compositePhotoUriRef = useRef<string | null>(null);
   const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
@@ -89,23 +105,9 @@ export default function PhotoSaveScreen() {
     if (isSharing || !uri) return;
     setIsSharing(true);
     try {
-      const sharing = await getSharingModule();
-      if (!sharing) {
-        setShowShareUnavailableToast(true);
-        return;
-      }
-
-      const isAvailable = await sharing.isAvailableAsync?.();
-      if (!isAvailable || !sharing.shareAsync) {
-        setShowShareUnavailableToast(true);
-        return;
-      }
-
       const compositeUri = await captureCompositePhoto();
-      await sharing.shareAsync(compositeUri, {
-        mimeType: "image/jpeg",
-        dialogTitle: poseLabel || entry?.name[locale] || mapT.pins[locationId],
-      });
+      const didShare = await shareImageAsync(compositeUri, poseLabel || entry?.name[locale] || mapT.pins[locationId]);
+      if (!didShare) setShowShareUnavailableToast(true);
     } catch (error) {
       console.error("[photo-save] selfie photo share failed", error);
       setShowShareUnavailableToast(true);
@@ -124,7 +126,13 @@ export default function PhotoSaveScreen() {
       let serverSelfiePhotoId: number | undefined;
       if (spotId !== null && storyId !== null && collectionItemId !== null) {
         try {
-          const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
+          const saved = await saveSelfiePhoto({
+            spotId,
+            storyId,
+            collectionItemId,
+            ...(selectedPoseId !== null ? { poseId: selectedPoseId } : {}),
+            photoUri: compositeUri,
+          });
           serverSelfiePhotoId = saved.selfiePhotoId;
         } catch (error) {
           // Server sync is best-effort — the local save below must still
@@ -179,6 +187,7 @@ export default function PhotoSaveScreen() {
               <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
             </View>
           )}
+          {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
         </View>
 
         {poseLabel && (
@@ -294,6 +303,18 @@ const styles = StyleSheet.create({
   photoPersonOverlayImage: {
     width: "100%",
     height: "100%",
+  },
+  photoDisclosureText: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    zIndex: 3,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.92)",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   captionPill: {
     position: "absolute",
