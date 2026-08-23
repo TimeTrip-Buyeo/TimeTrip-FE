@@ -335,37 +335,40 @@ export default function BuyeoCutScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.collagePreview}>
-          <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
-            {selected.map((item, index) => (
-              <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
-                <Image source={item.source} style={styles.frameSlotImage} resizeMode="cover" />
-              </View>
-            ))}
-            {selectedFrame && (
-              <Image
-                source={{ uri: selectedFrame.frameImageUrl }}
-                style={{ position: "absolute", top: 0, left: 0, width: COLLAGE_FRAME_WIDTH, height: COLLAGE_FRAME_HEIGHT }}
-                resizeMode="stretch"
-              />
+        <ScrollView contentContainerStyle={styles.collageScrollContent}>
+          <View style={styles.collagePreview}>
+            <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
+              {selected.map((item, index) => (
+                <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
+                  <Image source={item.source} style={styles.frameSlotImage} resizeMode="cover" />
+                </View>
+              ))}
+              {selectedFrame && (
+                <Image
+                  source={{ uri: selectedFrame.frameImageUrl }}
+                  style={{ position: "absolute", top: 0, left: 0, width: COLLAGE_FRAME_WIDTH, height: COLLAGE_FRAME_HEIGHT }}
+                  resizeMode="stretch"
+                />
+              )}
+            </View>
+
+            <Text style={styles.aiGeneratedDisclaimerText}>{t.aiGeneratedDisclaimerText}</Text>
+
+            {showSaveToast ? (
+              <SaveToast title={t.saveToastTitle} body={t.saveToastBody} />
+            ) : showSaveErrorToast ? (
+              <SaveToast title={t.saveErrorToastTitle} body={t.saveErrorToastBody} />
+            ) : showShareUnsupportedToast ? (
+              <SaveToast title={t.shareUnsupportedToastTitle} body={t.shareUnsupportedToastBody} />
+            ) : (
+              showShareUnavailableToast && (
+                <SaveToast title={t.shareUnavailableToastTitle} body={t.shareUnavailableToastBody} />
+              )
             )}
           </View>
 
-          {showSaveToast ? (
-            <SaveToast title={t.saveToastTitle} body={t.saveToastBody} />
-          ) : showSaveErrorToast ? (
-            <SaveToast title={t.saveErrorToastTitle} body={t.saveErrorToastBody} />
-          ) : showShareUnsupportedToast ? (
-            <SaveToast title={t.shareUnsupportedToastTitle} body={t.shareUnsupportedToastBody} />
-          ) : (
-            showShareUnavailableToast && (
-              <SaveToast title={t.shareUnavailableToastTitle} body={t.shareUnavailableToastBody} />
-            )
-          )}
-        </View>
-
-        <View style={[styles.collageBottom, { paddingBottom: insets.bottom > 0 ? insets.bottom : 32 }]}>
-          <View style={styles.frameSection}>
+          <View style={[styles.collageBottom, { paddingBottom: insets.bottom > 0 ? insets.bottom : 32 }]}>
+            <View style={styles.frameSection}>
             <Text style={styles.frameSectionLabel}>{t.frameSectionLabel}</Text>
             {framesLoadError ? (
               <Text style={styles.frameLoadErrorText}>{t.frameLoadErrorText}</Text>
@@ -404,8 +407,6 @@ export default function BuyeoCutScreen() {
             )}
           </View>
 
-          {!canSaveCollage && <Text style={styles.unsyncedSelectionWarningText}>{t.unsyncedSelectionWarningText}</Text>}
-
           <View style={styles.collageActions}>
             <Pressable
               style={[styles.saveButton, (!canSaveCollage || isSaving) && styles.saveButtonDisabled]}
@@ -431,6 +432,7 @@ export default function BuyeoCutScreen() {
             </Pressable>
           </View>
         </View>
+        </ScrollView>
       </View>
     );
   }
@@ -973,11 +975,20 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 20,
   },
+  // Wrapping collagePreview + collageBottom in a ScrollView (see the
+  // "collage" view's JSX) means nothing gets silently clipped or overlapped
+  // if their combined content is taller than the screen — it just scrolls
+  // instead. flexGrow: 1 keeps the old centered look on screens tall enough
+  // to fit everything without scrolling.
+  collageScrollContent: {
+    flexGrow: 1,
+  },
   collagePreview: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
+    paddingVertical: 16,
     backgroundColor: "rgba(245,244,240,0.4)",
   },
   frameBox: {
@@ -985,6 +996,12 @@ const styles = StyleSheet.create({
     height: COLLAGE_FRAME_HEIGHT,
     position: "relative",
     overflow: "hidden",
+  },
+  aiGeneratedDisclaimerText: {
+    marginTop: 8,
+    fontSize: 10,
+    textAlign: "center",
+    color: "#C8CDD7",
   },
   frameSlot: {
     position: "absolute",
@@ -1059,6 +1076,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   frameOptionButton: {
+    width: 132,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
