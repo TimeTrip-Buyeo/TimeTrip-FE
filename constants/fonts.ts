@@ -17,3 +17,5 @@ export const GUNGSEO_FONT = "NanumMyeongjo_400Regular";
  * own weight) with no `fontWeight` set, rather than GUNGSEO_FONT + fontWeight.
  */
 export const GUNGSEO_FONT_BOLD = "NanumMyeongjo_700Bold";
+
+export const INTER_FONT_REGULAR = "Inter_400Regular";

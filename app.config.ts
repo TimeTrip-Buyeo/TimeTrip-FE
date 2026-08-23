@@ -24,7 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-    permissions: ["android.permission.CAMERA"],
+    permissions: ["android.permission.CAMERA", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"],
     package: "com.anonymous.TimeSlip_buyeo",
   },
   web: {
@@ -54,6 +54,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         recordAudioAndroid: false,
       },
     ],
+    [
+      "expo-location",
+      {
+        locationAlwaysAndWhenInUsePermission:
+          "TimeTrip이 유적지와의 거리를 확인해 타임슬립 오버레이를 보여주려면 위치 접근 권한이 필요해요.",
+      },
+    ],
+    "expo-audio",
+    "expo-asset",
     [
       "@react-native-seoul/kakao-login",
       {

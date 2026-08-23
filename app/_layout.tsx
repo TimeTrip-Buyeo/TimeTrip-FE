@@ -1,3 +1,4 @@
+import { Inter_400Regular } from '@expo-google-fonts/inter';
 import { NanumMyeongjo_400Regular, NanumMyeongjo_700Bold, useFonts } from '@expo-google-fonts/nanum-myeongjo';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
@@ -19,7 +20,7 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({ NanumMyeongjo_400Regular, NanumMyeongjo_700Bold });
+  const [fontsLoaded] = useFonts({ NanumMyeongjo_400Regular, NanumMyeongjo_700Bold, Inter_400Regular });
 
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync();

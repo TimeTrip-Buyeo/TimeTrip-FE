@@ -578,66 +578,85 @@ export const mapScreenText: Record<Locale, MapScreenText> = {
 
 type ArCameraText = {
   arActiveLabel: string;
-  alignInstructionText: string;
   timeSlipCameraTitle: string;
-  /** Figma's own copy literally includes a "[insert basic copy]" placeholder token — kept for ko to match exactly. */
-  collectibleHint: string;
-  audioGuideLabel: string;
-  audioGuideTitle: string;
-  characterName: string;
-  findCollectibleButtonLabel: string;
   cameraPermissionMessage: string;
   grantCameraAccessLabel: string;
+  searchingHintText: string;
+  locationPermissionMessage: string;
+  locationPermissionDeniedMessage: string;
+  grantLocationAccessLabel: string;
+  openSettingsLabel: string;
+  loadingText: string;
+  emptyStateTitle: string;
+  emptyStateMessage: string;
+  audioGuideLabel: string;
+  aiGeneratedImageDisclaimer: string;
 };
 
 export const arCameraText: Record<Locale, ArCameraText> = {
   ko: {
     arActiveLabel: 'AR 작동 중',
-    alignInstructionText: '과거 건물을 현재 배경에 맞추세요',
     timeSlipCameraTitle: '타임슬립 카메라',
-    collectibleHint: '기본문구 + 해당 장소에서 컬랙션 대상을 획득해보세요!',
-    audioGuideLabel: '오디오 가이드',
-    audioGuideTitle: '법왕이 왕흥사를 창건, 승려들의 출가를 허하다',
-    characterName: '법왕',
-    findCollectibleButtonLabel: '인물 또는 유물을 찾아 떠나보세요!',
     cameraPermissionMessage: 'AR 카메라를 사용하려면 카메라 권한이 필요해요.',
     grantCameraAccessLabel: '카메라 권한 허용하기',
+    searchingHintText: '유적지에 가까이 다가가면 타임슬립이 시작돼요',
+    locationPermissionMessage: '위치 권한을 켜면 타임슬립을 시작할 수 있어요',
+    locationPermissionDeniedMessage: '설정에서 위치 권한을 허용해주세요',
+    grantLocationAccessLabel: '위치 권한 허용하기',
+    openSettingsLabel: '설정으로 이동',
+    loadingText: '불러오는 중...',
+    emptyStateTitle: '이번 달은 준비 중이에요',
+    emptyStateMessage: '이 장소는 이번 달엔 특별 테마가 없어요. 다음 달에 다시 찾아주세요!',
+    audioGuideLabel: '오디오 가이드',
+    aiGeneratedImageDisclaimer: '* AI로 생성한 이미지입니다.',
   },
   en: {
     arActiveLabel: 'AR ACTIVE',
-    alignInstructionText: 'Align the past building with your current view',
     timeSlipCameraTitle: 'Time Slip Camera',
-    collectibleHint: "Collect this location's item!",
-    audioGuideLabel: 'Audio Guide',
-    audioGuideTitle: 'King Beopwang founds Wangheungsa Temple, permitting monks to take vows',
-    characterName: 'King Beopwang',
-    findCollectibleButtonLabel: 'Go find a figure or an artifact!',
     cameraPermissionMessage: 'Camera access is needed to use the AR camera.',
     grantCameraAccessLabel: 'Grant Camera Access',
+    searchingHintText: 'Get closer to the site to start the time slip',
+    locationPermissionMessage: 'Turn on location access to start the time slip',
+    locationPermissionDeniedMessage: 'Please allow location access in Settings',
+    grantLocationAccessLabel: 'Allow Location Access',
+    openSettingsLabel: 'Open Settings',
+    loadingText: 'Loading...',
+    emptyStateTitle: 'Nothing special this month',
+    emptyStateMessage: "This site doesn't have a special theme this month. Please check back next month!",
+    audioGuideLabel: 'Audio Guide',
+    aiGeneratedImageDisclaimer: '* Generated using AI.',
   },
   zh: {
     arActiveLabel: 'AR 已启用',
-    alignInstructionText: '将过去的建筑与当前背景对齐',
     timeSlipCameraTitle: '时空穿越相机',
-    collectibleHint: '在此地点获取收藏品吧!',
-    audioGuideLabel: '语音导览',
-    audioGuideTitle: '法王创建王兴寺，准许僧侣出家',
-    characterName: '法王',
-    findCollectibleButtonLabel: '快去寻找人物或文物吧！',
     cameraPermissionMessage: '使用AR相机需要相机权限。',
     grantCameraAccessLabel: '允许使用相机',
+    searchingHintText: '靠近遗址即可开始时空穿越',
+    locationPermissionMessage: '开启位置权限即可开始时空穿越',
+    locationPermissionDeniedMessage: '请在设置中允许位置权限',
+    grantLocationAccessLabel: '允许位置权限',
+    openSettingsLabel: '前往设置',
+    loadingText: '加载中...',
+    emptyStateTitle: '本月暂无特别主题',
+    emptyStateMessage: '该地点本月没有特别主题，请下个月再来看看！',
+    audioGuideLabel: '语音导览',
+    aiGeneratedImageDisclaimer: '* 该图像由AI生成。',
   },
   ja: {
     arActiveLabel: 'AR起動中',
-    alignInstructionText: '過去の建物を現在の背景に合わせてください',
     timeSlipCameraTitle: 'タイムスリップカメラ',
-    collectibleHint: 'この場所でコレクションを手に入れよう!',
-    audioGuideLabel: '音声ガイド',
-    audioGuideTitle: '法王が王興寺を創建し、僧侶の出家を許す',
-    characterName: '法王',
-    findCollectibleButtonLabel: '人物や遺物を探しに行きましょう！',
     cameraPermissionMessage: 'ARカメラを使用するにはカメラへのアクセス許可が必要です。',
     grantCameraAccessLabel: 'カメラへのアクセスを許可',
+    searchingHintText: '遺跡に近づくとタイムスリップが始まります',
+    locationPermissionMessage: '位置情報の権限をオンにするとタイムスリップを始められます',
+    locationPermissionDeniedMessage: '設定で位置情報へのアクセスを許可してください',
+    grantLocationAccessLabel: '位置情報へのアクセスを許可',
+    openSettingsLabel: '設定を開く',
+    loadingText: '読み込み中...',
+    emptyStateTitle: '今月は準備中です',
+    emptyStateMessage: 'この場所は今月特別なテーマがありません。来月また訪れてください！',
+    audioGuideLabel: '音声ガイド',
+    aiGeneratedImageDisclaimer: '* この画像はAIで生成されました。',
   },
 };
 
@@ -747,6 +766,8 @@ type CollectibleAcquiredText = {
   newAcquiredSuffix: string;
   /** Appended directly after the collectible's name (Figma's own example hardcodes the 이/가 particle rather than varying it per name). */
   addedToCollectionSuffix: string;
+  /** Item-card caption — deliberately name-free since the name is already shown in the subtitle above and on the card itself. */
+  genericAcquiredMessage: string;
   takePhotoButtonLabel: string;
   viewCollectionButtonLabel: string;
   closeButtonAccessibilityLabel: string;
@@ -763,6 +784,7 @@ export const collectibleAcquiredText: Record<Locale, CollectibleAcquiredText> = 
     artifactLabel: '유물',
     newAcquiredSuffix: '  획득!',
     addedToCollectionSuffix: '이 컬렉션에 추가되었어요.',
+    genericAcquiredMessage: '획득 완료! 도감에서 확인해보세요.',
     takePhotoButtonLabel: '사진 찍기',
     viewCollectionButtonLabel: '도감 보기',
     closeButtonAccessibilityLabel: '닫기',
@@ -773,6 +795,7 @@ export const collectibleAcquiredText: Record<Locale, CollectibleAcquiredText> = 
     artifactLabel: 'Artifact',
     newAcquiredSuffix: ' Acquired!',
     addedToCollectionSuffix: ' has been added to your collection.',
+    genericAcquiredMessage: 'Acquired! Check it out in your collection.',
     takePhotoButtonLabel: 'Take a Photo',
     viewCollectionButtonLabel: 'View Collection',
     closeButtonAccessibilityLabel: 'Close',
@@ -783,6 +806,7 @@ export const collectibleAcquiredText: Record<Locale, CollectibleAcquiredText> = 
     artifactLabel: '文物',
     newAcquiredSuffix: '获得！',
     addedToCollectionSuffix: '已添加到收藏。',
+    genericAcquiredMessage: '获得成功！快去图鉴查看吧。',
     takePhotoButtonLabel: '去拍照',
     viewCollectionButtonLabel: '查看图鉴',
     closeButtonAccessibilityLabel: '关闭',
@@ -793,6 +817,7 @@ export const collectibleAcquiredText: Record<Locale, CollectibleAcquiredText> = 
     artifactLabel: '遺物',
     newAcquiredSuffix: '獲得！',
     addedToCollectionSuffix: 'がコレクションに追加されました。',
+    genericAcquiredMessage: '獲得完了！図鑑で確認してみてください。',
     takePhotoButtonLabel: '写真を撮る',
     viewCollectionButtonLabel: '図鑑を見る',
     closeButtonAccessibilityLabel: '閉じる',

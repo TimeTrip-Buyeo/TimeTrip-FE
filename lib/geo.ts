@@ -1,0 +1,21 @@
+// Radius judgement is 100% client-side — coordinates never leave the device
+// (see AR camera integration spec). 100m enter / 90m exit hysteresis avoids
+// SEARCHING/READY flicker from GPS jitter near the boundary.
+export const AR_TIMESLIP_ENTER_RADIUS_METERS = 100;
+export const AR_TIMESLIP_EXIT_RADIUS_METERS = 90;
+
+const EARTH_RADIUS_METERS = 6371000;
+
+function toRadians(degrees: number) {
+  return (degrees * Math.PI) / 180;
+}
+
+export function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_METERS * c;
+}
