@@ -1,6 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -11,6 +12,7 @@ import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
 import { mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
+import { toApiUrl } from "@/lib/api/client";
 import {
   getLocalizedSpotName,
   getSpotDetail,
@@ -21,6 +23,54 @@ import {
   type SpotDetail,
   type SpotStory,
 } from "@/lib/api/spots";
+
+// "화면 2" per the AR-camera integration spec — the map pin's audio card is
+// an independent entry point from the AR camera (special-guide-only) flow,
+// so a basic-guide spot just plays its audio here and never navigates, with
+// no acquire call. Keyed by spotId+filePath from the parent so switching
+// spots/story remounts (and thus stops/resets) the player.
+function SpotDetailPlayButton({
+  isSpecial,
+  audioGuide,
+  onNavigateToArCamera,
+}: {
+  isSpecial: boolean;
+  audioGuide: SpotStory["audioGuide"];
+  onNavigateToArCamera: () => void;
+}) {
+  const source = useMemo(() => (audioGuide ? { uri: toApiUrl(audioGuide.filePath) } : undefined), [audioGuide]);
+  const player = useAudioPlayer(source);
+  const status = useAudioPlayerStatus(player);
+
+  if (isSpecial) {
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.detailCardPlayButton, pressed && styles.detailCardPlayButtonPressed]}
+        onPress={onNavigateToArCamera}>
+        <FontAwesome5 name="volume-up" size={18} color="#fff" solid />
+      </Pressable>
+    );
+  }
+
+  const handlePress = () => {
+    if (!audioGuide) return;
+    if (status.playing) {
+      player.pause();
+      return;
+    }
+    if (status.didJustFinish) player.seekTo(0);
+    player.play();
+  };
+
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.detailCardPlayButton, pressed && styles.detailCardPlayButtonPressed]}
+      onPress={handlePress}
+      disabled={!audioGuide}>
+      <FontAwesome5 name={status.playing ? "pause" : "volume-up"} size={18} color="#fff" solid />
+    </Pressable>
+  );
+}
 
 export default function MapScreen() {
   const { locale, setLocale } = useLanguage();
@@ -35,6 +85,8 @@ export default function MapScreen() {
   const t = mapScreenText[locale];
   const selectedSpot = selectedSpotDetail ?? spots.find((spot) => spot.id === selectedSpotId) ?? null;
   const isTourSpot = selectedSpot?.spotType === "TOUR";
+  // Canonical flag straight from the spot detail — not derived from
+  // getSpotStory's storyType, which can drift from this field.
   const isSelectedSpecial = !isTourSpot && isCurrentSpecialSpot(selectedSpotDetail);
   const selectedSpotMessage = selectedSpot
     ? isTourSpot
@@ -187,12 +239,16 @@ export default function MapScreen() {
                   <Text style={styles.detailCardOverlayText}>{selectedSpotMessage}</Text>
                 </View>
               </View>
-              {/* Tapping this is a stand-in trigger for now. Eventually arriving
-                  at the location's real GPS coordinates should open the AR
-                  camera automatically instead of requiring a manual tap. */}
-              <Pressable
-                style={({ pressed }) => [styles.detailCardPlayButton, pressed && styles.detailCardPlayButtonPressed]}
-                onPress={() =>
+              {/* Special-guide spots navigate to the AR camera (tapping is a
+                  stand-in trigger for now — eventually arriving at the real
+                  GPS coordinates should open it automatically). Basic-guide
+                  spots never navigate — they just play the audio guide right
+                  here, per the spec's independent "화면 2" entry point. */}
+              <SpotDetailPlayButton
+                key={`${selectedSpot.id}-${selectedSpotStory?.audioGuide?.filePath ?? "none"}`}
+                isSpecial={isSelectedSpecial}
+                audioGuide={selectedSpotStory?.audioGuide ?? null}
+                onNavigateToArCamera={() =>
                   router.push({
                     pathname: "/ar-camera",
                     params: {
@@ -204,9 +260,8 @@ export default function MapScreen() {
                       ...(selectedSpotStory ? { storyId: String(selectedSpotStory.storyId) } : {}),
                     },
                   })
-                }>
-                <FontAwesome5 name="volume-up" size={18} color="#fff" solid />
-              </Pressable>
+                }
+              />
             </View>
           </View>
         )}

@@ -1,28 +1,96 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  LayoutAnimation,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ImageSourcePropType,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CollectibleAcquiredModal } from "@/components/collectible-acquired-modal";
 import { LanguageLegendModal } from "@/components/onboarding/language-legend-modal";
-import { COLLECTIBLES } from "@/constants/collectibles";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { arCameraText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
+import { arCameraText, collectibleAcquiredText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { getCollectionItems, type CollectionItem } from "@/lib/api/collections";
+import { acquireCollectionItem, type AcquireCollectionItemResult } from "@/lib/api/collections";
+import {
+  getSpotDetail,
+  getSpotTimeslip,
+  getStoryAudioGuide,
+  type SpotDetail,
+  type SpotTimeslip,
+  type StoryAudioGuide,
+} from "@/lib/api/spots";
+import { toApiUrl } from "@/lib/api/client";
+import { AR_TIMESLIP_ENTER_RADIUS_METERS, AR_TIMESLIP_EXIT_RADIUS_METERS, distanceMeters } from "@/lib/geo";
 import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
-// Placeholder — no real audio guide asset is wired up yet, so pressing play
-// simulates a few seconds of playback to demonstrate the finished-gating
-// flow. Swap for a real onPlaybackStatusUpdate(didJustFinish) once the audio
-// guide ships.
-const AUDIO_GUIDE_PLACEHOLDER_DURATION_MS = 3000;
+// Screen is visible from onStart(mount) to onStop(unmount) only — the watch
+// subscription below is torn down on unmount, matching the spec's "화면이
+// 보이는 동안만 5~10초 간격으로 위치 업데이트".
+const LOCATION_POLL_INTERVAL_MS = 7000;
+
+// TEST-ONLY: skips the GPS radius check entirely so the overlay always shows
+// as soon as this screen is entered, regardless of distance to the spot.
+// Flip back to false to restore the real 100m/90m enter/exit radius gate.
+const AR_TIMESLIP_TEST_BYPASS_RADIUS_CHECK = true;
+
+// SEARCHING → READY / EMPTY ↔ SEARCHING transitions only — never gates
+// screen entry (see lib/geo.ts for the enter/exit hysteresis values).
+type GeoState = "searching" | "loading" | "ready" | "empty";
 
 function resolveSpotTitle(raw: string | string[] | undefined) {
   return resolveSingleParam(raw) || null;
+}
+
+function AudioGuideButton({ guide, onFinished }: { guide: StoryAudioGuide; onFinished: () => void }) {
+  const resolvedUri = toApiUrl(guide.filePath);
+  const source = useMemo(() => ({ uri: resolvedUri }), [resolvedUri]);
+  const player = useAudioPlayer(source);
+  const status = useAudioPlayerStatus(player);
+  const [isFinished, setIsFinished] = useState(false);
+
+  useEffect(() => {
+    if (status.didJustFinish) {
+      setIsFinished(true);
+      onFinished();
+    }
+  }, [status.didJustFinish, onFinished]);
+
+  const handlePress = () => {
+    if (isFinished) {
+      setIsFinished(false);
+      player.seekTo(0).then(() => player.play());
+      return;
+    }
+    if (status.playing) {
+      player.pause();
+    } else {
+      player.play();
+    }
+  };
+
+  return (
+    <Pressable style={styles.audioPlayButton} onPress={handlePress}>
+      <FontAwesome5
+        name={isFinished ? "redo" : status.playing ? "volume-up" : "play"}
+        size={10}
+        color="#b8860b"
+        solid
+      />
+    </Pressable>
+  );
 }
 
 export default function ArCameraScreen() {
@@ -30,7 +98,6 @@ export default function ArCameraScreen() {
   const locationId = resolveLocationId(params.locationId, params.spotId, "busosanseong");
   const spotTitle = resolveSpotTitle(params.spotName);
   const spotId = resolveNumberParam(params.spotId);
-  const storyId = resolveNumberParam(params.storyId);
   const insets = useSafeAreaInsets();
 
   const { locale, setLocale } = useLanguage();
@@ -39,14 +106,22 @@ export default function ArCameraScreen() {
   // (all details visible) and "peeked" down to a single row so more of the
   // camera view shows through — "스크롤로 전체화면 가능". Toggled by the drag handle.
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
-
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [isAudioFinished, setIsAudioFinished] = useState(false);
   const [isAcquiredModalVisible, setIsAcquiredModalVisible] = useState(false);
-  const [collectionItem, setCollectionItem] = useState<CollectionItem | null>(null);
-  const collectible = COLLECTIBLES[locationId];
+  const [acquireResult, setAcquireResult] = useState<AcquireCollectionItemResult | null>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
+  const [locationPermission, requestLocationPermission] = Location.useForegroundPermissions();
+
+  const [spotDetail, setSpotDetail] = useState<SpotDetail | null>(null);
+  const [geoState, setGeoState] = useState<GeoState>("searching");
+  const [timeslip, setTimeslip] = useState<SpotTimeslip | null>(null);
+  const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
+  const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
+
+  // Keyed by `${spotId}:${month}` so a SEARCHING→READY round-trip reuses the
+  // cached response instead of re-hitting the API (content doesn't change
+  // within the same month — see integration spec).
+  const timeslipCacheRef = useRef<{ key: string; data: SpotTimeslip | null } | null>(null);
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -55,26 +130,119 @@ export default function ArCameraScreen() {
   }, [permission, requestPermission]);
 
   useEffect(() => {
-    if (collectible?.type !== "person" || spotId === null || storyId === null) {
-      setCollectionItem(null);
+    if (locationPermission?.status === Location.PermissionStatus.UNDETERMINED) {
+      requestLocationPermission();
+    }
+  }, [locationPermission?.status, requestLocationPermission]);
+
+  useEffect(() => {
+    if (spotId === null) return;
+    let isActive = true;
+    getSpotDetail(spotId)
+      .then((detail) => {
+        if (isActive) setSpotDetail(detail);
+      })
+      .catch((error) => console.error("[ar-camera] spot detail lookup failed", error));
+    return () => {
+      isActive = false;
+    };
+  }, [spotId]);
+
+  useEffect(() => {
+    if (!locationPermission?.granted) return;
+
+    if (AR_TIMESLIP_TEST_BYPASS_RADIUS_CHECK) {
+      if (spotDetail !== null) {
+        setGeoState((prev) => (prev === "searching" ? "loading" : prev));
+      }
       return;
     }
 
     let isActive = true;
-    getCollectionItems(storyId, { spotId, locale, type: "CHARACTER" })
-      .then(({ items }) => {
+    let subscription: Location.LocationSubscription | null = null;
+
+    Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: LOCATION_POLL_INTERVAL_MS, distanceInterval: 5 },
+      (location) => {
+        if (!isActive || spotDetail === null) return;
+        const distance = distanceMeters(
+          location.coords.latitude,
+          location.coords.longitude,
+          spotDetail.latitude,
+          spotDetail.longitude,
+        );
+        setGeoState((prev) => {
+          if (prev === "searching" && distance <= AR_TIMESLIP_ENTER_RADIUS_METERS) return "loading";
+          if ((prev === "ready" || prev === "empty") && distance > AR_TIMESLIP_EXIT_RADIUS_METERS) return "searching";
+          return prev;
+        });
+      },
+    ).then((sub) => {
+      if (isActive) subscription = sub;
+      else sub.remove();
+    });
+
+    return () => {
+      isActive = false;
+      subscription?.remove();
+    };
+  }, [locationPermission?.granted, spotDetail]);
+
+  // Fires exactly once per SEARCHING→READY transition — never on the
+  // repeated position callbacks above.
+  useEffect(() => {
+    if (geoState !== "loading" || spotId === null) return;
+    let isActive = true;
+    const month = new Date().getMonth() + 1;
+    const cacheKey = `${spotId}:${month}`;
+
+    if (timeslipCacheRef.current?.key === cacheKey) {
+      const cached = timeslipCacheRef.current.data;
+      setTimeslip(cached);
+      setGeoState(cached ? "ready" : "empty");
+      return;
+    }
+
+    getSpotTimeslip(spotId, { month, language: locale })
+      .then((data) => {
         if (!isActive) return;
-        setCollectionItem(items[0] ?? null);
+        timeslipCacheRef.current = { key: cacheKey, data };
+        setTimeslip(data);
+        setGeoState(data ? "ready" : "empty");
       })
       .catch((error) => {
-        console.error("[ar-camera] collection item lookup failed", error);
-        if (isActive) setCollectionItem(null);
+        console.error("[ar-camera] timeslip lookup failed", error);
+        if (isActive) setGeoState("searching");
       });
 
     return () => {
       isActive = false;
     };
-  }, [collectible?.type, locale, spotId, storyId]);
+  }, [geoState, spotId, locale]);
+
+  useEffect(() => {
+    if (geoState !== "ready" || !timeslip) {
+      setActiveAudioGuide(null);
+      return;
+    }
+    setActiveAudioGuide(timeslip.audioGuide);
+    setIsCollectionItemAcquired(timeslip.collectionItem.isAcquired);
+  }, [geoState, timeslip]);
+
+  // Language switch re-fetches only the audio guide, not the whole timeslip
+  // response, per spec.
+  useEffect(() => {
+    if (geoState !== "ready" || !timeslip?.audioGuide || locale === timeslip.audioGuide.language) return;
+    let isActive = true;
+    getStoryAudioGuide(timeslip.storyId, { spotId: timeslip.spotId, language: locale })
+      .then((guide) => {
+        if (isActive && guide) setActiveAudioGuide(guide);
+      })
+      .catch((error) => console.error("[ar-camera] audio guide lookup failed", error));
+    return () => {
+      isActive = false;
+    };
+  }, [locale, geoState, timeslip]);
 
   const mapT = mapScreenText[locale];
   const t = arCameraText[locale];
@@ -90,14 +258,34 @@ export default function ArCameraScreen() {
     setIsLegendVisible(false);
   };
 
-  const handlePlayAudio = () => {
-    if (isAudioPlaying || isAudioFinished) return;
-    setIsAudioPlaying(true);
-    setTimeout(() => {
-      setIsAudioPlaying(false);
-      setIsAudioFinished(true);
-    }, AUDIO_GUIDE_PLACEHOLDER_DURATION_MS);
-  };
+  const handleAudioFinished = useCallback(() => {
+    if (!timeslip || isCollectionItemAcquired) return;
+    const itemId = timeslip.collectionItem.collectionItemId;
+
+    acquireCollectionItem(itemId)
+      .then((result) => {
+        // null means 409 (already acquired) — ignored silently per spec.
+        setIsCollectionItemAcquired(true);
+        if (result) {
+          setAcquireResult(result);
+          setIsAcquiredModalVisible(true);
+        }
+      })
+      .catch((error) => {
+        console.error("[ar-camera] acquire failed", error);
+      });
+  }, [timeslip, isCollectionItemAcquired]);
+
+  const locationDeniedForever = locationPermission !== null && !locationPermission.granted && !locationPermission.canAskAgain;
+  const characterCardImageUrl = timeslip
+    ? isCollectionItemAcquired
+      ? (timeslip.collectionItem.cardImageUrl ?? timeslip.collectionItem.beforeImageUrl)
+      : (timeslip.collectionItem.beforeImageUrl ?? timeslip.collectionItem.cardImageUrl)
+    : null;
+  const acquireImageUrl = acquireResult?.cardImageUrl ?? timeslip?.collectionItem.cardImageUrl ?? null;
+  const acquireImageSource: ImageSourcePropType = acquireImageUrl
+    ? { uri: acquireImageUrl }
+    : require("@/assets/images/icon.png");
 
   return (
     <View style={styles.container}>
@@ -130,115 +318,177 @@ export default function ArCameraScreen() {
         </View>
       </LinearGradient>
 
-      {/* AR alignment guide — where the saved historical image for this
-          location will be overlaid onto the live camera feed once that
-          asset pipeline exists. */}
-      <View style={styles.guideBoxWrapper} pointerEvents="none">
-        <View style={styles.guideBox}>
-          <FontAwesome5 name="expand" size={60} color="rgba(255,255,255,0.3)" solid />
-          <View style={styles.guideCaption}>
-            <Text style={styles.guideCaptionText}>{t.alignInstructionText}</Text>
-          </View>
-        </View>
-        <Text style={styles.imageDisclosureText}>{t.aiImageDisclosure}</Text>
-      </View>
-
-      {isLegendVisible && (
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsLegendVisible(false)} />
-      )}
-
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
-        <Pressable style={styles.dragHandle} onPress={toggleSheet} hitSlop={8}>
-          <View style={[styles.dragHandleIcon, !isSheetExpanded && styles.dragHandleIconCollapsed]}>
-            <FontAwesome5
-              name="chevron-left"
-              size={16}
-              color="#1b1b1b"
-              solid
-              style={{ transform: [{ rotate: "-90deg" }] }}
+      {/* Guide/overlay area and sheet share one flex column so expanding the
+          sheet (which grows taller) shrinks the guide area above it instead
+          of the sheet covering the overlay image — both resize in the same
+          layout pass toggleSheet's LayoutAnimation already animates. */}
+      <View style={styles.contentColumn} pointerEvents="box-none">
+        <View style={styles.guideBoxWrapper} pointerEvents="none">
+          {geoState === "ready" && timeslip && timeslip.overlayImageUrl ? (
+            <Image
+              source={{ uri: timeslip.overlayImageUrl }}
+              style={styles.overlayImage}
+              contentFit="contain"
             />
-          </View>
-        </Pressable>
-
-        <View style={styles.sheetHeaderRow}>
-          <View style={styles.sheetHeaderIcon}>
-            <FontAwesome5 name="camera-retro" size={12} color="#fff" solid />
-          </View>
-          <Text style={styles.sheetHeaderTitle}>{t.timeSlipCameraTitle}</Text>
-        </View>
-
-        {isSheetExpanded && (
-          <>
-            <View style={styles.characterCard}>
-              <View style={styles.characterAvatar}>
-                <FontAwesome5 name="user" size={26} color="#800000" solid />
-              </View>
-              <View style={styles.characterBody}>
-                <Text style={styles.characterName}>{t.characterName}</Text>
-                <Text style={styles.characterDescription}>{t.collectibleHint}</Text>
+          ) : geoState === "ready" && timeslip ? (
+            <View style={styles.guideBox}>
+              <FontAwesome5 name="image" size={52} color="rgba(255,255,255,0.3)" solid />
+              <View style={styles.guideCaption}>
+                <Text style={styles.guideCaptionText}>{timeslip.guideText}</Text>
               </View>
             </View>
-
-            {/* Placeholder trigger — later this unlocks automatically once
-                GPS confirms the visitor is physically at this location,
-                instead of being manually tappable. */}
-            <View style={styles.audioRow}>
-              <Pressable
-                style={styles.audioPlayButton}
-                onPress={handlePlayAudio}
-                disabled={isAudioPlaying || isAudioFinished}>
-                <FontAwesome5
-                  name={isAudioFinished ? "check" : isAudioPlaying ? "volume-up" : "play"}
-                  size={10}
-                  color="#b8860b"
-                  solid
-                />
-              </Pressable>
-              <View style={styles.audioTextColumn}>
-                <Text style={styles.audioLabel}>{t.audioGuideLabel}</Text>
-                <Text style={styles.audioTitle}>{t.audioGuideTitle}</Text>
+          ) : geoState === "loading" ? (
+            <View style={styles.guideBox}>
+              <ActivityIndicator color="rgba(255,255,255,0.85)" />
+            </View>
+          ) : geoState === "empty" ? (
+            <View style={styles.guideBox}>
+              <FontAwesome5 name="calendar-times" size={52} color="rgba(255,255,255,0.3)" solid />
+              <View style={styles.guideCaption}>
+                <Text style={styles.guideCaptionText}>{t.emptyStateTitle}</Text>
               </View>
-              <Pressable
-                style={[styles.langBadge, isLegendVisible && styles.langBadgeActive]}
-                onPress={() => setIsLegendVisible((visible) => !visible)}
-                hitSlop={8}>
-                <FontAwesome5 name="globe" size={10} color={isLegendVisible ? "#fff" : "#b8860b"} solid />
-                <Text style={[styles.langBadgeText, isLegendVisible && styles.langBadgeTextActive]}>
-                  {currentLocaleMeta.badgeLabel}
-                </Text>
-              </Pressable>
-              {isLegendVisible && (
-                <View style={styles.legendAnchor}>
-                  <LanguageLegendModal currentLocale={locale} onSelect={handleSelectLocale} />
+            </View>
+          ) : (
+            <View style={styles.guideBox}>
+              <FontAwesome5 name="expand" size={60} color="rgba(255,255,255,0.3)" solid />
+              <View style={styles.guideCaption}>
+                <Text style={styles.guideCaptionText}>{t.searchingHintText}</Text>
+              </View>
+            </View>
+          )}
+          <Text style={styles.imageDisclosureText}>{t.aiImageDisclosure}</Text>
+        </View>
+
+        {isLegendVisible && (
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsLegendVisible(false)} />
+        )}
+
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+          <Pressable style={styles.dragHandle} onPress={toggleSheet} hitSlop={8}>
+            <View style={[styles.dragHandleIcon, !isSheetExpanded && styles.dragHandleIconCollapsed]}>
+              <FontAwesome5
+                name="chevron-left"
+                size={16}
+                color="#1b1b1b"
+                solid
+                style={{ transform: [{ rotate: "-90deg" }] }}
+              />
+            </View>
+          </Pressable>
+
+          <View style={styles.sheetHeaderRow}>
+            <View style={styles.sheetHeaderIcon}>
+              <FontAwesome5 name="camera-retro" size={12} color="#fff" solid />
+            </View>
+            <Text style={styles.sheetHeaderTitle}>{t.timeSlipCameraTitle}</Text>
+          </View>
+
+          {isSheetExpanded && (
+            <>
+              {geoState === "ready" && timeslip && (
+                <>
+                  <View style={styles.characterCard}>
+                    {characterCardImageUrl ? (
+                      <Image
+                        source={{ uri: characterCardImageUrl }}
+                        style={styles.characterAvatarImage}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={styles.characterAvatar}>
+                        <FontAwesome5 name="user" size={26} color="#800000" solid />
+                      </View>
+                    )}
+                    <View style={styles.characterBody}>
+                      <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
+                      <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
+                    </View>
+                  </View>
+
+                  {activeAudioGuide && (
+                    <View style={styles.audioRow}>
+                      <AudioGuideButton
+                        key={activeAudioGuide.filePath}
+                        guide={activeAudioGuide}
+                        onFinished={handleAudioFinished}
+                      />
+                      <View style={styles.audioTextColumn}>
+                        <Text style={styles.audioLabel}>{t.audioGuideLabel}</Text>
+                        <Text style={styles.audioTitle}>{activeAudioGuide.title}</Text>
+                      </View>
+                      <Pressable
+                        style={[styles.langBadge, isLegendVisible && styles.langBadgeActive]}
+                        onPress={() => setIsLegendVisible((visible) => !visible)}
+                        hitSlop={8}>
+                        <FontAwesome5 name="globe" size={10} color={isLegendVisible ? "#fff" : "#b8860b"} solid />
+                        <Text style={[styles.langBadgeText, isLegendVisible && styles.langBadgeTextActive]}>
+                          {currentLocaleMeta.badgeLabel}
+                        </Text>
+                      </Pressable>
+                      {isLegendVisible && (
+                        <View style={styles.legendAnchor}>
+                          <LanguageLegendModal currentLocale={locale} onSelect={handleSelectLocale} />
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {geoState === "loading" && (
+                <View style={styles.stateRow}>
+                  <ActivityIndicator color="#800000" />
+                  <Text style={styles.stateText}>{t.loadingText}</Text>
                 </View>
               )}
-            </View>
 
-            {/* Hidden until the audio guide finishes playing. */}
-            {isAudioFinished && (
-              <Pressable style={styles.findButton} onPress={() => setIsAcquiredModalVisible(true)}>
-                <Text style={styles.findButtonText}>{t.findCollectibleButtonLabel}</Text>
-              </Pressable>
-            )}
+              {geoState === "empty" && (
+                <View style={styles.stateRow}>
+                  <Text style={styles.stateTitle}>{t.emptyStateTitle}</Text>
+                  <Text style={styles.stateText}>{t.emptyStateMessage}</Text>
+                </View>
+              )}
 
-            <View style={styles.navIndicator} />
-          </>
-        )}
+              {geoState === "searching" && (
+                <View style={styles.stateRow}>
+                  <Text style={styles.stateText}>
+                    {!locationPermission?.granted
+                      ? locationDeniedForever
+                        ? t.locationPermissionDeniedMessage
+                        : t.locationPermissionMessage
+                      : t.searchingHintText}
+                  </Text>
+                  {!locationPermission?.granted && (
+                    <Pressable
+                      style={styles.locationPermissionButton}
+                      onPress={locationDeniedForever ? Linking.openSettings : requestLocationPermission}>
+                      <Text style={styles.locationPermissionButtonText}>
+                        {locationDeniedForever ? t.openSettingsLabel : t.grantLocationAccessLabel}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+
+              <View style={styles.navIndicator} />
+            </>
+          )}
+        </View>
       </View>
 
-      {isAcquiredModalVisible && collectible && (
+      {isAcquiredModalVisible && acquireResult && (
         <CollectibleAcquiredModal
-          type={collectible.type}
-          name={collectible.name[locale]}
-          description={collectible.description[locale]}
-          image={collectible.image}
+          type={acquireResult.isCharacter ? "person" : "artifact"}
+          name={acquireResult.name}
+          description={collectibleAcquiredText[locale].genericAcquiredMessage}
+          image={acquireImageSource}
           onClose={() => setIsAcquiredModalVisible(false)}
           onViewCollection={() => {
             setIsAcquiredModalVisible(false);
             router.push({ pathname: "/collection", params: { locationId } });
           }}
           onTakePhoto={
-            collectible.type === "person"
+            acquireResult.isCharacter
               ? () => {
                   setIsAcquiredModalVisible(false);
                   router.push({
@@ -246,8 +496,8 @@ export default function ArCameraScreen() {
                     params: {
                       locationId,
                       ...(spotId !== null ? { spotId: String(spotId) } : {}),
-                      ...(storyId !== null ? { storyId: String(storyId) } : {}),
-                      ...(collectionItem ? { collectionItemId: String(collectionItem.collectionItemId) } : {}),
+                      ...(timeslip ? { storyId: String(timeslip.storyId) } : {}),
+                      collectionItemId: String(acquireResult.collectionItemId),
                     },
                   });
                 }
@@ -328,8 +578,12 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     color: "#fff",
   },
-  guideBoxWrapper: {
+  contentColumn: {
     ...StyleSheet.absoluteFillObject,
+    flexDirection: "column",
+  },
+  guideBoxWrapper: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -343,6 +597,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
+  },
+  overlayImage: {
+    width: 317,
+    height: 360,
+    opacity: 0.78,
   },
   guideCaption: {
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -366,10 +625,6 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   sheet: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     backgroundColor: "#fdfcf8",
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
@@ -424,6 +679,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     alignItems: "center",
     justifyContent: "center",
+  },
+  characterAvatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: "#f3f4f6",
   },
   characterBody: {
     flex: 1,
@@ -508,22 +769,32 @@ const styles = StyleSheet.create({
     marginTop: 8,
     zIndex: 10,
   },
-  // Matches Figma exactly (node 110:146): a single full-width CTA, not the
-  // 3-button camera-control row (album/shutter/share) this screen had
-  // before — that trio wasn't in the design and the shutter/share buttons
-  // didn't do anything (no AR capture pipeline exists here).
-  findButton: {
-    alignSelf: "stretch",
+  stateRow: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 16,
-    backgroundColor: "#800000",
+    gap: 12,
+    paddingVertical: 12,
   },
-  findButtonText: {
-    fontFamily: "serif",
+  stateTitle: {
+    fontFamily: GUNGSEO_FONT_BOLD,
+    fontSize: 14,
+    color: "#1b1b1b",
+    textAlign: "center",
+  },
+  stateText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#6b7280",
+    textAlign: "center",
+  },
+  locationPermissionButton: {
+    backgroundColor: "#800000",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 9999,
+  },
+  locationPermissionButtonText: {
+    fontSize: 12.5,
     fontWeight: "700",
-    fontSize: 16,
     color: "#fff",
   },
   navIndicator: {
