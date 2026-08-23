@@ -47,15 +47,20 @@ export default function PhotoSaveScreen() {
     locationId?: string;
     poseId?: string;
     poseLabel?: string;
+    poseImageUrl?: string;
+    poseAspectRatio?: string;
     uri?: string;
     personOverlayFrameRatio?: string;
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
   }>();
-  const locationId = resolveLocationId(params.locationId);
+  const locationId = resolveLocationId(params.locationId, params.spotId);
   const poseId = params.poseId ?? "";
+  const selectedPoseId = resolveNumberParam(params.poseId);
   const poseLabel = params.poseLabel ?? "";
+  const poseImageUrl = params.poseImageUrl ?? "";
+  const parsedPoseAspectRatio = Number(params.poseAspectRatio);
   const uri = params.uri ?? "";
   const parsedPersonOverlayFrameRatio = Number(params.personOverlayFrameRatio);
   const personOverlayFrameRatio =
@@ -72,7 +77,18 @@ export default function PhotoSaveScreen() {
   const albumT = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const pose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const fallbackPose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  const pose = poseImageUrl
+    ? {
+        id: poseId,
+        label: { ko: poseLabel, en: poseLabel, zh: poseLabel, ja: poseLabel },
+        image: { uri: poseImageUrl },
+        aspectRatio:
+          Number.isFinite(parsedPoseAspectRatio) && parsedPoseAspectRatio > 0
+            ? parsedPoseAspectRatio
+            : fallbackPose?.aspectRatio ?? 0.55,
+      }
+    : fallbackPose;
   const compositeRef = useRef<View>(null);
   const compositePhotoUriRef = useRef<string | null>(null);
   const [photoWrapperHeight, setPhotoWrapperHeight] = useState(0);
@@ -147,7 +163,13 @@ export default function PhotoSaveScreen() {
       let serverSelfiePhotoId: number | undefined;
       if (spotId !== null && storyId !== null && collectionItemId !== null) {
         try {
-          const saved = await saveSelfiePhoto({ spotId, storyId, collectionItemId, photoUri: compositeUri });
+          const saved = await saveSelfiePhoto({
+            spotId,
+            storyId,
+            collectionItemId,
+            ...(selectedPoseId !== null ? { poseId: selectedPoseId } : {}),
+            photoUri: compositeUri,
+          });
           serverSelfiePhotoId = saved.selfiePhotoId;
         } catch (error) {
           // Server sync is best-effort — the local save below must still

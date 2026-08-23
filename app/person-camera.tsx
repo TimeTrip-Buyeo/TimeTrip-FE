@@ -2,19 +2,73 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, LayoutAnimation, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import {
+  Animated,
+  Image,
+  LayoutAnimation,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type ImageSourcePropType,
+  type LayoutChangeEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { PERSON_POSES } from "@/constants/poses";
-import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
+import { albumScreenText, mapScreenText, personCameraText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveSingleParam } from "@/lib/selfie-route";
+import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
+import { toApiUrl } from "@/lib/api/client";
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
+const DEFAULT_REMOTE_POSE_ASPECT_RATIO = 0.55;
+
+type RuntimePersonPose = {
+  id: string;
+  apiPoseId?: number;
+  label: Record<Locale, string>;
+  image: ImageSourcePropType;
+  imageUrl?: string;
+  aspectRatio: number;
+};
+
+function firstText(...values: (string | null | undefined)[]) {
+  return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
+}
+
+function getPoseApiId(pose: CollectionItemPose) {
+  return pose.poseId ?? pose.id;
+}
+
+function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string, number>): RuntimePersonPose[] {
+  return poses.flatMap((pose, index) => {
+    const imageUrl = firstText(pose.poseImageUrl, pose.thumbnailUrl);
+    if (!imageUrl) return [];
+
+    const apiPoseId = getPoseApiId(pose);
+    const id = String(apiPoseId ?? `remote-${index}`);
+    const label = firstText(pose.name) ?? `Pose ${index + 1}`;
+    const resolvedImageUrl = toApiUrl(imageUrl);
+
+    return [
+      {
+        id,
+        apiPoseId,
+        label: { ko: label, en: label, zh: label, ja: label },
+        image: { uri: resolvedImageUrl },
+        imageUrl: resolvedImageUrl,
+        aspectRatio: aspectRatios[id] ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO,
+      },
+    ];
+  });
+}
 
 // Matches Figma "인물 카메라 (포즈 선택 가능)", node 0:1000. This screen
 // captures the camera frame first; photo-save then captures the composed
@@ -26,7 +80,8 @@ export default function PersonCameraScreen() {
     storyId?: string;
     collectionItemId?: string;
   }>();
-  const locationId = resolveLocationId(params.locationId);
+  const locationId = resolveLocationId(params.locationId, params.spotId);
+  const collectionItemId = resolveNumberParam(params.collectionItemId);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
@@ -35,10 +90,12 @@ export default function PersonCameraScreen() {
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
-  const poses = PERSON_POSES[locationId] ?? [];
+  const fallbackPoses = PERSON_POSES[locationId] ?? [];
 
   const [permission, requestPermission] = useCameraPermissions();
   const [poseIndex, setPoseIndex] = useState(0);
+  const [remotePoses, setRemotePoses] = useState<CollectionItemPose[]>([]);
+  const [remotePoseAspectRatios, setRemotePoseAspectRatios] = useState<Record<string, number>>({});
   const [isCapturing, setIsCapturing] = useState(false);
   const [facing, setFacing] = useState<"front" | "back">("front");
   const [isPoseSectionExpanded, setIsPoseSectionExpanded] = useState(true);
@@ -66,6 +123,61 @@ export default function PersonCameraScreen() {
     }, 2800);
     return () => clearTimeout(timer);
   }, [spotPillOpacity]);
+
+  useEffect(() => {
+    if (collectionItemId === null) {
+      setRemotePoses([]);
+      return;
+    }
+
+    let isActive = true;
+    getCollectionItemPoses(collectionItemId)
+      .then((nextPoses) => {
+        if (isActive) setRemotePoses(nextPoses);
+      })
+      .catch((error) => {
+        console.error("[person-camera] collection item poses failed", error);
+        if (isActive) setRemotePoses([]);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [collectionItemId]);
+
+  useEffect(() => {
+    if (remotePoses.length === 0) {
+      setRemotePoseAspectRatios({});
+      return;
+    }
+
+    let isActive = true;
+    remotePoses.forEach((pose, index) => {
+      const imageUrl = firstText(pose.poseImageUrl, pose.thumbnailUrl);
+      if (!imageUrl) return;
+
+      const id = String(getPoseApiId(pose) ?? `remote-${index}`);
+      Image.getSize(
+        toApiUrl(imageUrl),
+        (width, height) => {
+          if (!isActive || width <= 0 || height <= 0) return;
+          setRemotePoseAspectRatios((current) => ({ ...current, [id]: width / height }));
+        },
+        () => undefined,
+      );
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [remotePoses]);
+
+  const apiPoses = toRuntimePoses(remotePoses, remotePoseAspectRatios);
+  const poses: RuntimePersonPose[] = apiPoses.length > 0 ? apiPoses : fallbackPoses;
+
+  useEffect(() => {
+    setPoseIndex(0);
+  }, [collectionItemId, locationId]);
 
   const togglePoseSection = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -115,8 +227,10 @@ export default function PersonCameraScreen() {
         pathname: "/photo-save",
         params: {
           locationId,
-          poseId: selectedPose?.id ?? "",
+          poseId: selectedPose?.apiPoseId !== undefined ? String(selectedPose.apiPoseId) : selectedPose?.id ?? "",
           poseLabel: selectedPose?.label[locale] ?? "",
+          ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
+          ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: photo.uri,
           personOverlayFrameRatio: String(personOverlayFrameRatio),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
