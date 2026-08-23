@@ -27,12 +27,27 @@ export type CollectionItemDetail = {
   isCharacter: boolean;
   cardImageUrl: string | null;
   detailImageUrl: string | null;
+  shortDescription: string | null;
+  summary?: string | null;
+  location: string | null;
+  period: string | null;
+  mainFeature: string | null;
   description: string;
   sourceCredit: string | null;
+  sourceInstitution?: string | null;
+  sourceAgency?: string | null;
+  institutionName?: string | null;
+  museumName?: string | null;
+  sourceSite?: string | null;
+  sourceSiteName?: string | null;
+  siteName?: string | null;
+  sourceName?: string | null;
+  sourceUrl?: string | null;
   audioFiles: {
     language: string;
     filePath: string;
     durationSec: number;
+    script?: string | null;
   }[];
   isAcquired: boolean;
   acquiredAt: string | null;
