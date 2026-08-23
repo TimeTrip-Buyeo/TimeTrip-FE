@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CollectibleAcquiredModal } from "@/components/collectible-acquired-modal";
 import { LanguageLegendModal } from "@/components/onboarding/language-legend-modal";
-import { GUNGSEO_FONT_BOLD, INTER_FONT_REGULAR } from "@/constants/fonts";
+import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { arCameraText, collectibleAcquiredText, LOCALES, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 import { acquireCollectionItem, type AcquireCollectionItemResult } from "@/lib/api/collections";
@@ -305,8 +305,6 @@ export default function ArCameraScreen() {
         </View>
       </LinearGradient>
 
-      <Text style={[styles.aiDisclaimer, { top: insets.top + 4 }]}>{t.aiGeneratedImageDisclaimer}</Text>
-
       {/* Guide/overlay area and sheet share one flex column so expanding the
           sheet (which grows taller) shrinks the guide area above it instead
           of the sheet covering the overlay image — both resize in the same
@@ -529,13 +527,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  aiDisclaimer: {
-    position: "absolute",
-    left: 16,
-    fontFamily: INTER_FONT_REGULAR,
-    fontSize: 8,
-    color: "#fff",
   },
   topBarLeft: {
     flexDirection: "row",

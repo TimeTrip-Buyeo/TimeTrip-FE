@@ -590,7 +590,6 @@ type ArCameraText = {
   emptyStateTitle: string;
   emptyStateMessage: string;
   audioGuideLabel: string;
-  aiGeneratedImageDisclaimer: string;
 };
 
 export const arCameraText: Record<Locale, ArCameraText> = {
@@ -608,7 +607,6 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: '이번 달은 준비 중이에요',
     emptyStateMessage: '이 장소는 이번 달엔 특별 테마가 없어요. 다음 달에 다시 찾아주세요!',
     audioGuideLabel: '오디오 가이드',
-    aiGeneratedImageDisclaimer: '* AI로 생성한 이미지입니다.',
   },
   en: {
     arActiveLabel: 'AR ACTIVE',
@@ -624,7 +622,6 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: 'Nothing special this month',
     emptyStateMessage: "This site doesn't have a special theme this month. Please check back next month!",
     audioGuideLabel: 'Audio Guide',
-    aiGeneratedImageDisclaimer: '* Generated using AI.',
   },
   zh: {
     arActiveLabel: 'AR 已启用',
@@ -640,7 +637,6 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: '本月暂无特别主题',
     emptyStateMessage: '该地点本月没有特别主题，请下个月再来看看！',
     audioGuideLabel: '语音导览',
-    aiGeneratedImageDisclaimer: '* 该图像由AI生成。',
   },
   ja: {
     arActiveLabel: 'AR起動中',
@@ -656,7 +652,6 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateTitle: '今月は準備中です',
     emptyStateMessage: 'この場所は今月特別なテーマがありません。来月また訪れてください！',
     audioGuideLabel: '音声ガイド',
-    aiGeneratedImageDisclaimer: '* この画像はAIで生成されました。',
   },
 };
 
