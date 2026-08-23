@@ -48,6 +48,15 @@ function hasAcquiredCollection(topic: StoryTopic) {
   return topic.acquiredCollectionCount > 0;
 }
 
+function dedupeStoryTopics(topics: StoryTopic[]) {
+  const seenStoryIds = new Set<number>();
+  return topics.filter((topic) => {
+    if (seenStoryIds.has(topic.storyId)) return false;
+    seenStoryIds.add(topic.storyId);
+    return true;
+  });
+}
+
 function hasImageUrl(imageUrl: string | null | undefined): imageUrl is string {
   return typeof imageUrl === "string" && imageUrl.trim().length > 0;
 }
@@ -231,7 +240,7 @@ function CollectionTopicList() {
             })),
           );
         }
-        if (isActive) setTopics(nextTopics.filter(hasAcquiredCollection));
+        if (isActive) setTopics(dedupeStoryTopics(nextTopics.filter(hasAcquiredCollection)));
       })
       .catch((error) => {
         console.error("[collection] topics failed", error);
@@ -278,7 +287,7 @@ function CollectionTopicList() {
           ) : (
             topics.map((topic) => (
               <Pressable
-                key={topic.storyId}
+                key={`collection-topic-${topic.storyId}`}
                 style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
                 onPress={() =>
                   router.push({
