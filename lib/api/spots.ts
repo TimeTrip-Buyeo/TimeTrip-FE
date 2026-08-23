@@ -17,6 +17,10 @@ export type Spot = {
 
 export type SpotDetail = Spot & {
   address: string;
+  /** Canonical special/basic-guide flag for the current month — prefer this
+      over deriving it from getSpotStory's storyType (that endpoint's story
+      data can drift from this field). */
+  currentStoryType: "SPECIAL" | "NORMAL";
 };
 
 export type SpotStoryType = "special" | "normal";
@@ -62,7 +66,7 @@ export async function getSpotStory(spotId: number, locale: Locale, month?: numbe
 export type SpotTimeslip = {
   spotId: number;
   spotName: string;
-  overlayImageUrl: string;
+  overlayImageUrl: string | null;
   guideText: string;
   storyId: number;
   storyTitle: string;
@@ -73,7 +77,7 @@ export type SpotTimeslip = {
     beforeImageUrl: string | null;
     isAcquired: boolean;
   };
-  audioGuide: StoryAudioGuide;
+  audioGuide: StoryAudioGuide | null;
 };
 
 // collectionItem.isAcquired is per-user, so this needs auth (apiGet) unlike
