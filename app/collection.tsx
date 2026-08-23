@@ -386,6 +386,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const sourceDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
   const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
+  const summary = firstText(detail?.summary, detail?.description);
   const rawHeroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
   const maxHeroHeight = windowHeight * MAX_HERO_HEIGHT_RATIO;
   const imageFrameHeight = Math.min(Math.max(rawHeroHeight, MIN_HERO_HEIGHT), maxHeroHeight);
@@ -492,7 +493,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
           </Pressable>
           <Text style={styles.cardTitle}>{detail.name}</Text>
 
-          {isDetailCardExpanded && (
+          {isDetailCardExpanded ? (
             <>
               <View style={styles.cardDescriptionRow}>
                 <View style={styles.cardDivider} />
@@ -500,7 +501,11 @@ function CollectionDetail({ itemId }: { itemId: number }) {
               </View>
               {cardSourceDisclosure && <Text style={styles.cardSourceText}>{cardSourceDisclosure}</Text>}
             </>
-          )}
+          ) : summary ? (
+            <Text style={styles.cardSummary} numberOfLines={1} ellipsizeMode="tail">
+              {summary}
+            </Text>
+          ) : null}
         </View>
 
         <View style={[styles.actionButtons, { paddingBottom: insets.bottom + 16 }]}>
@@ -842,6 +847,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: "#1b1b1b",
     marginBottom: 20,
+  },
+  cardSummary: {
+    fontFamily: GUNGSEO_FONT,
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#6b7280",
   },
   cardDescriptionRow: {
     flexDirection: "row",
