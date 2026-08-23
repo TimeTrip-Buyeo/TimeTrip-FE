@@ -27,7 +27,11 @@ export type CollectionItemDetail = {
   isCharacter: boolean;
   cardImageUrl: string | null;
   detailImageUrl: string | null;
+  shortDescription: string | null;
   summary?: string | null;
+  location: string | null;
+  period: string | null;
+  mainFeature: string | null;
   description: string;
   sourceCredit: string | null;
   sourceInstitution?: string | null;

@@ -77,6 +77,26 @@ function getCollectionImageDisclosure(detail: CollectionItemDetail, t: (typeof c
   return sourceCredit ? `${t.sourceDisclosurePrefix}${sourceCredit}` : null;
 }
 
+function CollectionDetailInfoRow({
+  accentColor,
+  label,
+  value,
+}: {
+  accentColor: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.cardInfoRow}>
+      <View style={[styles.cardInfoBar, { backgroundColor: accentColor }]} />
+      <View style={styles.cardInfoTextColumn}>
+        <Text style={styles.cardInfoLabel}>{label}</Text>
+        <Text style={styles.cardInfoValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 function CollectionTopicList() {
   const insets = useSafeAreaInsets();
   const { locale, setLocale } = useLanguage();
@@ -386,7 +406,10 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const sourceDisclosure = detail ? getCollectionImageDisclosure(detail, t) : null;
   const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
-  const summary = firstText(detail?.summary, detail?.description);
+  const summary = firstText(detail?.shortDescription, detail?.summary, detail?.description);
+  const locationText = firstText(detail?.location, locationLabel);
+  const periodText = firstText(detail?.period);
+  const mainFeatureText = firstText(detail?.mainFeature, detail?.description);
   const rawHeroHeight = imageAspectRatio ? windowWidth / imageAspectRatio : FALLBACK_HERO_HEIGHT;
   const maxHeroHeight = windowHeight * MAX_HERO_HEIGHT_RATIO;
   const imageFrameHeight = Math.min(Math.max(rawHeroHeight, MIN_HERO_HEIGHT), maxHeroHeight);
@@ -495,10 +518,17 @@ function CollectionDetail({ itemId }: { itemId: number }) {
 
           {isDetailCardExpanded ? (
             <>
-              <View style={styles.cardDescriptionRow}>
-                <View style={styles.cardDivider} />
-                <Text style={styles.cardDescription}>{detail.description}</Text>
-              </View>
+              {locationText && <CollectionDetailInfoRow accentColor="#b8860b" label={t.locationLabel} value={locationText} />}
+              {periodText && (
+                <CollectionDetailInfoRow
+                  accentColor="#800000"
+                  label={detail.isCharacter ? t.lifespanLabel : t.productionPeriodLabel}
+                  value={periodText}
+                />
+              )}
+              {mainFeatureText && (
+                <CollectionDetailInfoRow accentColor="#1b1b1b" label={t.keyFeaturesLabel} value={mainFeatureText} />
+              )}
               {cardSourceDisclosure && <Text style={styles.cardSourceText}>{cardSourceDisclosure}</Text>}
             </>
           ) : summary ? (
@@ -854,18 +884,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#6b7280",
   },
-  cardDescriptionRow: {
+  cardInfoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 16,
+    marginBottom: 20,
   },
-  cardDivider: {
+  cardInfoBar: {
     width: 1.6,
     height: 32,
-    backgroundColor: "#1b1b1b",
     marginTop: 4,
   },
-  cardDescription: {
+  cardInfoTextColumn: {
+    flex: 1,
+  },
+  cardInfoLabel: {
+    fontFamily: GUNGSEO_FONT_BOLD,
+    fontSize: 10,
+    color: "#9ca3af",
+    marginBottom: 4,
+  },
+  cardInfoValue: {
     flex: 1,
     fontFamily: GUNGSEO_FONT,
     fontSize: 14,

@@ -651,6 +651,7 @@ type CollectionScreenText = {
   listSubtitle: string;
   lifespanLabel: string;
   productionPeriodLabel: string;
+  locationLabel: string;
   keyFeaturesLabel: string;
   listenToAudioGuide: string;
   takePhotoWithFigure: string;
@@ -674,6 +675,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     listSubtitle: '다양한 장소의 유물&인물을 수집해보시오',
     lifespanLabel: '생애',
     productionPeriodLabel: '제작 시기',
+    locationLabel: '발굴 위치',
     keyFeaturesLabel: '주요 특징',
     listenToAudioGuide: '오디오 가이드 듣기',
     takePhotoWithFigure: '인물과 사진 찍기',
@@ -695,6 +697,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     listSubtitle: 'Collect artifacts & figures from every location',
     lifespanLabel: 'Lifespan',
     productionPeriodLabel: 'Production Period',
+    locationLabel: 'Location',
     keyFeaturesLabel: 'Key Features',
     listenToAudioGuide: 'Listen to Audio Guide',
     takePhotoWithFigure: 'Take a Photo Together',
@@ -716,6 +719,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     listSubtitle: '收集各地的文物与人物',
     lifespanLabel: '生平',
     productionPeriodLabel: '制作时期',
+    locationLabel: '发现地点',
     keyFeaturesLabel: '主要特点',
     listenToAudioGuide: '收听语音导览',
     takePhotoWithFigure: '与人物合影',
@@ -737,6 +741,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     listSubtitle: 'さまざまな場所の遺物と人物を集めよう',
     lifespanLabel: '生涯',
     productionPeriodLabel: '制作時期',
+    locationLabel: '発見場所',
     keyFeaturesLabel: '主な特徴',
     listenToAudioGuide: '音声ガイドを聞く',
     takePhotoWithFigure: '人物と写真を撮る',
