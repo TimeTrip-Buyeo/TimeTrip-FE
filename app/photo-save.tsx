@@ -1,5 +1,4 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
@@ -15,29 +14,7 @@ import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
 import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
-
-type ExpoSharingModule = {
-  isAvailableAsync?: () => Promise<boolean>;
-  shareAsync?: (url: string, options?: { mimeType?: string; dialogTitle?: string }) => Promise<void>;
-};
-type ExpoSharingModuleShape = ExpoSharingModule & { default?: ExpoSharingModule };
-
-async function getSharingModule(): Promise<ExpoSharingModule | null> {
-  if (!requireOptionalNativeModule("ExpoSharing")) {
-    console.warn("[photo-save] ExpoSharing native module is unavailable. Rebuild the dev client to enable image sharing.");
-    return null;
-  }
-
-  try {
-    // Lazy-load because an old dev client can run without the native ExpoSharing
-    // module until the user rebuilds after installing expo-sharing.
-    const sharing = (await import("expo-sharing")) as ExpoSharingModuleShape;
-    return sharing.isAvailableAsync ? sharing : sharing.default ?? null;
-  } catch (error) {
-    console.error("[photo-save] expo-sharing native module is unavailable", error);
-    return null;
-  }
-}
+import { shareImageAsync } from "@/lib/share-image";
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
 // viewer, but the center action is "download/save" (not share) and there's
@@ -128,23 +105,9 @@ export default function PhotoSaveScreen() {
     if (isSharing || !uri) return;
     setIsSharing(true);
     try {
-      const sharing = await getSharingModule();
-      if (!sharing) {
-        setShowShareUnavailableToast(true);
-        return;
-      }
-
-      const isAvailable = await sharing.isAvailableAsync?.();
-      if (!isAvailable || !sharing.shareAsync) {
-        setShowShareUnavailableToast(true);
-        return;
-      }
-
       const compositeUri = await captureCompositePhoto();
-      await sharing.shareAsync(compositeUri, {
-        mimeType: "image/jpeg",
-        dialogTitle: poseLabel || entry?.name[locale] || mapT.pins[locationId],
-      });
+      const didShare = await shareImageAsync(compositeUri, poseLabel || entry?.name[locale] || mapT.pins[locationId]);
+      if (!didShare) setShowShareUnavailableToast(true);
     } catch (error) {
       console.error("[photo-save] selfie photo share failed", error);
       setShowShareUnavailableToast(true);
