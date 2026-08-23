@@ -54,8 +54,9 @@ export type CollectionItemDetail = {
 };
 
 export type StoryTopic = {
-  storyId: number;
-  spotId: number;
+  storyIds: number[];
+  storyId?: number;
+  spotId?: number;
   title: string;
   thumbnailUrl: string | null;
   totalCollectionCount: number;
@@ -82,9 +83,17 @@ export function getStoryTopics(options: {
   if (options.storyType) params.set("storyType", options.storyType);
 
   return apiGet<StoryTopicListResponse | StoryTopic[]>(`/api/collections?${params.toString()}`).then((result) => {
-    if (Array.isArray(result)) return result;
-    return result.stories ?? result.topics ?? [];
+    const topics = Array.isArray(result) ? result : result.stories ?? result.topics ?? [];
+    return topics.map(normalizeStoryTopic).filter((topic) => topic.storyIds.length > 0);
   });
+}
+
+function normalizeStoryTopic(topic: StoryTopic): StoryTopic {
+  if (Array.isArray(topic.storyIds)) return topic;
+  return {
+    ...topic,
+    storyIds: topic.storyId !== undefined ? [topic.storyId] : [],
+  };
 }
 
 export function getCollectionItems(
