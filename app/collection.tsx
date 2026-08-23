@@ -31,6 +31,7 @@ import {
   type CollectionItemDetail,
   type StoryTopic,
 } from "@/lib/api/collections";
+import { getSpotAudioGuide, type StoryAudioGuide } from "@/lib/api/spots";
 import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 export default function CollectionScreen() {
@@ -98,21 +99,6 @@ function CollectionDetailInfoRow({
   );
 }
 
-function normalizeAudioLanguage(language: string) {
-  return language.toLowerCase() === "jp" ? "ja" : language.toLowerCase();
-}
-
-function selectAudioFile(detail: CollectionItemDetail | null, locale: Locale) {
-  if (!detail) return null;
-
-  const normalizedLocale = normalizeAudioLanguage(locale);
-  return (
-    detail.audioFiles.find((audioFile) => normalizeAudioLanguage(audioFile.language) === normalizedLocale) ??
-    detail.audioFiles[0] ??
-    null
-  );
-}
-
 function formatAudioTime(seconds: number) {
   const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
   const minutes = Math.floor(safeSeconds / 60);
@@ -127,7 +113,7 @@ function AudioGuideModal({
   onClose,
   t,
 }: {
-  audioFile: CollectionItemDetail["audioFiles"][number] | null;
+  audioFile: StoryAudioGuide | null;
   title: string;
   isVisible: boolean;
   onClose: () => void;
@@ -477,6 +463,8 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const [isDetailCardExpanded, setIsDetailCardExpanded] = useState(true);
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
   const [isAudioGuideVisible, setIsAudioGuideVisible] = useState(false);
+  const [audioFile, setAudioFile] = useState<StoryAudioGuide | null>(null);
+  const audioGuideSpotId = detail?.spotId ?? null;
 
   useEffect(() => {
     let isActive = true;
@@ -503,6 +491,28 @@ function CollectionDetail({ itemId }: { itemId: number }) {
     };
   }, [itemId, locale]);
 
+  useEffect(() => {
+    if (audioGuideSpotId === null) {
+      setAudioFile(null);
+      return;
+    }
+
+    let isActive = true;
+    setAudioFile(null);
+    getSpotAudioGuide(audioGuideSpotId, { language: locale })
+      .then((nextAudioFile) => {
+        if (isActive) setAudioFile(nextAudioFile);
+      })
+      .catch((error) => {
+        console.error("[collection] spot audio guide failed", error);
+        if (isActive) setAudioFile(null);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [audioGuideSpotId, locale]);
+
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
   const cameraLocationId = detail ? resolveLocationId(undefined, String(detail.spotId)) : undefined;
   const locationLabel = locationId ? mapT.pins[locationId] : detail?.spotName;
@@ -511,7 +521,6 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const imageDisclosure = detail?.isCharacter ? sourceDisclosure : null;
   const cardSourceDisclosure = detail && !detail.isCharacter ? sourceDisclosure : null;
   const summary = firstText(detail?.shortDescription, detail?.summary, detail?.description);
-  const audioFile = selectAudioFile(detail, locale);
   const locationText = firstText(detail?.location, locationLabel);
   const periodText = firstText(detail?.period);
   const mainFeatureText = firstText(detail?.mainFeature, detail?.description);
