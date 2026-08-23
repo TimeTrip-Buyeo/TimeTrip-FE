@@ -75,6 +75,7 @@ export default function MapScreen() {
     }
 
     let isActive = true;
+    setSelectedSpotDetail(null);
     setSelectedSpotStory(null);
 
     const spotSummary = spots.find((spot) => spot.id === selectedSpotId);
