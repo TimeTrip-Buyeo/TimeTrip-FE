@@ -221,7 +221,6 @@ type LoginText = {
   description: string;
   kakaoButton: string;
   googleButton: string;
-  emailButton: string;
   terms: string;
   socialLoginError: string;
 };
@@ -233,7 +232,6 @@ export const loginText: Record<Locale, LoginText> = {
     description: 'AR과 지도로 떠나는\n백제 역사 여행',
     kakaoButton: '카카오로 시작하기',
     googleButton: '구글로 시작하기',
-    emailButton: '이메일로 로그인',
     terms: '로그인 시 서비스 이용약관 및 개인정보처리방침에 동의합니다.',
     socialLoginError: '로그인에 실패했어요. 다시 시도해주세요.',
   },
@@ -243,7 +241,6 @@ export const loginText: Record<Locale, LoginText> = {
     description: 'A journey through Baekje history\nwith AR and the map',
     kakaoButton: 'Continue with Kakao',
     googleButton: 'Continue with Google',
-    emailButton: 'Log in with Email',
     terms: 'By logging in, you agree to the Terms of Service and Privacy Policy.',
     socialLoginError: 'Login failed. Please try again.',
   },
@@ -253,7 +250,6 @@ export const loginText: Record<Locale, LoginText> = {
     description: '用AR和地图开启的\n百济历史之旅',
     kakaoButton: '使用Kakao继续',
     googleButton: '使用Google继续',
-    emailButton: '使用邮箱登录',
     terms: '登录即表示您同意服务条款及隐私政策。',
     socialLoginError: '登录失败，请重试。',
   },
@@ -263,135 +259,11 @@ export const loginText: Record<Locale, LoginText> = {
     description: 'ARと地図でめぐる\n百済歴史の旅',
     kakaoButton: 'カカオで始める',
     googleButton: 'Googleで始める',
-    emailButton: 'メールでログイン',
     terms: 'ログインすると、利用規約およびプライバシーポリシーに同意したものとみなされます。',
     socialLoginError: 'ログインに失敗しました。もう一度お試しください。',
   },
 };
 
-type AuthText = {
-  loginTitle: string;
-  signUpTitle: string;
-  emailLabel: string;
-  emailPlaceholder: string;
-  passwordLabel: string;
-  passwordPlaceholder: string;
-  confirmPasswordLabel: string;
-  confirmPasswordPlaceholder: string;
-  loginButton: string;
-  signUpButton: string;
-  noAccountPrompt: string;
-  signUpLink: string;
-  hasAccountPrompt: string;
-  loginLink: string;
-  errors: {
-    invalidEmail: string;
-    weakPassword: string;
-    duplicate: string;
-    notFound: string;
-    wrongPassword: string;
-    passwordMismatch: string;
-  };
-};
-
-export const authText: Record<Locale, AuthText> = {
-  ko: {
-    loginTitle: '로그인',
-    signUpTitle: '회원가입',
-    emailLabel: '이메일',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: '비밀번호',
-    passwordPlaceholder: '6자 이상 입력해주세요',
-    confirmPasswordLabel: '비밀번호 확인',
-    confirmPasswordPlaceholder: '비밀번호를 다시 입력해주세요',
-    loginButton: '로그인',
-    signUpButton: '가입하기',
-    noAccountPrompt: '아직 계정이 없으신가요?',
-    signUpLink: '회원가입',
-    hasAccountPrompt: '이미 계정이 있으신가요?',
-    loginLink: '로그인',
-    errors: {
-      invalidEmail: '올바른 이메일 형식이 아니에요.',
-      weakPassword: '비밀번호는 6자 이상이어야 해요.',
-      duplicate: '이미 가입된 이메일이에요.',
-      notFound: '가입되지 않은 이메일이에요.',
-      wrongPassword: '비밀번호가 올바르지 않아요.',
-      passwordMismatch: '비밀번호가 일치하지 않아요.',
-    },
-  },
-  en: {
-    loginTitle: 'Log In',
-    signUpTitle: 'Sign Up',
-    emailLabel: 'Email',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: 'Password',
-    passwordPlaceholder: 'At least 6 characters',
-    confirmPasswordLabel: 'Confirm Password',
-    confirmPasswordPlaceholder: 'Re-enter your password',
-    loginButton: 'Log In',
-    signUpButton: 'Sign Up',
-    noAccountPrompt: "Don't have an account?",
-    signUpLink: 'Sign Up',
-    hasAccountPrompt: 'Already have an account?',
-    loginLink: 'Log In',
-    errors: {
-      invalidEmail: "That doesn't look like a valid email.",
-      weakPassword: 'Password must be at least 6 characters.',
-      duplicate: 'This email is already registered.',
-      notFound: 'No account found for this email.',
-      wrongPassword: 'Incorrect password.',
-      passwordMismatch: "Passwords don't match.",
-    },
-  },
-  zh: {
-    loginTitle: '登录',
-    signUpTitle: '注册',
-    emailLabel: '邮箱',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: '密码',
-    passwordPlaceholder: '请输入至少6位密码',
-    confirmPasswordLabel: '确认密码',
-    confirmPasswordPlaceholder: '请再次输入密码',
-    loginButton: '登录',
-    signUpButton: '注册',
-    noAccountPrompt: '还没有账号？',
-    signUpLink: '注册',
-    hasAccountPrompt: '已经有账号了？',
-    loginLink: '登录',
-    errors: {
-      invalidEmail: '邮箱格式不正确。',
-      weakPassword: '密码至少需要6位。',
-      duplicate: '该邮箱已注册。',
-      notFound: '未找到该邮箱对应的账号。',
-      wrongPassword: '密码不正确。',
-      passwordMismatch: '两次输入的密码不一致。',
-    },
-  },
-  ja: {
-    loginTitle: 'ログイン',
-    signUpTitle: '会員登録',
-    emailLabel: 'メールアドレス',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: 'パスワード',
-    passwordPlaceholder: '6文字以上入力してください',
-    confirmPasswordLabel: 'パスワード確認',
-    confirmPasswordPlaceholder: 'パスワードを再入力してください',
-    loginButton: 'ログイン',
-    signUpButton: '登録する',
-    noAccountPrompt: 'アカウントをお持ちでないですか？',
-    signUpLink: '会員登録',
-    hasAccountPrompt: 'すでにアカウントをお持ちですか？',
-    loginLink: 'ログイン',
-    errors: {
-      invalidEmail: '正しいメールアドレス形式ではありません。',
-      weakPassword: 'パスワードは6文字以上で入力してください。',
-      duplicate: 'すでに登録されているメールアドレスです。',
-      notFound: '登録されていないメールアドレスです。',
-      wrongPassword: 'パスワードが正しくありません。',
-      passwordMismatch: 'パスワードが一致しません。',
-    },
-  },
-};
 
 type MyPageText = {
   title: string;

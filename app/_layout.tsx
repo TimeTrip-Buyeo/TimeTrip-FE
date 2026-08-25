@@ -60,8 +60,6 @@ function RootNavigator() {
         </Stack.Protected>
         <Stack.Protected guard={hasSeenIntro && !isLoggedIn}>
           <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="email-login" options={{ headerShown: false }} />
-          <Stack.Screen name="signup" options={{ headerShown: false }} />
         </Stack.Protected>
         {/* Always reachable (not gated on login) so the map's guide button can
             reopen the tour for a logged-in user at any time. */}

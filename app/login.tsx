@@ -91,10 +91,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleEmailLogin = () => {
-    router.push("/email-login");
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       {isLangPickerVisible && (
@@ -150,12 +146,6 @@ export default function LoginScreen() {
             contentFit="contain"
           />
           <Text style={styles.googleText}>{t.googleButton}</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.emailButton, pressed && styles.emailButtonPressed]}
-          onPress={handleEmailLogin}>
-          <Text style={styles.emailText}>{t.emailButton}</Text>
         </Pressable>
 
         <Text style={styles.terms}>{t.terms}</Text>
@@ -293,21 +283,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#191919",
-  },
-  emailButton: {
-    height: 52,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emailButtonPressed: {
-    backgroundColor: "#cccccc",
-  },
-  emailText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#5b4339",
-    textDecorationLine: "underline",
   },
   terms: {
     marginTop: 6,
