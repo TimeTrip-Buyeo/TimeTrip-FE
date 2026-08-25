@@ -31,7 +31,7 @@ import {
   type CollectionItemDetail,
   type StoryTopic,
 } from "@/lib/api/collections";
-import { getSpotAudioGuide, type StoryAudioGuide } from "@/lib/api/spots";
+import { getStoryAudioGuide, type StoryAudioGuide } from "@/lib/api/spots";
 import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 export default function CollectionScreen() {
@@ -508,7 +508,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
   const [isAudioGuideVisible, setIsAudioGuideVisible] = useState(false);
   const [audioFile, setAudioFile] = useState<StoryAudioGuide | null>(null);
-  const audioGuideSpotId = detail?.spotId ?? null;
+  const audioGuideStoryId = detail?.storyId ?? null;
 
   useEffect(() => {
     let isActive = true;
@@ -536,26 +536,26 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   }, [itemId, locale]);
 
   useEffect(() => {
-    if (audioGuideSpotId === null) {
+    if (audioGuideStoryId === null) {
       setAudioFile(null);
       return;
     }
 
     let isActive = true;
     setAudioFile(null);
-    getSpotAudioGuide(audioGuideSpotId, { language: locale })
+    getStoryAudioGuide(audioGuideStoryId, { language: locale })
       .then((nextAudioFile) => {
         if (isActive) setAudioFile(nextAudioFile);
       })
       .catch((error) => {
-        console.error("[collection] spot audio guide failed", error);
+        console.error("[collection] story audio guide failed", error);
         if (isActive) setAudioFile(null);
       });
 
     return () => {
       isActive = false;
     };
-  }, [audioGuideSpotId, locale]);
+  }, [audioGuideStoryId, locale]);
 
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
   const cameraLocationId = detail ? resolveLocationId(undefined, String(detail.spotId)) : undefined;
@@ -715,7 +715,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
       {topBar}
       <AudioGuideModal
         audioFile={audioFile}
-        title={detail.name}
+        title={audioFile?.title ?? detail.name}
         isVisible={isAudioGuideVisible}
         onClose={() => setIsAudioGuideVisible(false)}
         t={t}
