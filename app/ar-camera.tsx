@@ -427,7 +427,7 @@ export default function ArCameraScreen() {
                       </Pressable>
                       {isLegendVisible && (
                         <View style={styles.legendAnchor}>
-                          <LanguageLegendModal currentLocale={locale} onSelect={handleSelectLocale} />
+                          <LanguageLegendModal currentLocale={locale} onSelect={handleSelectLocale} direction="up" />
                         </View>
                       )}
                     </View>
@@ -764,9 +764,9 @@ const styles = StyleSheet.create({
   },
   legendAnchor: {
     position: "absolute",
-    top: "100%",
+    bottom: "100%",
     right: 0,
-    marginTop: 8,
+    marginBottom: 8,
     zIndex: 10,
   },
   stateRow: {
