@@ -140,6 +140,9 @@ function AlbumList() {
   // vanish from this list entirely once the server list replaces it, with no
   // way back to AlbumDetail(locationId) for that photo.
   const knownServerNames = new Set((albums ?? []).map((album) => album.name));
+  // Only list albums with at least one photo — an acquired collection item
+  // with zero selfies yet isn't something to show in the album list.
+  const displayedAlbums = (albums ?? []).filter((album) => album.photoCount > 0);
   const fallbackLocationIds = ALBUM_LOCATION_IDS.filter((id) => {
     const entry = ALBUM_ENTRIES[id];
     const hasCapturedPhotos = (photosByLocation[id]?.length ?? 0) > 0;
@@ -177,7 +180,7 @@ function AlbumList() {
           </View>
         ) : (
           <View style={styles.list}>
-            {albums.map((album) => {
+            {displayedAlbums.map((album) => {
               const thumb = (
                 <View style={styles.cardThumb}>
                   {!!album.thumbnailUrl && (
