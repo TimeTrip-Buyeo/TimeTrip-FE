@@ -1,4 +1,4 @@
-import { ApiError, apiGet, publicGet } from "@/lib/api/client";
+import { ApiError, apiGet } from "@/lib/api/client";
 import type { Locale } from "@/constants/translations";
 
 export type SpotType = "MAIN" | "TOUR";
@@ -42,11 +42,11 @@ export type SpotStory = {
 };
 
 export function getSpots(): Promise<Spot[]> {
-  return publicGet<Spot[]>("/api/spots");
+  return apiGet<Spot[]>("/api/spots");
 }
 
 export function getSpotDetail(spotId: number): Promise<SpotDetail> {
-  return publicGet<SpotDetail>(`/api/spots/${spotId}`);
+  return apiGet<SpotDetail>(`/api/spots/${spotId}`);
 }
 
 export async function getSpotStory(spotId: number, locale: Locale, month?: number): Promise<SpotStory | null> {
@@ -54,7 +54,7 @@ export async function getSpotStory(spotId: number, locale: Locale, month?: numbe
     const params = new URLSearchParams({ language: locale });
     if (month !== undefined) params.set("month", String(month));
 
-    return await publicGet<SpotStory>(`/api/spots/${spotId}/story?${params.toString()}`);
+    return await apiGet<SpotStory>(`/api/spots/${spotId}/story?${params.toString()}`);
   } catch (error) {
     if (error instanceof ApiError && error.code === "STORY_404") {
       return null;
@@ -84,8 +84,6 @@ export type SpotTimeslip = {
   audioGuide: StoryAudioGuide | null;
 };
 
-// collectionItem.isAcquired is per-user, so this needs auth (apiGet) unlike
-// the rest of the spot domain, which is public.
 export async function getSpotTimeslip(
   spotId: number,
   options: { month?: number; language?: string } = {},
@@ -105,22 +103,25 @@ export async function getSpotTimeslip(
 
 export type StoryAudioGuide = {
   audioGuideId: number;
+  storyId?: number;
   title: string;
   language: string;
   filePath: string;
   durationSec: number;
   script: string;
+  availableLanguages?: string[];
 };
 
 export async function getStoryAudioGuide(
   storyId: number,
-  options: { spotId: number; language?: string },
+  options: { language?: string } = {},
 ): Promise<StoryAudioGuide | null> {
   try {
-    const params = new URLSearchParams({ spotId: String(options.spotId) });
+    const params = new URLSearchParams();
     if (options.language) params.set("language", options.language);
+    const query = params.toString();
 
-    return await publicGet<StoryAudioGuide>(`/api/stories/${storyId}/audio-guide?${params.toString()}`);
+    return await apiGet<StoryAudioGuide>(`/api/stories/${storyId}/audio-guide${query ? `?${query}` : ""}`);
   } catch (error) {
     if (error instanceof ApiError && (error.code === "AUDIO4041" || error.code === "STORY_404")) return null;
     throw error;
