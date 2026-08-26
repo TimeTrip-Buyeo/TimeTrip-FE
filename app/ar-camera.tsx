@@ -234,7 +234,7 @@ export default function ArCameraScreen() {
   useEffect(() => {
     if (geoState !== "ready" || !timeslip?.audioGuide || locale === timeslip.audioGuide.language) return;
     let isActive = true;
-    getStoryAudioGuide(timeslip.storyId, { spotId: timeslip.spotId, language: locale })
+    getStoryAudioGuide(timeslip.storyId, { language: locale })
       .then((guide) => {
         if (isActive && guide) setActiveAudioGuide(guide);
       })
