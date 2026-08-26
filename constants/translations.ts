@@ -279,6 +279,7 @@ type MyPageText = {
   withdrawConfirmButton: string;
   withdrawCancelButton: string;
   withdrawErrorMessage: string;
+  withdrawSessionExpiredMessage: string;
 };
 
 export const myPageText: Record<Locale, MyPageText> = {
@@ -296,6 +297,7 @@ export const myPageText: Record<Locale, MyPageText> = {
     withdrawConfirmButton: '탈퇴하기',
     withdrawCancelButton: '취소',
     withdrawErrorMessage: '탈퇴 처리에 실패했습니다. 잠시 후 다시 시도해주세요.',
+    withdrawSessionExpiredMessage: '로그인이 만료되어 탈퇴가 처리되지 않았습니다. 다시 로그인 후 시도해주세요.',
   },
   en: {
     title: 'My Page',
@@ -311,6 +313,7 @@ export const myPageText: Record<Locale, MyPageText> = {
     withdrawConfirmButton: 'Delete Account',
     withdrawCancelButton: 'Cancel',
     withdrawErrorMessage: 'Failed to delete your account. Please try again later.',
+    withdrawSessionExpiredMessage: 'Your session expired before the account could be deleted. Please log in again and retry.',
   },
   zh: {
     title: '我的',
@@ -326,6 +329,7 @@ export const myPageText: Record<Locale, MyPageText> = {
     withdrawConfirmButton: '注销账号',
     withdrawCancelButton: '取消',
     withdrawErrorMessage: '账号注销失败，请稍后重试。',
+    withdrawSessionExpiredMessage: '登录已过期，账号未被注销。请重新登录后再试。',
   },
   ja: {
     title: 'マイページ',
@@ -341,6 +345,7 @@ export const myPageText: Record<Locale, MyPageText> = {
     withdrawConfirmButton: '退会する',
     withdrawCancelButton: 'キャンセル',
     withdrawErrorMessage: '退会処理に失敗しました。しばらくしてから再度お試しください。',
+    withdrawSessionExpiredMessage: 'ログインが期限切れのため退会は処理されませんでした。再度ログインしてからお試しください。',
   },
 };
 

@@ -8,7 +8,7 @@ import { getMe } from "@/lib/api/auth";
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LOCALES, mapScreenText, myPageText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { useSession } from "@/hooks/use-session";
+import { SessionExpiredError, useSession } from "@/hooks/use-session";
 
 // A tab-root destination like AlbumList/CollectionList (album.tsx,
 // collection.tsx) — no back chevron, reached only via the bottom nav.
@@ -60,7 +60,12 @@ export default function MyPageScreen() {
           try {
             await withdraw();
             router.replace("/login");
-          } catch {
+          } catch (error) {
+            if (error instanceof SessionExpiredError) {
+              Alert.alert(t.withdrawConfirmTitle, t.withdrawSessionExpiredMessage);
+              router.replace("/login");
+              return;
+            }
             Alert.alert(t.withdrawConfirmTitle, t.withdrawErrorMessage);
           }
         },

@@ -13,13 +13,23 @@ type SessionContextValue = {
   currentEmail: string | null;
   login: (email?: string) => void;
   logout: () => Promise<void>;
-  /** Calls DELETE /users then clears local session state the same way logout() does. Only clears on success — a failed call leaves the session intact so the caller can show an error instead of silently logging the user out. */
+  /**
+   * Calls DELETE /users then clears local session state the same way logout() does.
+   * Only clears on success — a failed call leaves the session intact so the caller
+   * can show an error instead of silently logging the user out. Throws
+   * SessionExpiredError instead of the raw error if the session was already torn
+   * down by the unauthorizedListener (e.g. an expired refresh token) before the
+   * delete could complete — the account was NOT deleted in that case.
+   */
   withdraw: () => Promise<void>;
   /** Exchanges a provider (Kakao) accessToken for our own tokens and stores them. Does NOT flip isLoggedIn — the caller still routes through onboarding-guide's login() first. */
   loginWithKakao: (providerAccessToken: string) => Promise<void>;
   /** Exchanges a Google idToken for our own tokens and stores them. */
   loginWithGoogle: (providerIdToken: string) => Promise<void>;
 };
+
+/** Thrown by withdraw() when the session was already cleared (expired tokens) before the delete request could go through — the account was NOT deleted. */
+export class SessionExpiredError extends Error {}
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
@@ -65,7 +75,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, []);
 
   const withdraw = useCallback(async () => {
-    await authApi.deleteAccount();
+    try {
+      await authApi.deleteAccount();
+    } catch (error) {
+      // If the unauthorizedListener already fired (expired/invalid tokens),
+      // getTokens() comes back empty — the session is gone but the account
+      // was never actually deleted.
+      if (!(await getTokens())) throw new SessionExpiredError();
+      throw error;
+    }
     await clearTokens();
     clearRemoteAlbumPhotoCache();
     setIsLoggedIn(false);
