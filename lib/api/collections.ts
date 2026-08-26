@@ -89,11 +89,21 @@ export function getStoryTopics(options: {
 }
 
 function normalizeStoryTopic(topic: StoryTopic): StoryTopic {
-  if (Array.isArray(topic.storyIds)) return topic;
+  if (Array.isArray(topic.storyIds)) {
+    return {
+      ...topic,
+      storyIds: normalizeStoryIds(topic.storyIds),
+    };
+  }
+
   return {
     ...topic,
-    storyIds: topic.storyId !== undefined ? [topic.storyId] : [],
+    storyIds: normalizeStoryIds(topic.storyId !== undefined ? [topic.storyId] : []),
   };
+}
+
+function normalizeStoryIds(storyIds: number[]) {
+  return [...new Set(storyIds.filter((storyId) => Number.isInteger(storyId) && storyId > 0))];
 }
 
 export function getCollectionItems(
