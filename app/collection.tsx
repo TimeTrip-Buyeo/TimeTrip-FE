@@ -64,12 +64,16 @@ function hasAcquiredCollection(topic: StoryTopic) {
   return topic.acquiredCollectionCount > 0;
 }
 
+// StoryTopic has no id field, so storyIds is the only identity we can key
+// on — but keying on storyIds alone would collapse two genuinely different
+// topics (different title) that happen to share the same story ids, so
+// title is folded into the key too. This only dedupes true duplicate rows.
 function dedupeStoryTopics(topics: StoryTopic[]) {
-  const seenStoryIds = new Set<string>();
+  const seenKeys = new Set<string>();
   return topics.filter((topic) => {
-    const storyIdKey = topic.storyIds.join(",");
-    if (seenStoryIds.has(storyIdKey)) return false;
-    seenStoryIds.add(storyIdKey);
+    const key = `${topic.storyIds.join(",")}::${topic.title}`;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 }
