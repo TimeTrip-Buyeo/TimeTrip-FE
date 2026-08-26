@@ -353,17 +353,21 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [hasPartialError, setHasPartialError] = useState(false);
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
     setLoadError(false);
+    setHasPartialError(false);
     Promise.allSettled(storyIds.map((storyId) => getCollectionItems(storyId, { locale })))
       .then((results) => {
         const fulfilledResults = results.filter((result): result is PromiseFulfilledResult<{ items: CollectionItem[] }> =>
           result.status === "fulfilled",
         );
         const nextItems = dedupeCollectionItems(fulfilledResults.flatMap((result) => result.value.items));
+
+        if (isActive) setHasPartialError(fulfilledResults.length > 0 && fulfilledResults.length < results.length);
 
         if (__DEV__) {
           console.log(
@@ -412,6 +416,12 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
           </Pressable>
           <Text style={styles.gridTitle}>{title ?? t.listTitle}</Text>
         </View>
+
+        {hasPartialError && (
+          <View style={styles.partialErrorBanner}>
+            <Text style={styles.partialErrorBannerText}>{t.partialLoadErrorMessage}</Text>
+          </View>
+        )}
 
         <View style={styles.grid}>
           {isLoading ? (
@@ -834,6 +844,19 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 16,
     paddingHorizontal: 24,
+  },
+  partialErrorBanner: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#fef3c7",
+  },
+  partialErrorBannerText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400e",
   },
   statusMessage: {
     width: "100%",

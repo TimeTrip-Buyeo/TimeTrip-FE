@@ -569,6 +569,7 @@ type CollectionScreenText = {
   emptyTopicMessage: string;
   emptyItemMessage: string;
   loadErrorMessage: string;
+  partialLoadErrorMessage: string;
   lockedItemMessage: string;
   detailUnavailableMessage: string;
   personTypeLabel: string;
@@ -597,6 +598,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: '아직 획득한 스페셜 도감이 없어요.',
     emptyItemMessage: '아직 획득한 도감 아이템이 없어요.',
     loadErrorMessage: '도감 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
+    partialLoadErrorMessage: '일부 항목을 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
     lockedItemMessage: 'AR카메라에서 먼저 만나보세요.',
     detailUnavailableMessage: '획득한 아이템만 상세 정보를 볼 수 있어요.',
     personTypeLabel: '인물',
@@ -623,6 +625,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: 'No acquired special collections yet.',
     emptyItemMessage: 'No acquired collection items yet.',
     loadErrorMessage: "Couldn't load collection data. Please try again later.",
+    partialLoadErrorMessage: "Couldn't load some items. Please try again later.",
     lockedItemMessage: 'Meet it in AR Camera first.',
     detailUnavailableMessage: 'Only acquired items can be viewed in detail.',
     personTypeLabel: 'Figure',
@@ -649,6 +652,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: '暂无已获得的特别图鉴。',
     emptyItemMessage: '暂无已获得的图鉴项目。',
     loadErrorMessage: '无法加载图鉴信息。请稍后再试。',
+    partialLoadErrorMessage: '部分内容加载失败。请稍后再试。',
     lockedItemMessage: '请先在 AR 相机中遇见它。',
     detailUnavailableMessage: '只有已获得的项目可以查看详情。',
     personTypeLabel: '人物',
@@ -675,6 +679,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: '獲得済みのスペシャル図鑑はまだありません。',
     emptyItemMessage: '獲得済みの図鑑アイテムはまだありません。',
     loadErrorMessage: '図鑑情報を読み込めませんでした。しばらくしてからもう一度お試しください。',
+    partialLoadErrorMessage: '一部の項目を読み込めませんでした。しばらくしてからもう一度お試しください。',
     lockedItemMessage: '先にARカメラで出会ってください。',
     detailUnavailableMessage: '獲得済みアイテムのみ詳細を表示できます。',
     personTypeLabel: '人物',
