@@ -80,8 +80,9 @@ export default function LoginScreen() {
       await GoogleSignin.hasPlayServices();
       const response = await GoogleSignin.signIn();
       if (response.type === "cancelled") return;
-      const { accessToken } = await GoogleSignin.getTokens();
-      await loginWithGoogle(accessToken);
+      const { idToken } = response.data;
+      if (!idToken) throw new Error("no idToken in Google sign-in response");
+      await loginWithGoogle(idToken);
       router.push("/onboarding-guide");
     } catch (error) {
       console.error(`[login] google login failed ${formatLoginError(error, t.socialLoginError)}`);
@@ -89,10 +90,6 @@ export default function LoginScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleEmailLogin = () => {
-    router.push("/email-login");
   };
 
   return (
@@ -150,12 +147,6 @@ export default function LoginScreen() {
             contentFit="contain"
           />
           <Text style={styles.googleText}>{t.googleButton}</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.emailButton, pressed && styles.emailButtonPressed]}
-          onPress={handleEmailLogin}>
-          <Text style={styles.emailText}>{t.emailButton}</Text>
         </Pressable>
 
         <Text style={styles.terms}>{t.terms}</Text>
@@ -293,21 +284,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#191919",
-  },
-  emailButton: {
-    height: 52,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emailButtonPressed: {
-    backgroundColor: "#cccccc",
-  },
-  emailText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#5b4339",
-    textDecorationLine: "underline",
   },
   terms: {
     marginTop: 6,

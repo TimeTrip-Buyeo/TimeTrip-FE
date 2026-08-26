@@ -5,26 +5,41 @@ import { LOCALES, type Locale } from "@/constants/translations";
 type LanguageLegendModalProps = {
   currentLocale: Locale;
   onSelect: (locale: Locale) => void;
+  /** Which way the popover opens relative to its anchor button. Defaults to "down" (caret on top, pointing up at the button above it) — pass "up" when the anchor sits near the bottom of the screen and the popover would otherwise get clipped by the screen edge. */
+  direction?: "down" | "up";
 };
 
 /** Popover listing every language other than the one currently active. */
-export function LanguageLegendModal({ currentLocale, onSelect }: LanguageLegendModalProps) {
+export function LanguageLegendModal({ currentLocale, onSelect, direction = "down" }: LanguageLegendModalProps) {
   const options = LOCALES.filter((item) => item.code !== currentLocale);
+  const caret = <View style={direction === "down" ? styles.caretDown : styles.caretUp} />;
+  const card = (
+    <View style={styles.card}>
+      {options.map((option, index) => (
+        <Pressable
+          key={option.code}
+          style={({ pressed }) => [styles.row, index > 0 && styles.rowDivider, pressed && styles.rowPressed]}
+          onPress={() => onSelect(option.code)}>
+          <View style={styles.dot} />
+          <Text style={styles.label}>{option.nativeLabel}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.caret} />
-      <View style={styles.card}>
-        {options.map((option, index) => (
-          <Pressable
-            key={option.code}
-            style={({ pressed }) => [styles.row, index > 0 && styles.rowDivider, pressed && styles.rowPressed]}
-            onPress={() => onSelect(option.code)}>
-            <View style={styles.dot} />
-            <Text style={styles.label}>{option.nativeLabel}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {direction === "down" ? (
+        <>
+          {caret}
+          {card}
+        </>
+      ) : (
+        <>
+          {card}
+          {caret}
+        </>
+      )}
     </View>
   );
 }
@@ -33,7 +48,7 @@ const styles = StyleSheet.create({
   wrapper: {
     alignItems: "flex-end",
   },
-  caret: {
+  caretDown: {
     width: 12,
     height: 12,
     marginBottom: -6,
@@ -41,6 +56,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderLeftWidth: 1,
+    borderColor: "#f0ece4",
+    transform: [{ rotate: "45deg" }],
+  },
+  caretUp: {
+    width: 12,
+    height: 12,
+    marginTop: -6,
+    marginRight: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderRightWidth: 1,
     borderColor: "#f0ece4",
     transform: [{ rotate: "45deg" }],
   },

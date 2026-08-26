@@ -132,9 +132,8 @@ const MAP_PINS: MapPinData[] = [
 export default function OnboardingGuideScreen() {
   const { login } = useSession();
   const { locale, setLocale } = useLanguage();
-  // Only present when this tour was reached from the email signup screen —
-  // Kakao/Google pushes here without it, so login() falls back to its
-  // existing no-arg (currentEmail stays null) for those mock flows.
+  // Kakao/Google push here without an email param, so login() falls back
+  // to its no-arg form and currentEmail stays null.
   const params = useLocalSearchParams<{ email?: string }>();
   const { width: windowWidth } = useWindowDimensions();
   const [stepIndex, setStepIndex] = useState(0);

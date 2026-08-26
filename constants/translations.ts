@@ -221,7 +221,6 @@ type LoginText = {
   description: string;
   kakaoButton: string;
   googleButton: string;
-  emailButton: string;
   terms: string;
   socialLoginError: string;
 };
@@ -233,7 +232,6 @@ export const loginText: Record<Locale, LoginText> = {
     description: 'AR과 지도로 떠나는\n백제 역사 여행',
     kakaoButton: '카카오로 시작하기',
     googleButton: '구글로 시작하기',
-    emailButton: '이메일로 로그인',
     terms: '로그인 시 서비스 이용약관 및 개인정보처리방침에 동의합니다.',
     socialLoginError: '로그인에 실패했어요. 다시 시도해주세요.',
   },
@@ -243,7 +241,6 @@ export const loginText: Record<Locale, LoginText> = {
     description: 'A journey through Baekje history\nwith AR and the map',
     kakaoButton: 'Continue with Kakao',
     googleButton: 'Continue with Google',
-    emailButton: 'Log in with Email',
     terms: 'By logging in, you agree to the Terms of Service and Privacy Policy.',
     socialLoginError: 'Login failed. Please try again.',
   },
@@ -253,7 +250,6 @@ export const loginText: Record<Locale, LoginText> = {
     description: '用AR和地图开启的\n百济历史之旅',
     kakaoButton: '使用Kakao继续',
     googleButton: '使用Google继续',
-    emailButton: '使用邮箱登录',
     terms: '登录即表示您同意服务条款及隐私政策。',
     socialLoginError: '登录失败，请重试。',
   },
@@ -263,135 +259,11 @@ export const loginText: Record<Locale, LoginText> = {
     description: 'ARと地図でめぐる\n百済歴史の旅',
     kakaoButton: 'カカオで始める',
     googleButton: 'Googleで始める',
-    emailButton: 'メールでログイン',
     terms: 'ログインすると、利用規約およびプライバシーポリシーに同意したものとみなされます。',
     socialLoginError: 'ログインに失敗しました。もう一度お試しください。',
   },
 };
 
-type AuthText = {
-  loginTitle: string;
-  signUpTitle: string;
-  emailLabel: string;
-  emailPlaceholder: string;
-  passwordLabel: string;
-  passwordPlaceholder: string;
-  confirmPasswordLabel: string;
-  confirmPasswordPlaceholder: string;
-  loginButton: string;
-  signUpButton: string;
-  noAccountPrompt: string;
-  signUpLink: string;
-  hasAccountPrompt: string;
-  loginLink: string;
-  errors: {
-    invalidEmail: string;
-    weakPassword: string;
-    duplicate: string;
-    notFound: string;
-    wrongPassword: string;
-    passwordMismatch: string;
-  };
-};
-
-export const authText: Record<Locale, AuthText> = {
-  ko: {
-    loginTitle: '로그인',
-    signUpTitle: '회원가입',
-    emailLabel: '이메일',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: '비밀번호',
-    passwordPlaceholder: '6자 이상 입력해주세요',
-    confirmPasswordLabel: '비밀번호 확인',
-    confirmPasswordPlaceholder: '비밀번호를 다시 입력해주세요',
-    loginButton: '로그인',
-    signUpButton: '가입하기',
-    noAccountPrompt: '아직 계정이 없으신가요?',
-    signUpLink: '회원가입',
-    hasAccountPrompt: '이미 계정이 있으신가요?',
-    loginLink: '로그인',
-    errors: {
-      invalidEmail: '올바른 이메일 형식이 아니에요.',
-      weakPassword: '비밀번호는 6자 이상이어야 해요.',
-      duplicate: '이미 가입된 이메일이에요.',
-      notFound: '가입되지 않은 이메일이에요.',
-      wrongPassword: '비밀번호가 올바르지 않아요.',
-      passwordMismatch: '비밀번호가 일치하지 않아요.',
-    },
-  },
-  en: {
-    loginTitle: 'Log In',
-    signUpTitle: 'Sign Up',
-    emailLabel: 'Email',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: 'Password',
-    passwordPlaceholder: 'At least 6 characters',
-    confirmPasswordLabel: 'Confirm Password',
-    confirmPasswordPlaceholder: 'Re-enter your password',
-    loginButton: 'Log In',
-    signUpButton: 'Sign Up',
-    noAccountPrompt: "Don't have an account?",
-    signUpLink: 'Sign Up',
-    hasAccountPrompt: 'Already have an account?',
-    loginLink: 'Log In',
-    errors: {
-      invalidEmail: "That doesn't look like a valid email.",
-      weakPassword: 'Password must be at least 6 characters.',
-      duplicate: 'This email is already registered.',
-      notFound: 'No account found for this email.',
-      wrongPassword: 'Incorrect password.',
-      passwordMismatch: "Passwords don't match.",
-    },
-  },
-  zh: {
-    loginTitle: '登录',
-    signUpTitle: '注册',
-    emailLabel: '邮箱',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: '密码',
-    passwordPlaceholder: '请输入至少6位密码',
-    confirmPasswordLabel: '确认密码',
-    confirmPasswordPlaceholder: '请再次输入密码',
-    loginButton: '登录',
-    signUpButton: '注册',
-    noAccountPrompt: '还没有账号？',
-    signUpLink: '注册',
-    hasAccountPrompt: '已经有账号了？',
-    loginLink: '登录',
-    errors: {
-      invalidEmail: '邮箱格式不正确。',
-      weakPassword: '密码至少需要6位。',
-      duplicate: '该邮箱已注册。',
-      notFound: '未找到该邮箱对应的账号。',
-      wrongPassword: '密码不正确。',
-      passwordMismatch: '两次输入的密码不一致。',
-    },
-  },
-  ja: {
-    loginTitle: 'ログイン',
-    signUpTitle: '会員登録',
-    emailLabel: 'メールアドレス',
-    emailPlaceholder: 'example@email.com',
-    passwordLabel: 'パスワード',
-    passwordPlaceholder: '6文字以上入力してください',
-    confirmPasswordLabel: 'パスワード確認',
-    confirmPasswordPlaceholder: 'パスワードを再入力してください',
-    loginButton: 'ログイン',
-    signUpButton: '登録する',
-    noAccountPrompt: 'アカウントをお持ちでないですか？',
-    signUpLink: '会員登録',
-    hasAccountPrompt: 'すでにアカウントをお持ちですか？',
-    loginLink: 'ログイン',
-    errors: {
-      invalidEmail: '正しいメールアドレス形式ではありません。',
-      weakPassword: 'パスワードは6文字以上で入力してください。',
-      duplicate: 'すでに登録されているメールアドレスです。',
-      notFound: '登録されていないメールアドレスです。',
-      wrongPassword: 'パスワードが正しくありません。',
-      passwordMismatch: 'パスワードが一致しません。',
-    },
-  },
-};
 
 type MyPageText = {
   title: string;
@@ -401,6 +273,13 @@ type MyPageText = {
   logoutRowLabel: string;
   languageModalTitle: string;
   languageModalCloseLabel: string;
+  withdrawRowLabel: string;
+  withdrawConfirmTitle: string;
+  withdrawConfirmMessage: string;
+  withdrawConfirmButton: string;
+  withdrawCancelButton: string;
+  withdrawErrorMessage: string;
+  withdrawSessionExpiredMessage: string;
 };
 
 export const myPageText: Record<Locale, MyPageText> = {
@@ -412,6 +291,13 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: '로그아웃',
     languageModalTitle: '언어 선택',
     languageModalCloseLabel: '닫기',
+    withdrawRowLabel: '회원탈퇴',
+    withdrawConfirmTitle: '정말 탈퇴하시겠습니까?',
+    withdrawConfirmMessage: '사진/도감 데이터가 즉시 삭제되며 복구할 수 없습니다.',
+    withdrawConfirmButton: '탈퇴하기',
+    withdrawCancelButton: '취소',
+    withdrawErrorMessage: '탈퇴 처리에 실패했습니다. 잠시 후 다시 시도해주세요.',
+    withdrawSessionExpiredMessage: '로그인이 만료되어 탈퇴가 처리되지 않았습니다. 다시 로그인 후 시도해주세요.',
   },
   en: {
     title: 'My Page',
@@ -421,6 +307,13 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: 'Log Out',
     languageModalTitle: 'Select Language',
     languageModalCloseLabel: 'Close',
+    withdrawRowLabel: 'Delete Account',
+    withdrawConfirmTitle: 'Delete your account?',
+    withdrawConfirmMessage: 'Your photos and collection progress will be deleted immediately and cannot be recovered.',
+    withdrawConfirmButton: 'Delete Account',
+    withdrawCancelButton: 'Cancel',
+    withdrawErrorMessage: 'Failed to delete your account. Please try again later.',
+    withdrawSessionExpiredMessage: 'Your session expired before the account could be deleted. Please log in again and retry.',
   },
   zh: {
     title: '我的',
@@ -430,6 +323,13 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: '退出登录',
     languageModalTitle: '选择语言',
     languageModalCloseLabel: '关闭',
+    withdrawRowLabel: '注销账号',
+    withdrawConfirmTitle: '确定要注销账号吗？',
+    withdrawConfirmMessage: '照片和图鉴数据将立即删除且无法恢复。',
+    withdrawConfirmButton: '注销账号',
+    withdrawCancelButton: '取消',
+    withdrawErrorMessage: '账号注销失败，请稍后重试。',
+    withdrawSessionExpiredMessage: '登录已过期，账号未被注销。请重新登录后再试。',
   },
   ja: {
     title: 'マイページ',
@@ -439,6 +339,13 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: 'ログアウト',
     languageModalTitle: '言語を選択',
     languageModalCloseLabel: '閉じる',
+    withdrawRowLabel: '退会する',
+    withdrawConfirmTitle: '本当に退会しますか？',
+    withdrawConfirmMessage: '写真・図鑑データは即座に削除され、復元できません。',
+    withdrawConfirmButton: '退会する',
+    withdrawCancelButton: 'キャンセル',
+    withdrawErrorMessage: '退会処理に失敗しました。しばらくしてから再度お試しください。',
+    withdrawSessionExpiredMessage: 'ログインが期限切れのため退会は処理されませんでした。再度ログインしてからお試しください。',
   },
 };
 
@@ -662,6 +569,7 @@ type CollectionScreenText = {
   emptyTopicMessage: string;
   emptyItemMessage: string;
   loadErrorMessage: string;
+  partialLoadErrorMessage: string;
   lockedItemMessage: string;
   detailUnavailableMessage: string;
   personTypeLabel: string;
@@ -680,7 +588,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: '주요 특징',
     listenToAudioGuide: '오디오 가이드 듣기',
     takePhotoWithFigure: '인물과 사진 찍기',
-    audioGuideModalTitle: '기본 가이드',
+    audioGuideModalTitle: '스페셜 가이드',
     audioGuideUnavailableMessage: '재생할 오디오 가이드가 없어요.',
     audioGuidePlayLabel: '재생',
     audioGuidePauseLabel: '멈춤',
@@ -690,6 +598,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: '아직 획득한 스페셜 도감이 없어요.',
     emptyItemMessage: '아직 획득한 도감 아이템이 없어요.',
     loadErrorMessage: '도감 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
+    partialLoadErrorMessage: '일부 항목을 불러오지 못했어요. 잠시 후 다시 시도해주세요.',
     lockedItemMessage: 'AR카메라에서 먼저 만나보세요.',
     detailUnavailableMessage: '획득한 아이템만 상세 정보를 볼 수 있어요.',
     personTypeLabel: '인물',
@@ -706,7 +615,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: 'Key Features',
     listenToAudioGuide: 'Listen to Audio Guide',
     takePhotoWithFigure: 'Take a Photo Together',
-    audioGuideModalTitle: 'Basic Guide',
+    audioGuideModalTitle: 'Special Guide',
     audioGuideUnavailableMessage: 'No audio guide is available.',
     audioGuidePlayLabel: 'Play',
     audioGuidePauseLabel: 'Pause',
@@ -716,6 +625,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: 'No acquired special collections yet.',
     emptyItemMessage: 'No acquired collection items yet.',
     loadErrorMessage: "Couldn't load collection data. Please try again later.",
+    partialLoadErrorMessage: "Couldn't load some items. Please try again later.",
     lockedItemMessage: 'Meet it in AR Camera first.',
     detailUnavailableMessage: 'Only acquired items can be viewed in detail.',
     personTypeLabel: 'Figure',
@@ -732,7 +642,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: '主要特点',
     listenToAudioGuide: '收听语音导览',
     takePhotoWithFigure: '与人物合影',
-    audioGuideModalTitle: '基础导览',
+    audioGuideModalTitle: '特别导览',
     audioGuideUnavailableMessage: '暂无可播放的语音导览。',
     audioGuidePlayLabel: '播放',
     audioGuidePauseLabel: '暂停',
@@ -742,6 +652,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: '暂无已获得的特别图鉴。',
     emptyItemMessage: '暂无已获得的图鉴项目。',
     loadErrorMessage: '无法加载图鉴信息。请稍后再试。',
+    partialLoadErrorMessage: '部分内容加载失败。请稍后再试。',
     lockedItemMessage: '请先在 AR 相机中遇见它。',
     detailUnavailableMessage: '只有已获得的项目可以查看详情。',
     personTypeLabel: '人物',
@@ -758,7 +669,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     keyFeaturesLabel: '主な特徴',
     listenToAudioGuide: '音声ガイドを聞く',
     takePhotoWithFigure: '人物と写真を撮る',
-    audioGuideModalTitle: '基本ガイド',
+    audioGuideModalTitle: 'スペシャルガイド',
     audioGuideUnavailableMessage: '再生できる音声ガイドがありません。',
     audioGuidePlayLabel: '再生',
     audioGuidePauseLabel: '停止',
@@ -768,6 +679,7 @@ export const collectionScreenText: Record<Locale, CollectionScreenText> = {
     emptyTopicMessage: '獲得済みのスペシャル図鑑はまだありません。',
     emptyItemMessage: '獲得済みの図鑑アイテムはまだありません。',
     loadErrorMessage: '図鑑情報を読み込めませんでした。しばらくしてからもう一度お試しください。',
+    partialLoadErrorMessage: '一部の項目を読み込めませんでした。しばらくしてからもう一度お試しください。',
     lockedItemMessage: '先にARカメラで出会ってください。',
     detailUnavailableMessage: '獲得済みアイテムのみ詳細を表示できます。',
     personTypeLabel: '人物',

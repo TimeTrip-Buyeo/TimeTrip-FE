@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Image,
   LayoutAnimation,
@@ -37,7 +37,11 @@ import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib
 export default function CollectionScreen() {
   const params = useLocalSearchParams<{ storyId?: string; storyIds?: string; itemId?: string; title?: string }>();
   const storyId = resolveNumberParam(params.storyId);
-  const storyIds = resolveStoryIdsParam(params.storyIds, storyId);
+  // Memoized so CollectionItemGrid's fetch effect (which depends on this
+  // array by reference) doesn't re-run on renders where the params haven't
+  // actually changed — resolveStoryIdsParam otherwise returns a new array
+  // every render.
+  const storyIds = useMemo(() => resolveStoryIdsParam(params.storyIds, storyId), [params.storyIds, storyId]);
   const itemId = resolveNumberParam(params.itemId);
   const title = resolveSingleParam(params.title);
 
@@ -60,12 +64,16 @@ function hasAcquiredCollection(topic: StoryTopic) {
   return topic.acquiredCollectionCount > 0;
 }
 
+// StoryTopic has no id field, so storyIds is the only identity we can key
+// on — but keying on storyIds alone would collapse two genuinely different
+// topics (different title) that happen to share the same story ids, so
+// title is folded into the key too. This only dedupes true duplicate rows.
 function dedupeStoryTopics(topics: StoryTopic[]) {
-  const seenStoryIds = new Set<string>();
+  const seenKeys = new Set<string>();
   return topics.filter((topic) => {
-    const storyIdKey = topic.storyIds.join(",");
-    if (seenStoryIds.has(storyIdKey)) return false;
-    seenStoryIds.add(storyIdKey);
+    const key = `${topic.storyIds.join(",")}::${topic.title}`;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 }
@@ -349,17 +357,21 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [hasPartialError, setHasPartialError] = useState(false);
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
     setLoadError(false);
+    setHasPartialError(false);
     Promise.allSettled(storyIds.map((storyId) => getCollectionItems(storyId, { locale })))
       .then((results) => {
         const fulfilledResults = results.filter((result): result is PromiseFulfilledResult<{ items: CollectionItem[] }> =>
           result.status === "fulfilled",
         );
         const nextItems = dedupeCollectionItems(fulfilledResults.flatMap((result) => result.value.items));
+
+        if (isActive) setHasPartialError(fulfilledResults.length > 0 && fulfilledResults.length < results.length);
 
         if (__DEV__) {
           console.log(
@@ -408,6 +420,12 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
           </Pressable>
           <Text style={styles.gridTitle}>{title ?? t.listTitle}</Text>
         </View>
+
+        {hasPartialError && (
+          <View style={styles.partialErrorBanner}>
+            <Text style={styles.partialErrorBannerText}>{t.partialLoadErrorMessage}</Text>
+          </View>
+        )}
 
         <View style={styles.grid}>
           {isLoading ? (
@@ -830,6 +848,19 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 16,
     paddingHorizontal: 24,
+  },
+  partialErrorBanner: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#fef3c7",
+  },
+  partialErrorBannerText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400e",
   },
   statusMessage: {
     width: "100%",

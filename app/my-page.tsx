@@ -1,29 +1,28 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getMe } from "@/lib/api/auth";
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LOCALES, mapScreenText, myPageText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
-import { useSession } from "@/hooks/use-session";
+import { SessionExpiredError, useSession } from "@/hooks/use-session";
 
 // A tab-root destination like AlbumList/CollectionList (album.tsx,
 // collection.tsx) — no back chevron, reached only via the bottom nav.
 export default function MyPageScreen() {
   const insets = useSafeAreaInsets();
   const { locale, setLocale } = useLanguage();
-  const { currentEmail, logout } = useSession();
+  const { currentEmail, logout, withdraw } = useSession();
   const t = myPageText[locale];
   const mapT = mapScreenText[locale];
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const currentLocaleMeta = LOCALES.find((item) => item.code === locale)!;
 
-  // GET /users gives the real nickname for a Kakao/Google session. For the
-  // email mock session (or if the call fails), fall back to the previous
-  // currentEmail/guestLabel display.
+  // GET /users gives the real nickname. Falls back to currentEmail/guestLabel
+  // display if the call fails (e.g. offline).
   const [nickname, setNickname] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +47,29 @@ export default function MyPageScreen() {
   const handleLogout = async () => {
     await logout();
     router.replace("/login");
+  };
+
+  const handleWithdraw = () => {
+    Alert.alert(t.withdrawConfirmTitle, t.withdrawConfirmMessage, [
+      { text: t.withdrawCancelButton, style: "cancel" },
+      {
+        text: t.withdrawConfirmButton,
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await withdraw();
+            router.replace("/login");
+          } catch (error) {
+            if (error instanceof SessionExpiredError) {
+              Alert.alert(t.withdrawConfirmTitle, t.withdrawSessionExpiredMessage);
+              router.replace("/login");
+              return;
+            }
+            Alert.alert(t.withdrawConfirmTitle, t.withdrawErrorMessage);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -89,6 +111,13 @@ export default function MyPageScreen() {
             </View>
           </Pressable>
         </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.withdrawButton, pressed && styles.withdrawButtonPressed]}
+          onPress={handleWithdraw}
+          hitSlop={8}>
+          <Text style={styles.withdrawText}>{t.withdrawRowLabel}</Text>
+        </Pressable>
       </ScrollView>
 
       <BottomNav
@@ -280,6 +309,18 @@ const styles = StyleSheet.create({
   rowValue: {
     fontSize: 12,
     fontWeight: "600",
+    color: "#9ca3af",
+  },
+  withdrawButton: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  withdrawButtonPressed: {
+    opacity: 0.6,
+  },
+  withdrawText: {
+    fontSize: 11,
+    fontWeight: "500",
     color: "#9ca3af",
   },
   // Language select modal (bottom sheet)

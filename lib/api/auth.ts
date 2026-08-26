@@ -1,4 +1,4 @@
-import { apiGet, apiPost, publicPost } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPost, publicPost } from "@/lib/api/client";
 import type { AuthTokens } from "@/lib/token-storage";
 
 export type MeResponse = {
@@ -11,8 +11,8 @@ export function loginWithKakao(providerAccessToken: string): Promise<AuthTokens>
   return publicPost<AuthTokens>("/users/kakao", { accessToken: providerAccessToken });
 }
 
-export function loginWithGoogle(providerAccessToken: string): Promise<AuthTokens> {
-  return publicPost<AuthTokens>("/users/google", { accessToken: providerAccessToken });
+export function loginWithGoogle(providerIdToken: string): Promise<AuthTokens> {
+  return publicPost<AuthTokens>("/users/google", { idToken: providerIdToken });
 }
 
 export function getMe(): Promise<MeResponse> {
@@ -21,4 +21,8 @@ export function getMe(): Promise<MeResponse> {
 
 export function logout(): Promise<null> {
   return apiPost<null>("/auth/logout");
+}
+
+export function deleteAccount(): Promise<null> {
+  return apiDelete<null>("/users");
 }
