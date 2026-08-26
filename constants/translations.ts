@@ -273,6 +273,12 @@ type MyPageText = {
   logoutRowLabel: string;
   languageModalTitle: string;
   languageModalCloseLabel: string;
+  withdrawRowLabel: string;
+  withdrawConfirmTitle: string;
+  withdrawConfirmMessage: string;
+  withdrawConfirmButton: string;
+  withdrawCancelButton: string;
+  withdrawErrorMessage: string;
 };
 
 export const myPageText: Record<Locale, MyPageText> = {
@@ -284,6 +290,12 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: '로그아웃',
     languageModalTitle: '언어 선택',
     languageModalCloseLabel: '닫기',
+    withdrawRowLabel: '회원탈퇴',
+    withdrawConfirmTitle: '정말 탈퇴하시겠습니까?',
+    withdrawConfirmMessage: '사진/도감 데이터가 즉시 삭제되며 복구할 수 없습니다.',
+    withdrawConfirmButton: '탈퇴하기',
+    withdrawCancelButton: '취소',
+    withdrawErrorMessage: '탈퇴 처리에 실패했습니다. 잠시 후 다시 시도해주세요.',
   },
   en: {
     title: 'My Page',
@@ -293,6 +305,12 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: 'Log Out',
     languageModalTitle: 'Select Language',
     languageModalCloseLabel: 'Close',
+    withdrawRowLabel: 'Delete Account',
+    withdrawConfirmTitle: 'Delete your account?',
+    withdrawConfirmMessage: 'Your photos and collection progress will be deleted immediately and cannot be recovered.',
+    withdrawConfirmButton: 'Delete Account',
+    withdrawCancelButton: 'Cancel',
+    withdrawErrorMessage: 'Failed to delete your account. Please try again later.',
   },
   zh: {
     title: '我的',
@@ -302,6 +320,12 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: '退出登录',
     languageModalTitle: '选择语言',
     languageModalCloseLabel: '关闭',
+    withdrawRowLabel: '注销账号',
+    withdrawConfirmTitle: '确定要注销账号吗？',
+    withdrawConfirmMessage: '照片和图鉴数据将立即删除且无法恢复。',
+    withdrawConfirmButton: '注销账号',
+    withdrawCancelButton: '取消',
+    withdrawErrorMessage: '账号注销失败，请稍后重试。',
   },
   ja: {
     title: 'マイページ',
@@ -311,6 +335,12 @@ export const myPageText: Record<Locale, MyPageText> = {
     logoutRowLabel: 'ログアウト',
     languageModalTitle: '言語を選択',
     languageModalCloseLabel: '閉じる',
+    withdrawRowLabel: '退会する',
+    withdrawConfirmTitle: '本当に退会しますか？',
+    withdrawConfirmMessage: '写真・図鑑データは即座に削除され、復元できません。',
+    withdrawConfirmButton: '退会する',
+    withdrawCancelButton: 'キャンセル',
+    withdrawErrorMessage: '退会処理に失敗しました。しばらくしてから再度お試しください。',
   },
 };
 

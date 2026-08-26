@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getMe } from "@/lib/api/auth";
@@ -15,7 +15,7 @@ import { useSession } from "@/hooks/use-session";
 export default function MyPageScreen() {
   const insets = useSafeAreaInsets();
   const { locale, setLocale } = useLanguage();
-  const { currentEmail, logout } = useSession();
+  const { currentEmail, logout, withdraw } = useSession();
   const t = myPageText[locale];
   const mapT = mapScreenText[locale];
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
@@ -48,6 +48,24 @@ export default function MyPageScreen() {
   const handleLogout = async () => {
     await logout();
     router.replace("/login");
+  };
+
+  const handleWithdraw = () => {
+    Alert.alert(t.withdrawConfirmTitle, t.withdrawConfirmMessage, [
+      { text: t.withdrawCancelButton, style: "cancel" },
+      {
+        text: t.withdrawConfirmButton,
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await withdraw();
+            router.replace("/login");
+          } catch {
+            Alert.alert(t.withdrawConfirmTitle, t.withdrawErrorMessage);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -89,6 +107,13 @@ export default function MyPageScreen() {
             </View>
           </Pressable>
         </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.withdrawButton, pressed && styles.withdrawButtonPressed]}
+          onPress={handleWithdraw}
+          hitSlop={8}>
+          <Text style={styles.withdrawText}>{t.withdrawRowLabel}</Text>
+        </Pressable>
       </ScrollView>
 
       <BottomNav
@@ -280,6 +305,18 @@ const styles = StyleSheet.create({
   rowValue: {
     fontSize: 12,
     fontWeight: "600",
+    color: "#9ca3af",
+  },
+  withdrawButton: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  withdrawButtonPressed: {
+    opacity: 0.6,
+  },
+  withdrawText: {
+    fontSize: 11,
+    fontWeight: "500",
     color: "#9ca3af",
   },
   // Language select modal (bottom sheet)

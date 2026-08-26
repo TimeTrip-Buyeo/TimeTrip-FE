@@ -1,4 +1,4 @@
-import { apiGet, apiPost, publicPost } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPost, publicPost } from "@/lib/api/client";
 import type { AuthTokens } from "@/lib/token-storage";
 
 export type MeResponse = {
@@ -21,4 +21,8 @@ export function getMe(): Promise<MeResponse> {
 
 export function logout(): Promise<null> {
   return apiPost<null>("/auth/logout");
+}
+
+export function deleteAccount(): Promise<null> {
+  return apiDelete<null>("/users");
 }

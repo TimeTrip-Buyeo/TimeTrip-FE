@@ -13,6 +13,8 @@ type SessionContextValue = {
   currentEmail: string | null;
   login: (email?: string) => void;
   logout: () => Promise<void>;
+  /** Calls DELETE /users then clears local session state the same way logout() does. Only clears on success — a failed call leaves the session intact so the caller can show an error instead of silently logging the user out. */
+  withdraw: () => Promise<void>;
   /** Exchanges a provider (Kakao) accessToken for our own tokens and stores them. Does NOT flip isLoggedIn — the caller still routes through onboarding-guide's login() first. */
   loginWithKakao: (providerAccessToken: string) => Promise<void>;
   /** Exchanges a Google idToken for our own tokens and stores them. */
@@ -62,6 +64,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setCurrentEmail(null);
   }, []);
 
+  const withdraw = useCallback(async () => {
+    await authApi.deleteAccount();
+    await clearTokens();
+    clearRemoteAlbumPhotoCache();
+    setIsLoggedIn(false);
+    setCurrentEmail(null);
+  }, []);
+
   const loginWithKakao = useCallback(async (providerAccessToken: string) => {
     const tokens = await authApi.loginWithKakao(providerAccessToken);
     await saveTokens(tokens);
@@ -79,10 +89,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
       currentEmail,
       login,
       logout,
+      withdraw,
       loginWithKakao,
       loginWithGoogle,
     }),
-    [isLoggedIn, isSessionReady, currentEmail, login, logout, loginWithKakao, loginWithGoogle],
+    [isLoggedIn, isSessionReady, currentEmail, login, logout, withdraw, loginWithKakao, loginWithGoogle],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
