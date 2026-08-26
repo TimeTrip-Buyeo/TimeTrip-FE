@@ -21,9 +21,8 @@ export default function MyPageScreen() {
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const currentLocaleMeta = LOCALES.find((item) => item.code === locale)!;
 
-  // GET /users gives the real nickname for a Kakao/Google session. For the
-  // email mock session (or if the call fails), fall back to the previous
-  // currentEmail/guestLabel display.
+  // GET /users gives the real nickname. Falls back to currentEmail/guestLabel
+  // display if the call fails (e.g. offline).
   const [nickname, setNickname] = useState<string | null>(null);
 
   useEffect(() => {
