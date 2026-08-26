@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Image,
   LayoutAnimation,
@@ -37,7 +37,11 @@ import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib
 export default function CollectionScreen() {
   const params = useLocalSearchParams<{ storyId?: string; storyIds?: string; itemId?: string; title?: string }>();
   const storyId = resolveNumberParam(params.storyId);
-  const storyIds = resolveStoryIdsParam(params.storyIds, storyId);
+  // Memoized so CollectionItemGrid's fetch effect (which depends on this
+  // array by reference) doesn't re-run on renders where the params haven't
+  // actually changed — resolveStoryIdsParam otherwise returns a new array
+  // every render.
+  const storyIds = useMemo(() => resolveStoryIdsParam(params.storyIds, storyId), [params.storyIds, storyId]);
   const itemId = resolveNumberParam(params.itemId);
   const title = resolveSingleParam(params.title);
 
