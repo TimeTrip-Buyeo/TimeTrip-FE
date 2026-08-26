@@ -11,8 +11,8 @@ export function loginWithKakao(providerAccessToken: string): Promise<AuthTokens>
   return publicPost<AuthTokens>("/users/kakao", { accessToken: providerAccessToken });
 }
 
-export function loginWithGoogle(providerAccessToken: string): Promise<AuthTokens> {
-  return publicPost<AuthTokens>("/users/google", { accessToken: providerAccessToken });
+export function loginWithGoogle(providerIdToken: string): Promise<AuthTokens> {
+  return publicPost<AuthTokens>("/users/google", { idToken: providerIdToken });
 }
 
 export function getMe(): Promise<MeResponse> {

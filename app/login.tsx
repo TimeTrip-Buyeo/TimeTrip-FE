@@ -80,8 +80,9 @@ export default function LoginScreen() {
       await GoogleSignin.hasPlayServices();
       const response = await GoogleSignin.signIn();
       if (response.type === "cancelled") return;
-      const { accessToken } = await GoogleSignin.getTokens();
-      await loginWithGoogle(accessToken);
+      const { idToken } = response.data;
+      if (!idToken) throw new Error("no idToken in Google sign-in response");
+      await loginWithGoogle(idToken);
       router.push("/onboarding-guide");
     } catch (error) {
       console.error(`[login] google login failed ${formatLoginError(error, t.socialLoginError)}`);

@@ -15,8 +15,8 @@ type SessionContextValue = {
   logout: () => Promise<void>;
   /** Exchanges a provider (Kakao) accessToken for our own tokens and stores them. Does NOT flip isLoggedIn — the caller still routes through onboarding-guide's login() first. */
   loginWithKakao: (providerAccessToken: string) => Promise<void>;
-  /** Same as loginWithKakao but for Google. */
-  loginWithGoogle: (providerAccessToken: string) => Promise<void>;
+  /** Exchanges a Google idToken for our own tokens and stores them. */
+  loginWithGoogle: (providerIdToken: string) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -67,8 +67,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
     await saveTokens(tokens);
   }, []);
 
-  const loginWithGoogle = useCallback(async (providerAccessToken: string) => {
-    const tokens = await authApi.loginWithGoogle(providerAccessToken);
+  const loginWithGoogle = useCallback(async (providerIdToken: string) => {
+    const tokens = await authApi.loginWithGoogle(providerIdToken);
     await saveTokens(tokens);
   }, []);
 
