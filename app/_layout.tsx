@@ -64,6 +64,9 @@ function RootNavigator() {
         {/* Always reachable (not gated on login) so the map's guide button can
             reopen the tour for a logged-in user at any time. */}
         <Stack.Screen name="onboarding-guide" options={{ headerShown: false }} />
+        {/* Always reachable (not gated on login) so the login screen's review/QA
+            fixed-account form can be reached before a real session exists. */}
+        <Stack.Screen name="dev-login" options={{ headerShown: false }} />
         <Stack.Screen name="ar-camera" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="collection" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="album" options={{ headerShown: false, presentation: 'fullScreenModal' }} />

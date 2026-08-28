@@ -3,7 +3,7 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LanguagePickerModal } from "@/components/login/language-picker-modal";
@@ -132,7 +132,9 @@ export default function LoginScreen() {
         <Text style={styles.description}>{t.description}</Text>
       </View>
 
-      <View style={styles.bottom}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.bottom}>
         {error && <Text style={styles.errorText}>{error}</Text>}
 
         <Pressable style={styles.kakaoButton} onPress={handleKakaoLogin} disabled={isSubmitting}>
@@ -150,7 +152,14 @@ export default function LoginScreen() {
         </Pressable>
 
         <Text style={styles.terms}>{t.terms}</Text>
-      </View>
+
+        <Pressable
+          style={styles.devLoginToggle}
+          onPress={() => router.push("/dev-login")}
+          hitSlop={8}>
+          <Text style={styles.devLoginToggleText}>{t.devLoginToggle}</Text>
+        </Pressable>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -290,5 +299,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: "center",
     color: "#a09087",
+  },
+  devLoginToggle: {
+    marginTop: 14,
+    alignSelf: "center",
+  },
+  devLoginToggleText: {
+    fontSize: 11,
+    color: "#c3b8ae",
+    textDecorationLine: "underline",
   },
 });
