@@ -30,6 +30,11 @@ export default function DevLoginScreen() {
         setError(t.devLoginTooMany);
       } else if (submitError instanceof ApiError && submitError.status === 401) {
         setError(t.devLoginInvalid);
+      } else if (submitError instanceof ApiError && submitError.status === 404) {
+        // DEV_LOGIN_ENABLED=false인 서버(주로 로컬/개발 환경)에서는 /users/dev 자체가 없어
+        // 스프링 기본 404 포맷(code/message 없음)이 내려온다. 운영 서버에서는 항상 켜져 있어
+        // 정상적인 사용자는 이 분기를 만나지 않는다.
+        setError(t.devLoginUnavailable);
       } else {
         console.error("[dev-login] login failed", submitError);
         setError(t.socialLoginError);

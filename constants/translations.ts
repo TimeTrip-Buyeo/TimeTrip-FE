@@ -229,6 +229,7 @@ type LoginText = {
   devLoginButton: string;
   devLoginInvalid: string;
   devLoginTooMany: string;
+  devLoginUnavailable: string;
 };
 
 export const loginText: Record<Locale, LoginText> = {
@@ -246,6 +247,7 @@ export const loginText: Record<Locale, LoginText> = {
     devLoginButton: '로그인',
     devLoginInvalid: '아이디 또는 비밀번호가 올바르지 않습니다.',
     devLoginTooMany: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.',
+    devLoginUnavailable: '테스트 로그인을 일시적으로 이용할 수 없습니다.',
   },
   en: {
     appTitle: 'TimeTrip',
@@ -261,6 +263,7 @@ export const loginText: Record<Locale, LoginText> = {
     devLoginButton: 'Log in',
     devLoginInvalid: 'Incorrect ID or password.',
     devLoginTooMany: 'Too many login attempts. Please try again later.',
+    devLoginUnavailable: 'Test login is temporarily unavailable.',
   },
   zh: {
     appTitle: 'TimeTrip',
@@ -276,6 +279,7 @@ export const loginText: Record<Locale, LoginText> = {
     devLoginButton: '登录',
     devLoginInvalid: '账号或密码不正确。',
     devLoginTooMany: '登录尝试次数过多，请稍后再试。',
+    devLoginUnavailable: '测试登录暂时无法使用。',
   },
   ja: {
     appTitle: 'TimeTrip',
@@ -291,6 +295,7 @@ export const loginText: Record<Locale, LoginText> = {
     devLoginButton: 'ログイン',
     devLoginInvalid: 'IDまたはパスワードが正しくありません。',
     devLoginTooMany: 'ログイン試行回数が多すぎます。しばらくしてから再度お試しください。',
+    devLoginUnavailable: 'テストログインは一時的にご利用いただけません。',
   },
 };
 
