@@ -15,6 +15,11 @@ export function loginWithGoogle(providerIdToken: string): Promise<AuthTokens> {
   return publicPost<AuthTokens>("/users/google", { idToken: providerIdToken });
 }
 
+/** Review/QA-only fixed-account login (Play/관광공사 심사, 내부 QA). See AUTH_API_SPEC.md. */
+export function loginWithDev(loginId: string, password: string): Promise<AuthTokens> {
+  return publicPost<AuthTokens>("/users/dev", { loginId, password });
+}
+
 export function getMe(): Promise<MeResponse> {
   return apiGet<MeResponse>("/users");
 }

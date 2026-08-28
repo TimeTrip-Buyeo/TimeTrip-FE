@@ -150,6 +150,13 @@ export default function LoginScreen() {
         </Pressable>
 
         <Text style={styles.terms}>{t.terms}</Text>
+
+        <Pressable
+          style={styles.devLoginToggle}
+          onPress={() => router.push("/dev-login")}
+          hitSlop={8}>
+          <Text style={styles.devLoginToggleText}>{t.devLoginToggle}</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -290,5 +297,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: "center",
     color: "#a09087",
+  },
+  devLoginToggle: {
+    marginTop: 14,
+    alignSelf: "center",
+  },
+  devLoginToggleText: {
+    fontSize: 11,
+    color: "#c3b8ae",
+    textDecorationLine: "underline",
   },
 });

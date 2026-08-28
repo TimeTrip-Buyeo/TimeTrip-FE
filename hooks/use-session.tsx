@@ -26,6 +26,8 @@ type SessionContextValue = {
   loginWithKakao: (providerAccessToken: string) => Promise<void>;
   /** Exchanges a Google idToken for our own tokens and stores them. */
   loginWithGoogle: (providerIdToken: string) => Promise<void>;
+  /** Review/QA fixed-account login (POST /users/dev). Same token handling as the social logins. */
+  loginWithDev: (loginId: string, password: string) => Promise<void>;
 };
 
 /** Thrown by withdraw() when the session was already cleared (expired tokens) before the delete request could go through — the account was NOT deleted. */
@@ -100,6 +102,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
     await saveTokens(tokens);
   }, []);
 
+  const loginWithDev = useCallback(async (loginId: string, password: string) => {
+    const tokens = await authApi.loginWithDev(loginId, password);
+    await saveTokens(tokens);
+  }, []);
+
   const value = useMemo(
     () => ({
       isLoggedIn,
@@ -110,8 +117,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
       withdraw,
       loginWithKakao,
       loginWithGoogle,
+      loginWithDev,
     }),
-    [isLoggedIn, isSessionReady, currentEmail, login, logout, withdraw, loginWithKakao, loginWithGoogle],
+    [
+      isLoggedIn,
+      isSessionReady,
+      currentEmail,
+      login,
+      logout,
+      withdraw,
+      loginWithKakao,
+      loginWithGoogle,
+      loginWithDev,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
