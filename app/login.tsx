@@ -3,7 +3,7 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LanguagePickerModal } from "@/components/login/language-picker-modal";
@@ -132,9 +132,7 @@ export default function LoginScreen() {
         <Text style={styles.description}>{t.description}</Text>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.bottom}>
+      <View style={styles.bottom}>
         {error && <Text style={styles.errorText}>{error}</Text>}
 
         <Pressable style={styles.kakaoButton} onPress={handleKakaoLogin} disabled={isSubmitting}>
@@ -159,7 +157,7 @@ export default function LoginScreen() {
           hitSlop={8}>
           <Text style={styles.devLoginToggleText}>{t.devLoginToggle}</Text>
         </Pressable>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
