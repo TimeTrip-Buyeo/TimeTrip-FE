@@ -105,9 +105,16 @@ export default function AlbumScreen() {
   return <AlbumList />;
 }
 
-function BuyeoCutFab({ bottom }: { bottom: number }) {
+function BuyeoCutFab({ bottom, collectionItemId }: { bottom: number; collectionItemId?: number }) {
   return (
-    <Pressable style={[styles.fab, { bottom }]} onPress={() => router.push("/buyeo-cut")}>
+    <Pressable
+      style={[styles.fab, { bottom }]}
+      onPress={() =>
+        router.push({
+          pathname: "/buyeo-cut",
+          params: collectionItemId !== undefined ? { collectionItemId: String(collectionItemId) } : {},
+        })
+      }>
       <GripRectIcon />
     </Pressable>
   );
@@ -315,10 +322,6 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
         </View>
         <View style={styles.photoSectionHeader}>
           <Text style={styles.themeLabel}>{data?.name ?? t.themeLabel}</Text>
-          <Pressable style={styles.allAlbumButton} onPress={() => router.push("/album")}>
-            <FontAwesome5 name="th-large" size={11} color="#800000" solid />
-            <Text style={styles.allAlbumButtonText}>{t.allAlbumButton}</Text>
-          </Pressable>
         </View>
 
         {loadError ? (
@@ -351,7 +354,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
         )}
       </ScrollView>
 
-      <BuyeoCutFab bottom={insets.bottom + 96} />
+      <BuyeoCutFab bottom={insets.bottom + 96} collectionItemId={collectionItemId} />
 
       <BottomNav
         active="album"
@@ -598,6 +601,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
+  const buyeoCutCollectionItemId = captured?.collectionItemId ?? remotePhoto?.collectionItemId;
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -664,7 +668,17 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
       </View>
 
       <View style={[styles.viewerActions, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable style={styles.viewerSideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.viewerSideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params:
+                buyeoCutCollectionItemId !== undefined
+                  ? { collectionItemId: String(buyeoCutCollectionItemId) }
+                  : {},
+            })
+          }>
           <View style={styles.viewerSideCircle}>
             <GripRectIcon />
           </View>
@@ -914,22 +928,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 12,
     marginBottom: 12,
-  },
-  allAlbumButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "rgba(128,0,0,0.18)",
-    borderRadius: 9999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "rgba(255,255,255,0.8)",
-  },
-  allAlbumButtonText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#800000",
   },
   editControls: {
     flexDirection: "row",
