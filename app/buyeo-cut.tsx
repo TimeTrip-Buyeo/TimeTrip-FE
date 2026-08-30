@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSourcePropType } from "react-native";
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -45,7 +45,15 @@ async function getMediaLibraryModule(): Promise<ExpoMediaLibraryModule | null> {
 // example ("2 / 3", node 0:1418) — not a 4-photo strip.
 const SLOT_COUNT = 3;
 const ALL_FILTER = "all" as const;
-type ThemeFilter = LocationId | typeof ALL_FILTER;
+type ThemeFilter = string | typeof ALL_FILTER;
+
+function parseRouteId(value: string | string[] | undefined): number | undefined {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  if (rawValue === undefined || rawValue === "") return undefined;
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
 
 // The frame box keeps the exact 1:2 ratio measured off Figma's original frame
 // graphic (node 0:580's "image 46", native 887x1774) — GET /collages/frames
@@ -76,6 +84,8 @@ type PickerItem = {
   id: string;
   locationId: LocationId;
   source: ImageSourcePropType;
+  collectionItemId?: number;
+  collectionItemName?: string;
   /** Set only if the server upload in photo-save.tsx succeeded — undefined for
       local-only captures (upload failed, or never attempted). Not read right
       now (handleSave/handleShare capture the on-screen collage directly
@@ -86,12 +96,22 @@ type PickerItem = {
   serverSelfiePhotoId?: number;
 };
 
+type PickerSection = {
+  sectionKey: string;
+  id: LocationId;
+  entry?: AlbumEntry;
+  collectionItemName?: string;
+  items: PickerItem[];
+};
+
 // Rebuilt to match Figma's "부여세컷 선택" → "콜라주 만들기" flow (nodes 0:1418,
 // 0:1670, 0:580/0:612) directly. The picker grid shows real captures only —
 // this session's local captures plus the user's uploaded selfies from the
 // server (GET /collages/selfie-photos) — mock album/collectible artwork is
 // intentionally excluded so tests don't accidentally select placeholder photos.
 export default function BuyeoCutScreen() {
+  const params = useLocalSearchParams<{ collectionItemId?: string }>();
+  const selectedCollectionItemId = parseRouteId(params.collectionItemId);
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
   const t = buyeoCutScreenText[locale];
@@ -108,8 +128,12 @@ export default function BuyeoCutScreen() {
   // screen, so this fetches the user's full selfie set once and groups it by
   // spotId → LocationId below (same mapping album.tsx's remote photos use).
   const { data: selfiesData, loadError: selfiesLoadError } = useApiResource(
-    () => getSelfiePhotoOptions({ locale }),
-    [locale],
+    () =>
+      getSelfiePhotoOptions({
+        locale,
+        ...(selectedCollectionItemId !== undefined ? { collectionItemId: selectedCollectionItemId } : {}),
+      }),
+    [locale, selectedCollectionItemId],
     "[buyeo-cut] failed to load selfie photos",
   );
   const remoteSelfies = useMemo(() => selfiesData?.selfiePhotos ?? [], [selfiesData]);
@@ -156,16 +180,22 @@ export default function BuyeoCutScreen() {
     // silently hiding every photo (local or server-synced) taken at museum/
     // royalTombs/busosanseong.
     return MAP_LOCATIONS.map((location) => location.id)
-      .map((id) => {
+      .flatMap((id) => {
         const entry = ALBUM_ENTRIES[id];
         const capturedPhotos = photosByLocation[id] ?? [];
+        const filteredCapturedPhotos =
+          selectedCollectionItemId !== undefined
+            ? capturedPhotos.filter((photo) => photo.collectionItemId === selectedCollectionItemId)
+            : capturedPhotos;
         // photo.uri is already a flattened composite (background + person
         // cutout baked in by photo-save.tsx's captureRef) — no separate pose
         // overlay here, same as album.tsx just rendering captured.uri as-is.
-        const localItems: PickerItem[] = capturedPhotos.map((photo) => ({
+        const localItems: PickerItem[] = filteredCapturedPhotos.map((photo) => ({
           id: photo.id,
           locationId: id,
           source: { uri: photo.uri },
+          collectionItemId: photo.collectionItemId,
+          collectionItemName: photo.collectionItemName,
           serverSelfiePhotoId: photo.serverSelfiePhotoId,
         }));
         // Same dedup rule as album.tsx's useRemoteAlbumPhotos merge: skip a
@@ -173,22 +203,52 @@ export default function BuyeoCutScreen() {
         // selfiePhotoId, so it doesn't show up twice in the grid.
         const remoteItems: PickerItem[] = remoteSelfies
           .filter((photo) => SPOT_ID_TO_LOCATION_ID[photo.spotId] === id)
-          .filter((photo) => !capturedPhotos.some((local) => local.serverSelfiePhotoId === photo.selfiePhotoId))
+          .filter(
+            (photo) =>
+              selectedCollectionItemId === undefined || photo.collectionItemId === selectedCollectionItemId,
+          )
+          .filter((photo) => !filteredCapturedPhotos.some((local) => local.serverSelfiePhotoId === photo.selfiePhotoId))
           .map((photo) => ({
             id: `remote-${photo.selfiePhotoId}`,
             locationId: id,
             source: { uri: toApiUrl(photo.photoUrl) },
+            collectionItemId: photo.collectionItemId,
+            collectionItemName: photo.collectionItemName,
             serverSelfiePhotoId: photo.selfiePhotoId,
           }));
-        return { id, entry, items: [...localItems, ...remoteItems] };
+        const groupedItems = [...localItems, ...remoteItems].reduce<Record<string, PickerItem[]>>((groups, item) => {
+          const groupKey =
+            item.collectionItemId !== undefined
+              ? `collection-${item.collectionItemId}`
+              : `location-${id}-${item.id}`;
+          groups[groupKey] = [...(groups[groupKey] ?? []), item];
+          return groups;
+        }, {});
+
+        return Object.entries(groupedItems).map(([sectionKey, items]) => {
+          const collectionItemName = items.find((item) => item.collectionItemName)?.collectionItemName;
+          return { sectionKey, id, entry, collectionItemName, items };
+        });
       })
       .filter((section) => section.items.length > 0);
-  }, [photosByLocation, remoteSelfies]);
+  }, [photosByLocation, remoteSelfies, selectedCollectionItemId]);
 
   const sections = useMemo(
-    () => (themeFilter === ALL_FILTER ? allSections : allSections.filter((section) => section.id === themeFilter)),
+    () =>
+      themeFilter === ALL_FILTER
+        ? allSections
+        : allSections.filter((section) => section.sectionKey === themeFilter),
     [allSections, themeFilter],
   );
+
+  const visibleItemIds = useMemo(
+    () => new Set(sections.flatMap((section) => section.items.map((item) => item.id))),
+    [sections],
+  );
+
+  useEffect(() => {
+    setSelected((current) => current.filter((item) => visibleItemIds.has(item.id)));
+  }, [visibleItemIds]);
 
   const isFull = selected.length >= SLOT_COUNT;
 
@@ -204,7 +264,13 @@ export default function BuyeoCutScreen() {
   const handleApplyFilter = (filter: ThemeFilter) => {
     setThemeFilter(filter);
     setIsFilterSheetOpen(false);
-    const label = filter === ALL_FILTER ? t.filterAllLabel : ALBUM_ENTRIES[filter]?.name[locale] ?? mapT.pins[filter];
+    const activeSection = allSections.find((section) => section.sectionKey === filter);
+    const label =
+      filter === ALL_FILTER
+        ? t.filterAllLabel
+        : activeSection
+          ? activeSection.collectionItemName ?? activeSection.entry?.name[locale] ?? mapT.pins[activeSection.id]
+          : undefined;
     if (label) setToastMessage(t.filterAppliedToast(label));
   };
 
@@ -495,8 +561,10 @@ export default function BuyeoCutScreen() {
           <View style={styles.body}>
             {selfiesLoadError && <Text style={styles.selfiesLoadErrorText}>{t.selfiesLoadErrorText}</Text>}
             {sections.map((section) => (
-              <View key={section.id} style={styles.section}>
-                <Text style={styles.sectionLabel}>{section.entry?.name[locale] ?? mapT.pins[section.id]}</Text>
+              <View key={section.sectionKey} style={styles.section}>
+                <Text style={styles.sectionLabel}>
+                  {section.collectionItemName ?? section.entry?.name[locale] ?? mapT.pins[section.id]}
+                </Text>
                 <View style={styles.grid}>
                   {section.items.map((item) => {
                     const orderIndex = selected.findIndex((candidate) => candidate.id === item.id);
@@ -565,7 +633,7 @@ type FilterSheetProps = {
   closeLabel: string;
   allLabel: string;
   activeFilter: ThemeFilter;
-  sections: { id: LocationId; entry?: AlbumEntry }[];
+  sections: PickerSection[];
   locale: Locale;
   onSelect: (filter: ThemeFilter) => void;
   onClose: () => void;
@@ -600,12 +668,12 @@ function FilterSheet({ insetsBottom, title, closeLabel, allLabel, activeFilter, 
         </View>
         <View style={styles.sheetOptions}>
           <FilterOption label={allLabel} active={activeFilter === ALL_FILTER} onPress={() => onSelect(ALL_FILTER)} />
-          {sections.map(({ id, entry }) => (
+          {sections.map(({ sectionKey, id, entry, collectionItemName }) => (
             <FilterOption
-              key={id}
-              label={entry?.name[locale] ?? mapScreenText[locale].pins[id]}
-              active={activeFilter === id}
-              onPress={() => onSelect(id)}
+              key={sectionKey}
+              label={collectionItemName ?? entry?.name[locale] ?? mapScreenText[locale].pins[id]}
+              active={activeFilter === sectionKey}
+              onPress={() => onSelect(sectionKey)}
             />
           ))}
         </View>

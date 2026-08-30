@@ -79,6 +79,7 @@ export default function PersonCameraScreen() {
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
+    collectionItemName?: string;
   }>();
   const locationId = resolveLocationId(params.locationId, params.spotId);
   const collectionItemId = resolveNumberParam(params.collectionItemId);
@@ -237,6 +238,9 @@ export default function PersonCameraScreen() {
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
             ? { collectionItemId: resolveSingleParam(params.collectionItemId)! }
+            : {}),
+          ...(resolveSingleParam(params.collectionItemName)
+            ? { collectionItemName: resolveSingleParam(params.collectionItemName)! }
             : {}),
         },
       });
@@ -426,7 +430,14 @@ export default function PersonCameraScreen() {
       )}
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 24 }]}>
-        <Pressable style={styles.sideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.sideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params: collectionItemId !== null ? { collectionItemId: String(collectionItemId) } : {},
+            })
+          }>
           <View style={styles.sideCircle}>
             <GripRectIcon />
           </View>

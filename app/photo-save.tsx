@@ -13,7 +13,7 @@ import { albumScreenText, mapScreenText, personCameraText } from "@/constants/tr
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
-import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 import { shareImageAsync } from "@/lib/share-image";
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
@@ -31,11 +31,13 @@ export default function PhotoSaveScreen() {
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
+    collectionItemName?: string;
   }>();
   const locationId = resolveLocationId(params.locationId, params.spotId);
   const poseId = params.poseId ?? "";
   const selectedPoseId = resolveNumberParam(params.poseId);
   const poseLabel = params.poseLabel ?? "";
+  const collectionItemName = resolveSingleParam(params.collectionItemName) ?? "";
   const poseImageUrl = params.poseImageUrl ?? "";
   const parsedPoseAspectRatio = Number(params.poseAspectRatio);
   const uri = params.uri ?? "";
@@ -106,7 +108,10 @@ export default function PhotoSaveScreen() {
     setIsSharing(true);
     try {
       const compositeUri = await captureCompositePhoto();
-      const didShare = await shareImageAsync(compositeUri, poseLabel || entry?.name[locale] || mapT.pins[locationId]);
+      const didShare = await shareImageAsync(
+        compositeUri,
+        collectionItemName || poseLabel || entry?.name[locale] || mapT.pins[locationId],
+      );
       if (!didShare) setShowShareUnavailableToast(true);
     } catch (error) {
       console.error("[photo-save] selfie photo share failed", error);
@@ -140,7 +145,15 @@ export default function PhotoSaveScreen() {
           console.error("[photo-save] server selfie sync failed, keeping local copy only", error);
         }
       }
-      addPhoto({ locationId, poseId, poseLabel, uri: compositeUri, serverSelfiePhotoId });
+      addPhoto({
+        locationId,
+        poseId,
+        poseLabel,
+        uri: compositeUri,
+        ...(collectionItemId !== null ? { collectionItemId } : {}),
+        ...(collectionItemName ? { collectionItemName } : {}),
+        serverSelfiePhotoId,
+      });
       setIsSaved(true);
       setShowSaveToast(true);
     } catch (error) {
@@ -148,6 +161,10 @@ export default function PhotoSaveScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openAlbum = () => {
+    router.push("/album");
   };
 
   useEffect(() => {
@@ -210,7 +227,14 @@ export default function PhotoSaveScreen() {
       </View>
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable style={styles.sideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.sideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params: collectionItemId !== null ? { collectionItemId: String(collectionItemId) } : {},
+            })
+          }>
           <View style={styles.sideCircle}>
             <GripRectIcon />
           </View>
@@ -221,7 +245,7 @@ export default function PhotoSaveScreen() {
           <FontAwesome5 name={isSaved ? "check" : "download"} size={24} color="#fff" solid />
         </Pressable>
 
-        <Pressable style={styles.sideButton} onPress={() => router.push({ pathname: "/album", params: { locationId } })}>
+        <Pressable style={styles.sideButton} onPress={openAlbum}>
           <View style={styles.sideCircle}>
             <FontAwesome5 name="image" size={14} color="#1b1b1b" solid />
           </View>

@@ -556,6 +556,7 @@ export default function ArCameraScreen() {
                       ...(spotId !== null ? { spotId: String(spotId) } : {}),
                       ...(timeslip ? { storyId: String(timeslip.storyId) } : {}),
                       collectionItemId: String(acquireResult.collectionItemId),
+                      collectionItemName: acquireResult.name,
                     },
                   });
                 }

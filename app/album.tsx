@@ -105,9 +105,16 @@ export default function AlbumScreen() {
   return <AlbumList />;
 }
 
-function BuyeoCutFab({ bottom }: { bottom: number }) {
+function BuyeoCutFab({ bottom, collectionItemId }: { bottom: number; collectionItemId?: number }) {
   return (
-    <Pressable style={[styles.fab, { bottom }]} onPress={() => router.push("/buyeo-cut")}>
+    <Pressable
+      style={[styles.fab, { bottom }]}
+      onPress={() =>
+        router.push({
+          pathname: "/buyeo-cut",
+          params: collectionItemId !== undefined ? { collectionItemId: String(collectionItemId) } : {},
+        })
+      }>
       <GripRectIcon />
     </Pressable>
   );
@@ -135,18 +142,20 @@ function AlbumList() {
     setIsLegendVisible(false);
   };
 
-  // A photo captured for a location the server hasn't registered as an album
-  // yet (selfie upload isn't wired up — see photo-save.tsx) would otherwise
-  // vanish from this list entirely once the server list replaces it, with no
-  // way back to AlbumDetail(locationId) for that photo.
+  // A location-only photo captured before server album data exists would
+  // otherwise vanish from this list. Character selfies have collectionItemId
+  // metadata and belong in character albums, so they must not create a
+  // location fallback card that mixes different people from the same spot.
   const knownServerNames = new Set((albums ?? []).map((album) => album.name));
   // Only list albums with at least one photo — an acquired collection item
   // with zero selfies yet isn't something to show in the album list.
   const displayedAlbums = (albums ?? []).filter((album) => album.photoCount > 0);
   const fallbackLocationIds = ALBUM_LOCATION_IDS.filter((id) => {
     const entry = ALBUM_ENTRIES[id];
-    const hasCapturedPhotos = (photosByLocation[id]?.length ?? 0) > 0;
-    return !!entry && hasCapturedPhotos && !knownServerNames.has(entry.name[locale]);
+    const hasLocationOnlyCapturedPhotos = (photosByLocation[id] ?? []).some(
+      (photo) => photo.collectionItemId === undefined,
+    );
+    return !!entry && hasLocationOnlyCapturedPhotos && !knownServerNames.has(entry.name[locale]);
   });
 
   return (
@@ -347,7 +356,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
         )}
       </ScrollView>
 
-      <BuyeoCutFab bottom={insets.bottom + 96} />
+      <BuyeoCutFab bottom={insets.bottom + 96} collectionItemId={collectionItemId} />
 
       <BottomNav
         active="album"
@@ -594,6 +603,9 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
+  const buyeoCutCollectionItemId = captured?.collectionItemId ?? remotePhoto?.collectionItemId;
+  const collectionItemName = captured?.collectionItemName ?? remotePhoto?.collectionItemName;
+  const displayLabel = collectionItemName ?? captured?.poseLabel;
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -601,7 +613,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
     let isActive = true;
     setIsSelfieRouteLoading(true);
     getSelfieRouteParams(locationId, locale, {
-      collectionItemId: remotePhoto?.collectionItemId,
+      collectionItemId: buyeoCutCollectionItemId,
       requireAcquired: true,
     })
       .then((params) => {
@@ -618,12 +630,12 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
     return () => {
       isActive = false;
     };
-  }, [locale, locationId, remotePhoto?.collectionItemId]);
+  }, [buyeoCutCollectionItemId, locale, locationId]);
 
   const canOpenPersonCamera = !isSelfieRouteLoading && !!selfieRouteParams.collectionItemId;
 
   const handleShare = async () => {
-    const label = captured?.poseLabel || remotePhoto?.collectionItemName;
+    const label = displayLabel;
     const imageUri = captured?.uri || remotePhoto?.uri;
     if (!label || !imageUri) return;
 
@@ -652,15 +664,25 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         ) : remotePhoto ? (
           <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
         ) : null}
-        {(captured?.poseLabel || remotePhoto?.collectionItemName) && (
+        {displayLabel && (
           <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || remotePhoto?.collectionItemName}</Text>
+            <Text style={styles.viewerCaptionText}>● {displayLabel}</Text>
           </View>
         )}
       </View>
 
       <View style={[styles.viewerActions, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable style={styles.viewerSideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.viewerSideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params:
+                buyeoCutCollectionItemId !== undefined
+                  ? { collectionItemId: String(buyeoCutCollectionItemId) }
+                  : {},
+            })
+          }>
           <View style={styles.viewerSideCircle}>
             <GripRectIcon />
           </View>
@@ -674,7 +696,16 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         <Pressable
           style={[styles.viewerSideButton, !canOpenPersonCamera && styles.viewerSideButtonDisabled]}
           disabled={!canOpenPersonCamera}
-          onPress={() => router.push({ pathname: "/person-camera", params: { locationId, ...selfieRouteParams } })}>
+          onPress={() =>
+            router.push({
+              pathname: "/person-camera",
+              params: {
+                locationId,
+                ...selfieRouteParams,
+                ...(collectionItemName ? { collectionItemName } : {}),
+              },
+            })
+          }>
           <View style={styles.viewerSideCircle}>
             <FontAwesome5 name="camera" size={16} color="#1b1b1b" solid />
           </View>
