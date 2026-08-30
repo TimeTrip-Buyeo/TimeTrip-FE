@@ -142,18 +142,20 @@ function AlbumList() {
     setIsLegendVisible(false);
   };
 
-  // A photo captured for a location the server hasn't registered as an album
-  // yet (selfie upload isn't wired up — see photo-save.tsx) would otherwise
-  // vanish from this list entirely once the server list replaces it, with no
-  // way back to AlbumDetail(locationId) for that photo.
+  // A location-only photo captured before server album data exists would
+  // otherwise vanish from this list. Character selfies have collectionItemId
+  // metadata and belong in character albums, so they must not create a
+  // location fallback card that mixes different people from the same spot.
   const knownServerNames = new Set((albums ?? []).map((album) => album.name));
   // Only list albums with at least one photo — an acquired collection item
   // with zero selfies yet isn't something to show in the album list.
   const displayedAlbums = (albums ?? []).filter((album) => album.photoCount > 0);
   const fallbackLocationIds = ALBUM_LOCATION_IDS.filter((id) => {
     const entry = ALBUM_ENTRIES[id];
-    const hasCapturedPhotos = (photosByLocation[id]?.length ?? 0) > 0;
-    return !!entry && hasCapturedPhotos && !knownServerNames.has(entry.name[locale]);
+    const hasLocationOnlyCapturedPhotos = (photosByLocation[id] ?? []).some(
+      (photo) => photo.collectionItemId === undefined,
+    );
+    return !!entry && hasLocationOnlyCapturedPhotos && !knownServerNames.has(entry.name[locale]);
   });
 
   return (
