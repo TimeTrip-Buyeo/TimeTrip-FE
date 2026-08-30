@@ -25,9 +25,9 @@ import { arCameraText, collectibleAcquiredText, LOCALES, mapScreenText, type Loc
 import { useLanguage } from "@/hooks/use-language";
 import { acquireCollectionItem, type AcquireCollectionItemResult } from "@/lib/api/collections";
 import {
+  getLocalizedSpotName,
   getSpotDetail,
   getSpotTimeslip,
-  getStoryAudioGuide,
   type SpotDetail,
   type SpotTimeslip,
   type StoryAudioGuide,
@@ -118,10 +118,12 @@ export default function ArCameraScreen() {
   const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
 
-  // Keyed by `${spotId}:${month}` so a SEARCHING→READY round-trip reuses the
-  // cached response instead of re-hitting the API (content doesn't change
-  // within the same month — see integration spec).
-  const timeslipCacheRef = useRef<{ key: string; data: SpotTimeslip | null } | null>(null);
+  // Keyed by `${spotId}:${month}:${locale}` so a SEARCHING→READY round-trip,
+  // or switching back to a previously-viewed language, reuses the cached
+  // response instead of re-hitting the API (content doesn't change within
+  // the same month+language — see integration spec). A map (not a single
+  // slot) so cache entries for earlier languages survive a locale switch.
+  const timeslipCacheRef = useRef<Map<string, SpotTimeslip | null>>(new Map());
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -188,31 +190,40 @@ export default function ArCameraScreen() {
     };
   }, [locationPermission?.granted, spotDetail]);
 
-  // Fires exactly once per SEARCHING→READY transition — never on the
-  // repeated position callbacks above.
+  // Fires on the SEARCHING→READY transition, and again whenever the locale
+  // changes while already READY, so the whole payload (spot name, item name,
+  // guide text, audio guide) stays in sync with the selected language —
+  // never on the repeated position callbacks above.
   useEffect(() => {
-    if (geoState !== "loading" || spotId === null) return;
+    if (spotId === null || (geoState !== "loading" && geoState !== "ready")) return;
     let isActive = true;
     const month = new Date().getMonth() + 1;
-    const cacheKey = `${spotId}:${month}`;
+    const cacheKey = `${spotId}:${month}:${locale}`;
 
-    if (timeslipCacheRef.current?.key === cacheKey) {
-      const cached = timeslipCacheRef.current.data;
+    if (timeslipCacheRef.current.has(cacheKey)) {
+      const cached = timeslipCacheRef.current.get(cacheKey) ?? null;
       setTimeslip(cached);
       setGeoState(cached ? "ready" : "empty");
       return;
     }
 
+    const wasAlreadyReady = geoState === "ready";
+
     getSpotTimeslip(spotId, { month, language: locale })
       .then((data) => {
         if (!isActive) return;
-        timeslipCacheRef.current = { key: cacheKey, data };
+        timeslipCacheRef.current.set(cacheKey, data);
         setTimeslip(data);
         setGeoState(data ? "ready" : "empty");
       })
       .catch((error) => {
         console.error("[ar-camera] timeslip lookup failed", error);
-        if (isActive) setGeoState("searching");
+        if (!isActive) return;
+        // A background refresh triggered by a locale switch (already READY)
+        // should leave the currently-displayed content and audio playback
+        // alone on failure — only a fresh SEARCHING→READY load has no prior
+        // content to fall back to.
+        if (!wasAlreadyReady) setGeoState("searching");
       });
 
     return () => {
@@ -228,21 +239,6 @@ export default function ArCameraScreen() {
     setActiveAudioGuide(timeslip.audioGuide);
     setIsCollectionItemAcquired(timeslip.collectionItem.isAcquired);
   }, [geoState, timeslip]);
-
-  // Language switch re-fetches only the audio guide, not the whole timeslip
-  // response, per spec.
-  useEffect(() => {
-    if (geoState !== "ready" || !timeslip?.audioGuide || locale === timeslip.audioGuide.language) return;
-    let isActive = true;
-    getStoryAudioGuide(timeslip.storyId, { language: locale })
-      .then((guide) => {
-        if (isActive && guide) setActiveAudioGuide(guide);
-      })
-      .catch((error) => console.error("[ar-camera] audio guide lookup failed", error));
-    return () => {
-      isActive = false;
-    };
-  }, [locale, geoState, timeslip]);
 
   const mapT = mapScreenText[locale];
   const t = arCameraText[locale];
@@ -276,6 +272,15 @@ export default function ArCameraScreen() {
       });
   }, [timeslip, isCollectionItemAcquired]);
 
+  // getLocalizedSpotName(spotDetail, locale) is checked first because it
+  // updates the instant locale changes, whereas timeslip.spotName only
+  // updates once the locale-keyed timeslip refetch resolves — putting it
+  // first would leave the header showing the previous language meanwhile.
+  const localizedSpotTitle =
+    (spotDetail ? getLocalizedSpotName(spotDetail, locale) : null) ??
+    timeslip?.spotName ??
+    spotTitle ??
+    mapT.pins[locationId];
   const locationDeniedForever = locationPermission !== null && !locationPermission.granted && !locationPermission.canAskAgain;
   const characterCardImageUrl = timeslip
     ? isCollectionItemAcquired
@@ -310,7 +315,7 @@ export default function ArCameraScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={20} color="#fff" solid />
           </Pressable>
-          <Text style={styles.locationTitle}>{spotTitle ?? mapT.pins[locationId]}</Text>
+          <Text style={styles.locationTitle}>{localizedSpotTitle}</Text>
         </View>
         <View style={styles.arActivePill}>
           <View style={styles.arActiveDot} />
@@ -383,58 +388,63 @@ export default function ArCameraScreen() {
             <Text style={styles.sheetHeaderTitle}>{t.timeSlipCameraTitle}</Text>
           </View>
 
+          {isSheetExpanded && geoState === "ready" && timeslip && (
+            <View style={styles.characterCard}>
+              {characterCardImageUrl ? (
+                <Image
+                  source={{ uri: characterCardImageUrl }}
+                  style={styles.characterAvatarImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.characterAvatar}>
+                  <FontAwesome5 name="user" size={26} color="#800000" solid />
+                </View>
+              )}
+              <View style={styles.characterBody}>
+                <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
+                {!isCollectionItemAcquired && <Text style={styles.acquireHintText}>{t.acquireHintText}</Text>}
+                <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Always rendered (never inside the isSheetExpanded block) so
+              AudioGuideButton (and the useAudioPlayer it owns) never
+              unmounts when the sheet is collapsed — audio keeps playing.
+              Hidden via `display: none` rather than unmounted when
+              collapsed, so only "타임슬립카메라" stays visible while the
+              player keeps running underneath. */}
+          {geoState === "ready" && activeAudioGuide && (
+            <View style={[styles.audioRow, !isSheetExpanded && styles.audioRowCollapsed]}>
+              <AudioGuideButton
+                key={activeAudioGuide.filePath}
+                guide={activeAudioGuide}
+                onFinished={handleAudioFinished}
+              />
+              <View style={styles.audioTextColumn}>
+                <Text style={styles.audioLabel}>{t.audioGuideLabel}</Text>
+                <Text style={styles.audioTitle}>{activeAudioGuide.title}</Text>
+              </View>
+              <Pressable
+                style={[styles.langBadge, isLegendVisible && styles.langBadgeActive]}
+                onPress={() => setIsLegendVisible((visible) => !visible)}
+                hitSlop={8}>
+                <FontAwesome5 name="globe" size={10} color={isLegendVisible ? "#fff" : "#b8860b"} solid />
+                <Text style={[styles.langBadgeText, isLegendVisible && styles.langBadgeTextActive]}>
+                  {currentLocaleMeta.badgeLabel}
+                </Text>
+              </Pressable>
+              {isLegendVisible && (
+                <View style={styles.legendAnchor}>
+                  <LanguageLegendModal currentLocale={locale} onSelect={handleSelectLocale} direction="up" />
+                </View>
+              )}
+            </View>
+          )}
+
           {isSheetExpanded && (
             <>
-              {geoState === "ready" && timeslip && (
-                <>
-                  <View style={styles.characterCard}>
-                    {characterCardImageUrl ? (
-                      <Image
-                        source={{ uri: characterCardImageUrl }}
-                        style={styles.characterAvatarImage}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={styles.characterAvatar}>
-                        <FontAwesome5 name="user" size={26} color="#800000" solid />
-                      </View>
-                    )}
-                    <View style={styles.characterBody}>
-                      <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
-                      <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
-                    </View>
-                  </View>
-
-                  {activeAudioGuide && (
-                    <View style={styles.audioRow}>
-                      <AudioGuideButton
-                        key={activeAudioGuide.filePath}
-                        guide={activeAudioGuide}
-                        onFinished={handleAudioFinished}
-                      />
-                      <View style={styles.audioTextColumn}>
-                        <Text style={styles.audioLabel}>{t.audioGuideLabel}</Text>
-                        <Text style={styles.audioTitle}>{activeAudioGuide.title}</Text>
-                      </View>
-                      <Pressable
-                        style={[styles.langBadge, isLegendVisible && styles.langBadgeActive]}
-                        onPress={() => setIsLegendVisible((visible) => !visible)}
-                        hitSlop={8}>
-                        <FontAwesome5 name="globe" size={10} color={isLegendVisible ? "#fff" : "#b8860b"} solid />
-                        <Text style={[styles.langBadgeText, isLegendVisible && styles.langBadgeTextActive]}>
-                          {currentLocaleMeta.badgeLabel}
-                        </Text>
-                      </Pressable>
-                      {isLegendVisible && (
-                        <View style={styles.legendAnchor}>
-                          <LanguageLegendModal currentLocale={locale} onSelect={handleSelectLocale} direction="up" />
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </>
-              )}
-
               {geoState === "loading" && (
                 <View style={styles.stateRow}>
                   <ActivityIndicator color="#800000" />
@@ -695,6 +705,11 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: "#1b1b1b",
   },
+  acquireHintText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#b8860b",
+  },
   characterDescription: {
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 9.4,
@@ -712,6 +727,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17,
     paddingTop: 21,
     paddingBottom: 17,
+  },
+  audioRowCollapsed: {
+    display: "none",
   },
   audioPlayButton: {
     width: 32,
