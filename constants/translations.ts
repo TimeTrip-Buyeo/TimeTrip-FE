@@ -760,6 +760,7 @@ type AlbumScreenText = {
   loadErrorText: string;
   themeLabel: string;
   buyeoCutLabel: string;
+  allAlbumButton: string;
   personCameraLabel: string;
   emptyTitle: string;
   emptyBodyLine1: string;
@@ -775,6 +776,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     loadErrorText: '앨범을 불러오지 못했어요. 다시 시도해주세요.',
     themeLabel: '테마',
     buyeoCutLabel: '부여세컷',
+    allAlbumButton: '전체 앨범 가기',
     personCameraLabel: '인물 카메라',
     emptyTitle: '아직 촬영된 사진이 없습니다!',
     emptyBodyLine1: '부여에 잠들어있는 백제의 유물과 인물들을 발견하고 획득해보세요.',
@@ -788,6 +790,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     loadErrorText: "Couldn't load the album. Please try again.",
     themeLabel: 'Theme',
     buyeoCutLabel: 'Buyeo 4-Cut',
+    allAlbumButton: 'All Albums',
     personCameraLabel: 'Portrait Camera',
     emptyTitle: "You haven't taken any photos yet!",
     emptyBodyLine1: "Discover and collect Baekje's artifacts and figures resting around Buyeo.",
@@ -801,6 +804,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     loadErrorText: '相册加载失败，请重试。',
     themeLabel: '主题',
     buyeoCutLabel: '扶余四格',
+    allAlbumButton: '全部相册',
     personCameraLabel: '人物相机',
     emptyTitle: '还没有拍摄的照片！',
     emptyBodyLine1: '发现并收集沉睡在扶余的百济文物与人物吧。',
@@ -814,6 +818,7 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     loadErrorText: 'アルバムを読み込めませんでした。もう一度お試しください。',
     themeLabel: 'テーマ',
     buyeoCutLabel: '扶余フォーカット',
+    allAlbumButton: '全アルバム',
     personCameraLabel: '人物カメラ',
     emptyTitle: 'まだ撮影された写真がありません！',
     emptyBodyLine1: '扶余に眠る百済の遺物と人物を発見して手に入れましょう。',
