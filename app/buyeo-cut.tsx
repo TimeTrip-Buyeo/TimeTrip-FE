@@ -45,7 +45,7 @@ async function getMediaLibraryModule(): Promise<ExpoMediaLibraryModule | null> {
 // example ("2 / 3", node 0:1418) — not a 4-photo strip.
 const SLOT_COUNT = 3;
 const ALL_FILTER = "all" as const;
-type ThemeFilter = LocationId | typeof ALL_FILTER;
+type ThemeFilter = string | typeof ALL_FILTER;
 
 function parseRouteId(value: string | string[] | undefined): number | undefined {
   const rawValue = Array.isArray(value) ? value[0] : value;
@@ -94,6 +94,14 @@ type PickerItem = {
       lib/api/collage.ts) can be re-enabled once collection-item acquisition
       is wired up server-side. */
   serverSelfiePhotoId?: number;
+};
+
+type PickerSection = {
+  sectionKey: string;
+  id: LocationId;
+  entry?: AlbumEntry;
+  collectionItemName?: string;
+  items: PickerItem[];
 };
 
 // Rebuilt to match Figma's "부여세컷 선택" → "콜라주 만들기" flow (nodes 0:1418,
@@ -172,7 +180,7 @@ export default function BuyeoCutScreen() {
     // silently hiding every photo (local or server-synced) taken at museum/
     // royalTombs/busosanseong.
     return MAP_LOCATIONS.map((location) => location.id)
-      .map((id) => {
+      .flatMap((id) => {
         const entry = ALBUM_ENTRIES[id];
         const capturedPhotos = photosByLocation[id] ?? [];
         const filteredCapturedPhotos =
@@ -187,7 +195,7 @@ export default function BuyeoCutScreen() {
           locationId: id,
           source: { uri: photo.uri },
           collectionItemId: photo.collectionItemId,
-          collectionItemName: photo.poseLabel,
+          collectionItemName: photo.collectionItemName,
           serverSelfiePhotoId: photo.serverSelfiePhotoId,
         }));
         // Same dedup rule as album.tsx's useRemoteAlbumPhotos merge: skip a
@@ -204,15 +212,28 @@ export default function BuyeoCutScreen() {
             collectionItemName: photo.collectionItemName,
             serverSelfiePhotoId: photo.selfiePhotoId,
           }));
-        const items = [...localItems, ...remoteItems];
-        const collectionItemName = items.find((item) => item.collectionItemName)?.collectionItemName;
-        return { id, entry, collectionItemName, items };
+        const groupedItems = [...localItems, ...remoteItems].reduce<Record<string, PickerItem[]>>((groups, item) => {
+          const groupKey =
+            item.collectionItemId !== undefined
+              ? `collection-${item.collectionItemId}`
+              : `location-${id}-${item.id}`;
+          groups[groupKey] = [...(groups[groupKey] ?? []), item];
+          return groups;
+        }, {});
+
+        return Object.entries(groupedItems).map(([sectionKey, items]) => {
+          const collectionItemName = items.find((item) => item.collectionItemName)?.collectionItemName;
+          return { sectionKey, id, entry, collectionItemName, items };
+        });
       })
       .filter((section) => section.items.length > 0);
   }, [photosByLocation, remoteSelfies, selectedCollectionItemId]);
 
   const sections = useMemo(
-    () => (themeFilter === ALL_FILTER ? allSections : allSections.filter((section) => section.id === themeFilter)),
+    () =>
+      themeFilter === ALL_FILTER
+        ? allSections
+        : allSections.filter((section) => section.sectionKey === themeFilter),
     [allSections, themeFilter],
   );
 
@@ -230,11 +251,13 @@ export default function BuyeoCutScreen() {
   const handleApplyFilter = (filter: ThemeFilter) => {
     setThemeFilter(filter);
     setIsFilterSheetOpen(false);
-    const activeSection = allSections.find((section) => section.id === filter);
+    const activeSection = allSections.find((section) => section.sectionKey === filter);
     const label =
       filter === ALL_FILTER
         ? t.filterAllLabel
-        : activeSection?.collectionItemName ?? ALBUM_ENTRIES[filter]?.name[locale] ?? mapT.pins[filter];
+        : activeSection
+          ? activeSection.collectionItemName ?? activeSection.entry?.name[locale] ?? mapT.pins[activeSection.id]
+          : undefined;
     if (label) setToastMessage(t.filterAppliedToast(label));
   };
 
@@ -525,7 +548,7 @@ export default function BuyeoCutScreen() {
           <View style={styles.body}>
             {selfiesLoadError && <Text style={styles.selfiesLoadErrorText}>{t.selfiesLoadErrorText}</Text>}
             {sections.map((section) => (
-              <View key={section.id} style={styles.section}>
+              <View key={section.sectionKey} style={styles.section}>
                 <Text style={styles.sectionLabel}>
                   {section.collectionItemName ?? section.entry?.name[locale] ?? mapT.pins[section.id]}
                 </Text>
@@ -597,7 +620,7 @@ type FilterSheetProps = {
   closeLabel: string;
   allLabel: string;
   activeFilter: ThemeFilter;
-  sections: { id: LocationId; entry?: AlbumEntry; collectionItemName?: string }[];
+  sections: PickerSection[];
   locale: Locale;
   onSelect: (filter: ThemeFilter) => void;
   onClose: () => void;
@@ -632,12 +655,12 @@ function FilterSheet({ insetsBottom, title, closeLabel, allLabel, activeFilter, 
         </View>
         <View style={styles.sheetOptions}>
           <FilterOption label={allLabel} active={activeFilter === ALL_FILTER} onPress={() => onSelect(ALL_FILTER)} />
-          {sections.map(({ id, entry, collectionItemName }) => (
+          {sections.map(({ sectionKey, id, entry, collectionItemName }) => (
             <FilterOption
-              key={id}
+              key={sectionKey}
               label={collectionItemName ?? entry?.name[locale] ?? mapScreenText[locale].pins[id]}
-              active={activeFilter === id}
-              onPress={() => onSelect(id)}
+              active={activeFilter === sectionKey}
+              onPress={() => onSelect(sectionKey)}
             />
           ))}
         </View>

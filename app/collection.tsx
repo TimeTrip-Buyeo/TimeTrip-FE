@@ -720,6 +720,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
                     spotId: String(detail.spotId),
                     storyId: String(detail.storyId),
                     collectionItemId: String(detail.collectionItemId),
+                    collectionItemName: detail.name,
                   },
                 })
               }>

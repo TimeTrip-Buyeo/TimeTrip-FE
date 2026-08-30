@@ -11,6 +11,7 @@ export type CapturedPhoto = {
   uri: string;
   takenAt: number;
   collectionItemId?: number;
+  collectionItemName?: string;
   serverSelfiePhotoId?: number;
 };
 

@@ -13,7 +13,7 @@ import { albumScreenText, mapScreenText, personCameraText } from "@/constants/tr
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
-import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam } from "@/lib/selfie-route";
+import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 import { shareImageAsync } from "@/lib/share-image";
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
@@ -31,11 +31,13 @@ export default function PhotoSaveScreen() {
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
+    collectionItemName?: string;
   }>();
   const locationId = resolveLocationId(params.locationId, params.spotId);
   const poseId = params.poseId ?? "";
   const selectedPoseId = resolveNumberParam(params.poseId);
   const poseLabel = params.poseLabel ?? "";
+  const collectionItemName = resolveSingleParam(params.collectionItemName) ?? "";
   const poseImageUrl = params.poseImageUrl ?? "";
   const parsedPoseAspectRatio = Number(params.poseAspectRatio);
   const uri = params.uri ?? "";
@@ -106,7 +108,10 @@ export default function PhotoSaveScreen() {
     setIsSharing(true);
     try {
       const compositeUri = await captureCompositePhoto();
-      const didShare = await shareImageAsync(compositeUri, poseLabel || entry?.name[locale] || mapT.pins[locationId]);
+      const didShare = await shareImageAsync(
+        compositeUri,
+        collectionItemName || poseLabel || entry?.name[locale] || mapT.pins[locationId],
+      );
       if (!didShare) setShowShareUnavailableToast(true);
     } catch (error) {
       console.error("[photo-save] selfie photo share failed", error);
@@ -146,6 +151,7 @@ export default function PhotoSaveScreen() {
         poseLabel,
         uri: compositeUri,
         ...(collectionItemId !== null ? { collectionItemId } : {}),
+        ...(collectionItemName ? { collectionItemName } : {}),
         serverSelfiePhotoId,
       });
       setIsSaved(true);

@@ -602,6 +602,8 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
   const buyeoCutCollectionItemId = captured?.collectionItemId ?? remotePhoto?.collectionItemId;
+  const collectionItemName = captured?.collectionItemName ?? remotePhoto?.collectionItemName;
+  const displayLabel = collectionItemName ?? captured?.poseLabel;
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -609,7 +611,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
     let isActive = true;
     setIsSelfieRouteLoading(true);
     getSelfieRouteParams(locationId, locale, {
-      collectionItemId: remotePhoto?.collectionItemId,
+      collectionItemId: buyeoCutCollectionItemId,
       requireAcquired: true,
     })
       .then((params) => {
@@ -626,12 +628,12 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
     return () => {
       isActive = false;
     };
-  }, [locale, locationId, remotePhoto?.collectionItemId]);
+  }, [buyeoCutCollectionItemId, locale, locationId]);
 
   const canOpenPersonCamera = !isSelfieRouteLoading && !!selfieRouteParams.collectionItemId;
 
   const handleShare = async () => {
-    const label = captured?.poseLabel || remotePhoto?.collectionItemName;
+    const label = displayLabel;
     const imageUri = captured?.uri || remotePhoto?.uri;
     if (!label || !imageUri) return;
 
@@ -660,9 +662,9 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         ) : remotePhoto ? (
           <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
         ) : null}
-        {(captured?.poseLabel || remotePhoto?.collectionItemName) && (
+        {displayLabel && (
           <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {captured?.poseLabel || remotePhoto?.collectionItemName}</Text>
+            <Text style={styles.viewerCaptionText}>● {displayLabel}</Text>
           </View>
         )}
       </View>
@@ -692,7 +694,16 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         <Pressable
           style={[styles.viewerSideButton, !canOpenPersonCamera && styles.viewerSideButtonDisabled]}
           disabled={!canOpenPersonCamera}
-          onPress={() => router.push({ pathname: "/person-camera", params: { locationId, ...selfieRouteParams } })}>
+          onPress={() =>
+            router.push({
+              pathname: "/person-camera",
+              params: {
+                locationId,
+                ...selfieRouteParams,
+                ...(collectionItemName ? { collectionItemName } : {}),
+              },
+            })
+          }>
           <View style={styles.viewerSideCircle}>
             <FontAwesome5 name="camera" size={16} color="#1b1b1b" solid />
           </View>
