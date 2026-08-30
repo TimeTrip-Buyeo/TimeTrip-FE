@@ -164,14 +164,6 @@ export default function PhotoSaveScreen() {
   };
 
   const openAlbum = () => {
-    if (collectionItemId !== null) {
-      router.push({
-        pathname: "/album",
-        params: { collectionItemId: String(collectionItemId) },
-      });
-      return;
-    }
-
     router.push({ pathname: "/album", params: { locationId } });
   };
 
