@@ -121,8 +121,9 @@ export default function ArCameraScreen() {
   // Keyed by `${spotId}:${month}:${locale}` so a SEARCHING→READY round-trip,
   // or switching back to a previously-viewed language, reuses the cached
   // response instead of re-hitting the API (content doesn't change within
-  // the same month+language — see integration spec).
-  const timeslipCacheRef = useRef<{ key: string; data: SpotTimeslip | null } | null>(null);
+  // the same month+language — see integration spec). A map (not a single
+  // slot) so cache entries for earlier languages survive a locale switch.
+  const timeslipCacheRef = useRef<Map<string, SpotTimeslip | null>>(new Map());
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -199,23 +200,30 @@ export default function ArCameraScreen() {
     const month = new Date().getMonth() + 1;
     const cacheKey = `${spotId}:${month}:${locale}`;
 
-    if (timeslipCacheRef.current?.key === cacheKey) {
-      const cached = timeslipCacheRef.current.data;
+    if (timeslipCacheRef.current.has(cacheKey)) {
+      const cached = timeslipCacheRef.current.get(cacheKey) ?? null;
       setTimeslip(cached);
       setGeoState(cached ? "ready" : "empty");
       return;
     }
 
+    const wasAlreadyReady = geoState === "ready";
+
     getSpotTimeslip(spotId, { month, language: locale })
       .then((data) => {
         if (!isActive) return;
-        timeslipCacheRef.current = { key: cacheKey, data };
+        timeslipCacheRef.current.set(cacheKey, data);
         setTimeslip(data);
         setGeoState(data ? "ready" : "empty");
       })
       .catch((error) => {
         console.error("[ar-camera] timeslip lookup failed", error);
-        if (isActive) setGeoState("searching");
+        if (!isActive) return;
+        // A background refresh triggered by a locale switch (already READY)
+        // should leave the currently-displayed content and audio playback
+        // alone on failure — only a fresh SEARCHING→READY load has no prior
+        // content to fall back to.
+        if (!wasAlreadyReady) setGeoState("searching");
       });
 
     return () => {
@@ -264,9 +272,13 @@ export default function ArCameraScreen() {
       });
   }, [timeslip, isCollectionItemAcquired]);
 
+  // getLocalizedSpotName(spotDetail, locale) is checked first because it
+  // updates the instant locale changes, whereas timeslip.spotName only
+  // updates once the locale-keyed timeslip refetch resolves — putting it
+  // first would leave the header showing the previous language meanwhile.
   const localizedSpotTitle =
-    timeslip?.spotName ??
     (spotDetail ? getLocalizedSpotName(spotDetail, locale) : null) ??
+    timeslip?.spotName ??
     spotTitle ??
     mapT.pins[locationId];
   const locationDeniedForever = locationPermission !== null && !locationPermission.granted && !locationPermission.canAskAgain;
@@ -376,12 +388,35 @@ export default function ArCameraScreen() {
             <Text style={styles.sheetHeaderTitle}>{t.timeSlipCameraTitle}</Text>
           </View>
 
-          {/* Rendered outside the isSheetExpanded block so AudioGuideButton
-              (and the useAudioPlayer it owns) never unmounts when the sheet
-              is collapsed — audio keeps playing, and this row becomes the
-              "peeked to a single row" state the sheet design calls for. */}
+          {isSheetExpanded && geoState === "ready" && timeslip && (
+            <View style={styles.characterCard}>
+              {characterCardImageUrl ? (
+                <Image
+                  source={{ uri: characterCardImageUrl }}
+                  style={styles.characterAvatarImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.characterAvatar}>
+                  <FontAwesome5 name="user" size={26} color="#800000" solid />
+                </View>
+              )}
+              <View style={styles.characterBody}>
+                <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
+                {!isCollectionItemAcquired && <Text style={styles.acquireHintText}>{t.acquireHintText}</Text>}
+                <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Always rendered (never inside the isSheetExpanded block) so
+              AudioGuideButton (and the useAudioPlayer it owns) never
+              unmounts when the sheet is collapsed — audio keeps playing.
+              Hidden via `display: none` rather than unmounted when
+              collapsed, so only "타임슬립카메라" stays visible while the
+              player keeps running underneath. */}
           {geoState === "ready" && activeAudioGuide && (
-            <View style={styles.audioRow}>
+            <View style={[styles.audioRow, !isSheetExpanded && styles.audioRowCollapsed]}>
               <AudioGuideButton
                 key={activeAudioGuide.filePath}
                 guide={activeAudioGuide}
@@ -410,26 +445,6 @@ export default function ArCameraScreen() {
 
           {isSheetExpanded && (
             <>
-              {geoState === "ready" && timeslip && (
-                <View style={styles.characterCard}>
-                  {characterCardImageUrl ? (
-                    <Image
-                      source={{ uri: characterCardImageUrl }}
-                      style={styles.characterAvatarImage}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={styles.characterAvatar}>
-                      <FontAwesome5 name="user" size={26} color="#800000" solid />
-                    </View>
-                  )}
-                  <View style={styles.characterBody}>
-                    <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
-                    <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
-                  </View>
-                </View>
-              )}
-
               {geoState === "loading" && (
                 <View style={styles.stateRow}>
                   <ActivityIndicator color="#800000" />
@@ -690,6 +705,11 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: "#1b1b1b",
   },
+  acquireHintText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#b8860b",
+  },
   characterDescription: {
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 9.4,
@@ -707,6 +727,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17,
     paddingTop: 21,
     paddingBottom: 17,
+  },
+  audioRowCollapsed: {
+    display: "none",
   },
   audioPlayButton: {
     width: 32,
