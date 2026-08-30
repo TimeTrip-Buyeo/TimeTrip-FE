@@ -102,8 +102,10 @@ export async function getSpotTimeslip(
 }
 
 export type StoryAudioGuide = {
-  audioGuideId: number;
-  storyId?: number;
+  audioGuideId: number | null;
+  storyId?: number | null;
+  externalAudioGuideId?: string | null;
+  source?: "odii" | "db";
   title: string;
   language: string;
   filePath: string;
@@ -124,6 +126,22 @@ export async function getStoryAudioGuide(
     return await apiGet<StoryAudioGuide>(`/api/stories/${storyId}/audio-guide${query ? `?${query}` : ""}`);
   } catch (error) {
     if (error instanceof ApiError && (error.code === "AUDIO4041" || error.code === "STORY_404")) return null;
+    throw error;
+  }
+}
+
+export async function getSpotAudioGuide(
+  spotId: number,
+  options: { language?: string } = {},
+): Promise<StoryAudioGuide | null> {
+  try {
+    const params = new URLSearchParams();
+    if (options.language) params.set("language", options.language);
+    const query = params.toString();
+
+    return await apiGet<StoryAudioGuide>(`/api/spots/${spotId}/audio-guide${query ? `?${query}` : ""}`);
+  } catch (error) {
+    if (error instanceof ApiError && (error.code === "AUDIO4041" || error.code === "SPOT4041")) return null;
     throw error;
   }
 }

@@ -31,7 +31,7 @@ import {
   type CollectionItemDetail,
   type StoryTopic,
 } from "@/lib/api/collections";
-import { getStoryAudioGuide, type StoryAudioGuide } from "@/lib/api/spots";
+import { getSpotAudioGuide, type StoryAudioGuide } from "@/lib/api/spots";
 import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 export default function CollectionScreen() {
@@ -526,7 +526,7 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
   const [isAudioGuideVisible, setIsAudioGuideVisible] = useState(false);
   const [audioFile, setAudioFile] = useState<StoryAudioGuide | null>(null);
-  const audioGuideStoryId = detail?.storyId ?? null;
+  const audioGuideSpotId = detail?.spotId ?? null;
 
   useEffect(() => {
     let isActive = true;
@@ -554,26 +554,26 @@ function CollectionDetail({ itemId }: { itemId: number }) {
   }, [itemId, locale]);
 
   useEffect(() => {
-    if (audioGuideStoryId === null) {
+    if (audioGuideSpotId === null) {
       setAudioFile(null);
       return;
     }
 
     let isActive = true;
     setAudioFile(null);
-    getStoryAudioGuide(audioGuideStoryId, { language: locale })
+    getSpotAudioGuide(audioGuideSpotId, { language: locale })
       .then((nextAudioFile) => {
         if (isActive) setAudioFile(nextAudioFile);
       })
       .catch((error) => {
-        console.error("[collection] story audio guide failed", error);
+        console.error("[collection] spot audio guide failed", error);
         if (isActive) setAudioFile(null);
       });
 
     return () => {
       isActive = false;
     };
-  }, [audioGuideStoryId, locale]);
+  }, [audioGuideSpotId, locale]);
 
   const locationId = detail ? SPOT_ID_TO_LOCATION_ID[detail.spotId] : undefined;
   const cameraLocationId = detail ? resolveLocationId(undefined, String(detail.spotId)) : undefined;
