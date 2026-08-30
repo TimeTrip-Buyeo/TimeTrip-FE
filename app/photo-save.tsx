@@ -164,7 +164,7 @@ export default function PhotoSaveScreen() {
   };
 
   const openAlbum = () => {
-    router.push({ pathname: "/album", params: { locationId } });
+    router.push("/album");
   };
 
   useEffect(() => {
