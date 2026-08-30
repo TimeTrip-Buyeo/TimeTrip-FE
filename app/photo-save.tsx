@@ -78,7 +78,6 @@ export default function PhotoSaveScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [savedServerSelfiePhotoId, setSavedServerSelfiePhotoId] = useState<number | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [showShareUnavailableToast, setShowShareUnavailableToast] = useState(false);
 
@@ -135,7 +134,6 @@ export default function PhotoSaveScreen() {
             photoUri: compositeUri,
           });
           serverSelfiePhotoId = saved.selfiePhotoId;
-          setSavedServerSelfiePhotoId(saved.selfiePhotoId);
         } catch (error) {
           // Server sync is best-effort — the local save below must still
           // happen so a network hiccup doesn't lose the capture entirely.
@@ -156,10 +154,7 @@ export default function PhotoSaveScreen() {
     if (collectionItemId !== null) {
       router.push({
         pathname: "/album",
-        params: {
-          collectionItemId: String(collectionItemId),
-          ...(savedServerSelfiePhotoId !== null ? { selfiePhotoId: String(savedServerSelfiePhotoId) } : {}),
-        },
+        params: { collectionItemId: String(collectionItemId) },
       });
       return;
     }
