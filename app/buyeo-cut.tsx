@@ -203,6 +203,10 @@ export default function BuyeoCutScreen() {
         // selfiePhotoId, so it doesn't show up twice in the grid.
         const remoteItems: PickerItem[] = remoteSelfies
           .filter((photo) => SPOT_ID_TO_LOCATION_ID[photo.spotId] === id)
+          .filter(
+            (photo) =>
+              selectedCollectionItemId === undefined || photo.collectionItemId === selectedCollectionItemId,
+          )
           .filter((photo) => !filteredCapturedPhotos.some((local) => local.serverSelfiePhotoId === photo.selfiePhotoId))
           .map((photo) => ({
             id: `remote-${photo.selfiePhotoId}`,
@@ -236,6 +240,15 @@ export default function BuyeoCutScreen() {
         : allSections.filter((section) => section.sectionKey === themeFilter),
     [allSections, themeFilter],
   );
+
+  const visibleItemIds = useMemo(
+    () => new Set(sections.flatMap((section) => section.items.map((item) => item.id))),
+    [sections],
+  );
+
+  useEffect(() => {
+    setSelected((current) => current.filter((item) => visibleItemIds.has(item.id)));
+  }, [visibleItemIds]);
 
   const isFull = selected.length >= SLOT_COUNT;
 
