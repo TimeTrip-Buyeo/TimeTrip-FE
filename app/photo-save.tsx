@@ -78,6 +78,7 @@ export default function PhotoSaveScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [savedServerSelfiePhotoId, setSavedServerSelfiePhotoId] = useState<number | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [showShareUnavailableToast, setShowShareUnavailableToast] = useState(false);
 
@@ -134,6 +135,7 @@ export default function PhotoSaveScreen() {
             photoUri: compositeUri,
           });
           serverSelfiePhotoId = saved.selfiePhotoId;
+          setSavedServerSelfiePhotoId(saved.selfiePhotoId);
         } catch (error) {
           // Server sync is best-effort — the local save below must still
           // happen so a network hiccup doesn't lose the capture entirely.
@@ -148,6 +150,21 @@ export default function PhotoSaveScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openAlbum = () => {
+    if (collectionItemId !== null) {
+      router.push({
+        pathname: "/album",
+        params: {
+          collectionItemId: String(collectionItemId),
+          ...(savedServerSelfiePhotoId !== null ? { selfiePhotoId: String(savedServerSelfiePhotoId) } : {}),
+        },
+      });
+      return;
+    }
+
+    router.push({ pathname: "/album", params: { locationId } });
   };
 
   useEffect(() => {
@@ -221,7 +238,7 @@ export default function PhotoSaveScreen() {
           <FontAwesome5 name={isSaved ? "check" : "download"} size={24} color="#fff" solid />
         </Pressable>
 
-        <Pressable style={styles.sideButton} onPress={() => router.push({ pathname: "/album", params: { locationId } })}>
+        <Pressable style={styles.sideButton} onPress={openAlbum}>
           <View style={styles.sideCircle}>
             <FontAwesome5 name="image" size={14} color="#1b1b1b" solid />
           </View>
