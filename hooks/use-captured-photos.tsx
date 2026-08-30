@@ -10,6 +10,7 @@ export type CapturedPhoto = {
   /** file:// URI for the final selfie image saved by the photo-save screen. */
   uri: string;
   takenAt: number;
+  collectionItemId?: number;
   serverSelfiePhotoId?: number;
 };
 

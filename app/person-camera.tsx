@@ -426,7 +426,14 @@ export default function PersonCameraScreen() {
       )}
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 24 }]}>
-        <Pressable style={styles.sideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.sideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params: collectionItemId !== null ? { collectionItemId: String(collectionItemId) } : {},
+            })
+          }>
           <View style={styles.sideCircle}>
             <GripRectIcon />
           </View>

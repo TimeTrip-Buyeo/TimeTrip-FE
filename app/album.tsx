@@ -105,9 +105,16 @@ export default function AlbumScreen() {
   return <AlbumList />;
 }
 
-function BuyeoCutFab({ bottom }: { bottom: number }) {
+function BuyeoCutFab({ bottom, collectionItemId }: { bottom: number; collectionItemId?: number }) {
   return (
-    <Pressable style={[styles.fab, { bottom }]} onPress={() => router.push("/buyeo-cut")}>
+    <Pressable
+      style={[styles.fab, { bottom }]}
+      onPress={() =>
+        router.push({
+          pathname: "/buyeo-cut",
+          params: collectionItemId !== undefined ? { collectionItemId: String(collectionItemId) } : {},
+        })
+      }>
       <GripRectIcon />
     </Pressable>
   );
@@ -347,7 +354,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
         )}
       </ScrollView>
 
-      <BuyeoCutFab bottom={insets.bottom + 96} />
+      <BuyeoCutFab bottom={insets.bottom + 96} collectionItemId={collectionItemId} />
 
       <BottomNav
         active="album"
@@ -594,6 +601,7 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const { remotePhotos } = useRemoteAlbumPhotos(locationId, locale);
   const captured = (photosByLocation[locationId] ?? []).find((item) => item.id === photoParam);
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
+  const buyeoCutCollectionItemId = captured?.collectionItemId ?? remotePhoto?.collectionItemId;
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -660,7 +668,17 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
       </View>
 
       <View style={[styles.viewerActions, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable style={styles.viewerSideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.viewerSideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params:
+                buyeoCutCollectionItemId !== undefined
+                  ? { collectionItemId: String(buyeoCutCollectionItemId) }
+                  : {},
+            })
+          }>
           <View style={styles.viewerSideCircle}>
             <GripRectIcon />
           </View>

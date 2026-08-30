@@ -140,7 +140,14 @@ export default function PhotoSaveScreen() {
           console.error("[photo-save] server selfie sync failed, keeping local copy only", error);
         }
       }
-      addPhoto({ locationId, poseId, poseLabel, uri: compositeUri, serverSelfiePhotoId });
+      addPhoto({
+        locationId,
+        poseId,
+        poseLabel,
+        uri: compositeUri,
+        ...(collectionItemId !== null ? { collectionItemId } : {}),
+        serverSelfiePhotoId,
+      });
       setIsSaved(true);
       setShowSaveToast(true);
     } catch (error) {
@@ -222,7 +229,14 @@ export default function PhotoSaveScreen() {
       </View>
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable style={styles.sideButton} onPress={() => router.push("/buyeo-cut")}>
+        <Pressable
+          style={styles.sideButton}
+          onPress={() =>
+            router.push({
+              pathname: "/buyeo-cut",
+              params: collectionItemId !== null ? { collectionItemId: String(collectionItemId) } : {},
+            })
+          }>
           <View style={styles.sideCircle}>
             <GripRectIcon />
           </View>
