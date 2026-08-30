@@ -103,8 +103,11 @@ export default function ArCameraScreen() {
   const { locale, setLocale } = useLanguage();
   const [isLegendVisible, setIsLegendVisible] = useState(false);
   // Figma shows this AR camera in two states: the guide sheet fully expanded
-  // (all details visible) and "peeked" down to a single row so more of the
-  // camera view shows through — "스크롤로 전체화면 가능". Toggled by the drag handle.
+  // (all details visible) and collapsed down to just the "타임슬립카메라"
+  // header so more of the camera view shows through — "스크롤로 전체화면 가능".
+  // The audio row stays mounted (never unmounted) while collapsed so
+  // playback keeps running underneath; see its `display: none` styling.
+  // Toggled by the drag handle.
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   const [isAcquiredModalVisible, setIsAcquiredModalVisible] = useState(false);
   const [acquireResult, setAcquireResult] = useState<AcquireCollectionItemResult | null>(null);
@@ -115,6 +118,13 @@ export default function ArCameraScreen() {
   const [spotDetail, setSpotDetail] = useState<SpotDetail | null>(null);
   const [geoState, setGeoState] = useState<GeoState>("searching");
   const [timeslip, setTimeslip] = useState<SpotTimeslip | null>(null);
+  // Which locale `timeslip` was fetched (or cache-hit) for — lets the header
+  // fall back to the always-fresh getLocalizedSpotName while a locale-switch
+  // refetch is still in flight, instead of showing timeslip.spotName from
+  // the previous language.
+  const [timeslipLocale, setTimeslipLocale] = useState<Locale | null>(null);
+  const [localeRefreshFailed, setLocaleRefreshFailed] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
   const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
 
@@ -203,6 +213,8 @@ export default function ArCameraScreen() {
     if (timeslipCacheRef.current.has(cacheKey)) {
       const cached = timeslipCacheRef.current.get(cacheKey) ?? null;
       setTimeslip(cached);
+      setTimeslipLocale(locale);
+      setLocaleRefreshFailed(false);
       setGeoState(cached ? "ready" : "empty");
       return;
     }
@@ -214,6 +226,8 @@ export default function ArCameraScreen() {
         if (!isActive) return;
         timeslipCacheRef.current.set(cacheKey, data);
         setTimeslip(data);
+        setTimeslipLocale(locale);
+        setLocaleRefreshFailed(false);
         setGeoState(data ? "ready" : "empty");
       })
       .catch((error) => {
@@ -222,14 +236,20 @@ export default function ArCameraScreen() {
         // A background refresh triggered by a locale switch (already READY)
         // should leave the currently-displayed content and audio playback
         // alone on failure — only a fresh SEARCHING→READY load has no prior
-        // content to fall back to.
-        if (!wasAlreadyReady) setGeoState("searching");
+        // content to fall back to. Flag the mismatch so the UI can offer a
+        // retry instead of silently mixing the new locale's static labels
+        // with the old locale's still-showing content.
+        if (!wasAlreadyReady) {
+          setGeoState("searching");
+          return;
+        }
+        setLocaleRefreshFailed(true);
       });
 
     return () => {
       isActive = false;
     };
-  }, [geoState, spotId, locale]);
+  }, [geoState, spotId, locale, retryToken]);
 
   useEffect(() => {
     if (geoState !== "ready" || !timeslip) {
@@ -254,6 +274,11 @@ export default function ArCameraScreen() {
     setIsLegendVisible(false);
   };
 
+  const handleRetryLocaleRefresh = () => {
+    setLocaleRefreshFailed(false);
+    setRetryToken((n) => n + 1);
+  };
+
   const handleAudioFinished = useCallback(() => {
     if (!timeslip || isCollectionItemAcquired) return;
     const itemId = timeslip.collectionItem.collectionItemId;
@@ -262,6 +287,20 @@ export default function ArCameraScreen() {
       .then((result) => {
         // null means 409 (already acquired) — ignored silently per spec.
         setIsCollectionItemAcquired(true);
+        // Patch the just-fetched timeslip and every cached locale's entry
+        // for this item so switching languages afterwards doesn't resurrect
+        // the pre-acquisition "not acquired" state from a stale cache hit.
+        setTimeslip((prev) =>
+          prev ? { ...prev, collectionItem: { ...prev.collectionItem, isAcquired: true } } : prev,
+        );
+        for (const [key, cached] of timeslipCacheRef.current) {
+          if (cached && cached.collectionItem.collectionItemId === itemId) {
+            timeslipCacheRef.current.set(key, {
+              ...cached,
+              collectionItem: { ...cached.collectionItem, isAcquired: true },
+            });
+          }
+        }
         if (result) {
           setAcquireResult(result);
           setIsAcquiredModalVisible(true);
@@ -272,11 +311,13 @@ export default function ArCameraScreen() {
       });
   }, [timeslip, isCollectionItemAcquired]);
 
-  // getLocalizedSpotName(spotDetail, locale) is checked first because it
-  // updates the instant locale changes, whereas timeslip.spotName only
-  // updates once the locale-keyed timeslip refetch resolves — putting it
-  // first would leave the header showing the previous language meanwhile.
+  // timeslip?.spotName is only trusted when timeslipLocale matches the
+  // current locale (i.e. it was fetched/cache-hit for this exact language);
+  // otherwise a locale-switch refetch is still in flight and this falls
+  // back to the always-fresh getLocalizedSpotName so the header updates the
+  // instant locale changes instead of lagging behind.
   const localizedSpotTitle =
+    (timeslipLocale === locale ? timeslip?.spotName : null) ??
     (spotDetail ? getLocalizedSpotName(spotDetail, locale) : null) ??
     timeslip?.spotName ??
     spotTitle ??
@@ -387,6 +428,13 @@ export default function ArCameraScreen() {
             </View>
             <Text style={styles.sheetHeaderTitle}>{t.timeSlipCameraTitle}</Text>
           </View>
+
+          {isSheetExpanded && localeRefreshFailed && (
+            <Pressable style={styles.refreshErrorBanner} onPress={handleRetryLocaleRefresh} hitSlop={8}>
+              <FontAwesome5 name="redo" size={11} color="#b8860b" solid />
+              <Text style={styles.refreshErrorText}>{t.localeRefreshErrorMessage}</Text>
+            </Pressable>
+          )}
 
           {isSheetExpanded && geoState === "ready" && timeslip && (
             <View style={styles.characterCard}>
@@ -673,6 +721,22 @@ const styles = StyleSheet.create({
     fontSize: 15.3,
     fontWeight: "700",
     color: "#1b1b1b",
+  },
+  refreshErrorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fdf6e3",
+    borderWidth: 1,
+    borderColor: "#f3e3b8",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  refreshErrorText: {
+    flex: 1,
+    fontSize: 11.5,
+    color: "#8a6d1f",
   },
   characterCard: {
     flexDirection: "row",

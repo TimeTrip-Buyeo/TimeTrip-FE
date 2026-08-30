@@ -516,6 +516,7 @@ type ArCameraText = {
   emptyStateMessage: string;
   audioGuideLabel: string;
   acquireHintText: string;
+  localeRefreshErrorMessage: string;
   aiImageDisclosure: string;
 };
 
@@ -535,6 +536,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateMessage: '이 장소는 이번 달엔 특별 테마가 없어요. 다음 달에 다시 찾아주세요!',
     audioGuideLabel: '오디오 가이드',
     acquireHintText: '아래 오디오가이드를 끝까지 청취하면 얻을 수 있어요!',
+    localeRefreshErrorMessage: '번역을 불러오지 못했어요. 눌러서 다시 시도하세요.',
     aiImageDisclosure: '*AI로 생성된 이미지입니다.',
   },
   en: {
@@ -552,6 +554,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateMessage: "This site doesn't have a special theme this month. Please check back next month!",
     audioGuideLabel: 'Audio Guide',
     acquireHintText: 'Listen to the audio guide below all the way through to earn it!',
+    localeRefreshErrorMessage: "Couldn't refresh the translation. Tap to try again.",
     aiImageDisclosure: '*AI-generated image.',
   },
   zh: {
@@ -569,6 +572,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateMessage: '该地点本月没有特别主题，请下个月再来看看！',
     audioGuideLabel: '语音导览',
     acquireHintText: '听完下方的语音导览即可获得！',
+    localeRefreshErrorMessage: '翻译加载失败，点击重试。',
     aiImageDisclosure: '*AI生成图像。',
   },
   ja: {
@@ -586,6 +590,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     emptyStateMessage: 'この場所は今月特別なテーマがありません。来月また訪れてください！',
     audioGuideLabel: '音声ガイド',
     acquireHintText: '下の音声ガイドを最後まで聞くと獲得できます！',
+    localeRefreshErrorMessage: '翻訳を読み込めませんでした。タップして再試行してください。',
     aiImageDisclosure: '*AI生成画像です。',
   },
 };
