@@ -26,8 +26,8 @@ import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
 import { toApiUrl } from "@/lib/api/client";
 import {
+  PERSON_OVERLAY_BLEED_FRACTION,
   PERSON_OVERLAY_HEIGHT_RATIO,
-  PERSON_OVERLAY_SIDE_OFFSET,
   resolveLocationId,
   resolveNumberParam,
   resolveSingleParam,
@@ -151,11 +151,14 @@ export default function PersonCameraScreen() {
   // cancelled countdown can recognize it's stale and stop instead of firing
   // late (e.g. after the user backs out mid-countdown).
   const countdownTokenRef = useRef(0);
-  // Only the pose section's HEADER row is measured, not its full height — the
-  // figure and the capture crop are anchored to the header (which is the same
-  // height whether the pose list is expanded or collapsed), so raising or
-  // lowering the pose panel no longer changes what gets saved.
+  // The pose panel's HEADER row (stable height, expanded or collapsed) anchors
+  // the figure and the capture crop — so toggling the pose list never changes
+  // what gets saved.
   const [poseHeaderHeight, setPoseHeaderHeight] = useState(0);
+  // The pose panel's FULL current height (grows when the list is expanded) —
+  // used only to keep the "AI image" disclosure sitting just above the panel's
+  // live top edge instead of getting covered by it.
+  const [poseSectionHeight, setPoseSectionHeight] = useState(0);
   // Same reasoning — the top header's height depends on the safe-area inset
   // and font metrics, and the saved photo is cropped to start right below it,
   // so it has to be measured, not guessed.
@@ -237,6 +240,10 @@ export default function PersonCameraScreen() {
     setPoseHeaderHeight(event.nativeEvent.layout.height);
   };
 
+  const handlePoseSectionLayout = (event: LayoutChangeEvent) => {
+    setPoseSectionHeight(event.nativeEvent.layout.height);
+  };
+
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
@@ -263,10 +270,18 @@ export default function PersonCameraScreen() {
   // section to render at all (poses.length <= 1).
   const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
   const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
+  // Bleed a fixed FRACTION of the figure's own width off the right edge, so
+  // wide and narrow poses alike keep the same proportion on-screen instead of
+  // some getting clipped by a one-size pixel offset.
+  const personOverlayRight = -(personOverlayWidth * PERSON_OVERLAY_BLEED_FRACTION);
   // The visible viewfinder: screen minus the top header minus that floor. The
   // saved photo is cropped to exactly this band, so what you framed is what
   // you get — and it doesn't move when the pose panel does.
   const viewfinderHeight = Math.max(1, windowHeight - headerHeight - captureFloor);
+  // The pose panel's live top edge — the "AI image" disclosure rides just
+  // above it so an expanded panel can't cover it.
+  const posePanelTop = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -375,14 +390,19 @@ export default function PersonCameraScreen() {
         <View
           style={[
             styles.personOverlay,
-            { aspectRatio: selectedPose.aspectRatio, bottom: captureFloor, height: personOverlayHeight },
+            {
+              aspectRatio: selectedPose.aspectRatio,
+              bottom: captureFloor,
+              height: personOverlayHeight,
+              right: personOverlayRight,
+            },
           ]}
           pointerEvents="none">
           <Image source={selectedPose.image} style={styles.personOverlayImage} resizeMode="cover" />
         </View>
       )}
       {selectedPose && (
-        <Text style={[styles.imageDisclosureText, { bottom: captureFloor + 8 }]} pointerEvents="none">
+        <Text style={[styles.imageDisclosureText, { bottom: posePanelTop + 8 }]} pointerEvents="none">
           {t.aiImageDisclosure}
         </Text>
       )}
@@ -460,7 +480,7 @@ export default function PersonCameraScreen() {
       </Pressable>
 
       {poses.length > 1 && (
-        <View style={[styles.poseSection, { bottom: actionBarHeight }]}>
+        <View style={[styles.poseSection, { bottom: actionBarHeight }]} onLayout={handlePoseSectionLayout}>
           <Pressable style={styles.poseSectionHeader} onPress={togglePoseSection} onLayout={handlePoseHeaderLayout}>
             <View style={styles.poseSectionLabelRow}>
               <FontAwesome5 name="user-circle" size={11} color="#b8860b" solid />
@@ -551,18 +571,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
   },
-  // Pushed as far right as possible — allowed to bleed past the screen edge
-  // — instead of kept fully on-screen, so the figure reads as standing
-  // beside the shot rather than centered in it; a clipped shoulder/arm here
-  // is fine. Height is deliberately small (roughly chest-up, not full body)
-  // so it sits low and out of the way instead of looming over the header.
-  // Width is omitted since it's derived from `aspectRatio` (set inline per
-  // pose) so the box hugs the trimmed cutout exactly, with no letterbox
-  // gap — this scales the same way for every location's pose set since both
-  // dimensions come from the image's own aspect ratio, not a hardcoded size.
+  // Bleeds past the right screen edge so the figure reads as standing beside
+  // the shot rather than centered in it. Both `right` (a fraction of the box
+  // width) and `height` are set inline; width comes from `aspectRatio` so the
+  // box hugs the trimmed cutout exactly, scaling the same way for every pose.
   personOverlay: {
     position: "absolute",
-    right: PERSON_OVERLAY_SIDE_OFFSET,
   },
   personOverlayImage: {
     width: "100%",

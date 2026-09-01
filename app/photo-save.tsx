@@ -14,8 +14,8 @@ import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
 import {
+  PERSON_OVERLAY_BLEED_FRACTION,
   PERSON_OVERLAY_HEIGHT_RATIO,
-  PERSON_OVERLAY_SIDE_OFFSET,
   resolveLocationId,
   resolveNumberParam,
   resolveSingleParam,
@@ -88,6 +88,11 @@ export default function PhotoSaveScreen() {
   // height, the figure is bottom-anchored and sized by the same fraction of the
   // band it took up while framing.
   const personOverlayHeight = wrapperSize.height * personOverlayHeightRatio;
+  // Same rule as the camera screen: bleed a fraction of the figure's own width
+  // off the edge, so wide/narrow poses keep the same proportion on-screen.
+  const personOverlayRight = pose
+    ? -(personOverlayHeight * pose.aspectRatio * PERSON_OVERLAY_BLEED_FRACTION)
+    : 0;
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -212,7 +217,10 @@ export default function PhotoSaveScreen() {
           {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
           {pose && (
             <View
-              style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio, height: personOverlayHeight }]}
+              style={[
+                styles.photoPersonOverlay,
+                { aspectRatio: pose.aspectRatio, height: personOverlayHeight, right: personOverlayRight },
+              ]}
               pointerEvents="none">
               <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
             </View>
@@ -325,11 +333,11 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  // Same right-anchored, floor-standing placement as the live camera overlay
+  // Same floor-standing, edge-bleeding placement as the live camera overlay
   // (not centered), so the saved preview matches what was actually framed.
+  // `right` is set inline from the figure's own width.
   photoPersonOverlay: {
     position: "absolute",
-    right: PERSON_OVERLAY_SIDE_OFFSET,
     bottom: 0,
     zIndex: 2,
   },
