@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
   LayoutAnimation,
@@ -35,29 +35,14 @@ import { getSpotAudioGuide, type StoryAudioGuide } from "@/lib/api/spots";
 import { resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
 
 export default function CollectionScreen() {
-  const params = useLocalSearchParams<{ storyId?: string; storyIds?: string; itemId?: string; title?: string }>();
+  const params = useLocalSearchParams<{ storyId?: string; itemId?: string; title?: string }>();
   const storyId = resolveNumberParam(params.storyId);
-  // Memoized so CollectionItemGrid's fetch effect (which depends on this
-  // array by reference) doesn't re-run on renders where the params haven't
-  // actually changed — resolveStoryIdsParam otherwise returns a new array
-  // every render.
-  const storyIds = useMemo(() => resolveStoryIdsParam(params.storyIds, storyId), [params.storyIds, storyId]);
   const itemId = resolveNumberParam(params.itemId);
   const title = resolveSingleParam(params.title);
 
   if (itemId !== null) return <CollectionDetail itemId={itemId} />;
-  if (storyIds.length > 0) return <CollectionItemGrid storyIds={storyIds} title={title} />;
+  if (storyId !== null) return <CollectionItemGrid storyId={storyId} title={title} />;
   return <CollectionTopicList />;
-}
-
-function resolveStoryIdsParam(rawStoryIds: string | string[] | undefined, fallbackStoryId: number | null) {
-  const storyIds = resolveSingleParam(rawStoryIds)
-    ?.split(",")
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isInteger(value) && value > 0);
-
-  if (storyIds?.length) return [...new Set(storyIds)];
-  return fallbackStoryId !== null ? [fallbackStoryId] : [];
 }
 
 function hasAcquiredCollection(topic: StoryTopic) {
@@ -74,15 +59,6 @@ function dedupeStoryTopics(topics: StoryTopic[]) {
     const key = `${topic.storyIds.join(",")}::${topic.title}`;
     if (seenKeys.has(key)) return false;
     seenKeys.add(key);
-    return true;
-  });
-}
-
-function dedupeCollectionItems(items: CollectionItem[]) {
-  const seenItemIds = new Set<number>();
-  return items.filter((item) => {
-    if (seenItemIds.has(item.collectionItemId)) return false;
-    seenItemIds.add(item.collectionItemId);
     return true;
   });
 }
@@ -309,7 +285,6 @@ function CollectionTopicList() {
                     pathname: "/collection",
                     params: {
                       storyId: String(topic.storyIds[0]),
-                      storyIds: topic.storyIds.join(","),
                       title: topic.title,
                     },
                   })
@@ -349,7 +324,7 @@ function CollectionTopicList() {
   );
 }
 
-function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: string }) {
+function CollectionItemGrid({ storyId, title }: { storyId: number; title?: string }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLanguage();
   const mapT = mapScreenText[locale];
@@ -357,22 +332,13 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [hasPartialError, setHasPartialError] = useState(false);
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
     setLoadError(false);
-    setHasPartialError(false);
-    Promise.allSettled(storyIds.map((storyId) => getCollectionItems(storyId, { locale })))
-      .then((results) => {
-        const fulfilledResults = results.filter((result): result is PromiseFulfilledResult<{ items: CollectionItem[] }> =>
-          result.status === "fulfilled",
-        );
-        const nextItems = dedupeCollectionItems(fulfilledResults.flatMap((result) => result.value.items));
-
-        if (isActive) setHasPartialError(fulfilledResults.length > 0 && fulfilledResults.length < results.length);
-
+    getCollectionItems(storyId, { locale })
+      .then(({ items: nextItems }) => {
         if (__DEV__) {
           console.log(
             "[collection] items",
@@ -387,10 +353,6 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
               beforeImageUrl: item.beforeImageUrl,
             })),
           );
-        }
-
-        if (!fulfilledResults.length) {
-          throw results.find((result) => result.status === "rejected")?.reason ?? new Error("Collection items failed");
         }
 
         if (isActive) setItems(nextItems);
@@ -409,7 +371,7 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
     return () => {
       isActive = false;
     };
-  }, [locale, storyIds]);
+  }, [locale, storyId]);
 
   return (
     <View style={styles.container}>
@@ -420,12 +382,6 @@ function CollectionItemGrid({ storyIds, title }: { storyIds: number[]; title?: s
           </Pressable>
           <Text style={styles.gridTitle}>{title ?? t.listTitle}</Text>
         </View>
-
-        {hasPartialError && (
-          <View style={styles.partialErrorBanner}>
-            <Text style={styles.partialErrorBannerText}>{t.partialLoadErrorMessage}</Text>
-          </View>
-        )}
 
         <View style={styles.grid}>
           {isLoading ? (
