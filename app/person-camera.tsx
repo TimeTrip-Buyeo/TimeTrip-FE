@@ -25,10 +25,19 @@ import { albumScreenText, mapScreenText, personCameraText, type Locale } from "@
 import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
 import { toApiUrl } from "@/lib/api/client";
-import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
+import {
+  PERSON_OVERLAY_HEIGHT_RATIO,
+  PERSON_OVERLAY_SIDE_OFFSET,
+  resolveLocationId,
+  resolveNumberParam,
+  resolveSingleParam,
+} from "@/lib/selfie-route";
 
 // actionBar's own content height (paddingTop 17 + 64px shutter + paddingBottom 24), excluding safe-area inset.
 const ACTION_BAR_CONTENT_HEIGHT = 105;
+// poseSection style's own paddingTop (17) + paddingBottom (16) — added to the
+// measured header row to get the pose panel's collapsed height.
+const POSE_PANEL_PADDING = 33;
 const DEFAULT_REMOTE_POSE_ASPECT_RATIO = 0.55;
 
 type RuntimePersonPose = {
@@ -142,14 +151,14 @@ export default function PersonCameraScreen() {
   // cancelled countdown can recognize it's stale and stop instead of firing
   // late (e.g. after the user backs out mid-countdown).
   const countdownTokenRef = useRef(0);
-  // Measured (not guessed) from the pose section's own layout — its exact
-  // height shifts with font metrics across platforms, and a hardcoded guess
-  // is what previously let it silently drift out of sync and clip the
-  // figure standing above it.
-  const [poseSectionHeight, setPoseSectionHeight] = useState(0);
-  // Same reasoning as poseSectionHeight — the top header's height depends on
-  // the safe-area inset and font metrics, and the saved photo is cropped to
-  // start right below it, so it has to be measured, not guessed.
+  // Only the pose section's HEADER row is measured, not its full height — the
+  // figure and the capture crop are anchored to the header (which is the same
+  // height whether the pose list is expanded or collapsed), so raising or
+  // lowering the pose panel no longer changes what gets saved.
+  const [poseHeaderHeight, setPoseHeaderHeight] = useState(0);
+  // Same reasoning — the top header's height depends on the safe-area inset
+  // and font metrics, and the saved photo is cropped to start right below it,
+  // so it has to be measured, not guessed.
   const [headerHeight, setHeaderHeight] = useState(0);
   const cameraRef = useRef<CameraView>(null);
   // Shown only for the first few seconds on entering the screen, then fades
@@ -224,8 +233,8 @@ export default function PersonCameraScreen() {
     setIsPoseSectionExpanded((expanded) => !expanded);
   };
 
-  const handlePoseSectionLayout = (event: LayoutChangeEvent) => {
-    setPoseSectionHeight(event.nativeEvent.layout.height);
+  const handlePoseHeaderLayout = (event: LayoutChangeEvent) => {
+    setPoseHeaderHeight(event.nativeEvent.layout.height);
   };
 
   useEffect(() => {
@@ -247,18 +256,17 @@ export default function PersonCameraScreen() {
   // here is what let the two silently overlap and swallow the collapse
   // toggle's taps once the section shrank.
   const actionBarHeight = ACTION_BAR_CONTENT_HEIGHT + insets.bottom;
-  // The person overlay's own floor: it must clear whatever opaque panel is
-  // currently stacked above the action bar (the pose section, in either its
-  // expanded or collapsed height), or the panel paints over — "잘리는" —
-  // the figure's legs instead of the figure standing on top of it. Falls
-  // back to 0 before the first layout pass and whenever there's no pose
+  // The figure's floor. Anchored to the pose panel's COLLAPSED height (header
+  // row + the section's own vertical padding), never its live height — so
+  // expanding or collapsing the pose list while framing has no effect on the
+  // saved photo. Falls back to just the action bar when there's no pose
   // section to render at all (poses.length <= 1).
-  const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
+  const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
   const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
-  // The visible viewfinder: screen minus the top header minus the bottom
-  // panel the figure's feet rest on. The saved photo is cropped to exactly
-  // this band so what you framed is what you get.
-  const viewfinderHeight = Math.max(1, windowHeight - headerHeight - personFloor);
+  // The visible viewfinder: screen minus the top header minus that floor. The
+  // saved photo is cropped to exactly this band, so what you framed is what
+  // you get — and it doesn't move when the pose panel does.
+  const viewfinderHeight = Math.max(1, windowHeight - headerHeight - captureFloor);
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -360,21 +368,21 @@ export default function PersonCameraScreen() {
           subject filling it. Sized to roughly chest-height rather than full
           body on purpose. The box's aspectRatio matches the trimmed cutout
           exactly (see constants/poses.ts), so there's no letterbox gap.
-          Anchored to personFloor (not the screen edge) so their feet always
-          land on whatever opaque panel is topmost, never floating above it
-          or getting clipped behind it. */}
+          Anchored to captureFloor — the pose panel's collapsed line — so the
+          figure sits in the same place (and saves the same) no matter how the
+          pose list is toggled; an expanded panel just floats over its shins. */}
       {selectedPose && (
         <View
           style={[
             styles.personOverlay,
-            { aspectRatio: selectedPose.aspectRatio, bottom: personFloor, height: personOverlayHeight },
+            { aspectRatio: selectedPose.aspectRatio, bottom: captureFloor, height: personOverlayHeight },
           ]}
           pointerEvents="none">
           <Image source={selectedPose.image} style={styles.personOverlayImage} resizeMode="cover" />
         </View>
       )}
       {selectedPose && (
-        <Text style={[styles.imageDisclosureText, { bottom: personFloor + 8 }]} pointerEvents="none">
+        <Text style={[styles.imageDisclosureText, { bottom: captureFloor + 8 }]} pointerEvents="none">
           {t.aiImageDisclosure}
         </Text>
       )}
@@ -452,8 +460,8 @@ export default function PersonCameraScreen() {
       </Pressable>
 
       {poses.length > 1 && (
-        <View style={[styles.poseSection, { bottom: actionBarHeight }]} onLayout={handlePoseSectionLayout}>
-          <Pressable style={styles.poseSectionHeader} onPress={togglePoseSection}>
+        <View style={[styles.poseSection, { bottom: actionBarHeight }]}>
+          <Pressable style={styles.poseSectionHeader} onPress={togglePoseSection} onLayout={handlePoseHeaderLayout}>
             <View style={styles.poseSectionLabelRow}>
               <FontAwesome5 name="user-circle" size={11} color="#b8860b" solid />
               <Text style={styles.poseSectionLabel}>{t.posePickerLabel}</Text>
@@ -554,7 +562,7 @@ const styles = StyleSheet.create({
   // dimensions come from the image's own aspect ratio, not a hardcoded size.
   personOverlay: {
     position: "absolute",
-    right: -24,
+    right: PERSON_OVERLAY_SIDE_OFFSET,
   },
   personOverlayImage: {
     width: "100%",

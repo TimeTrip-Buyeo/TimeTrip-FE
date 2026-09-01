@@ -13,7 +13,13 @@ import { albumScreenText, mapScreenText, personCameraText } from "@/constants/tr
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
-import { PERSON_OVERLAY_HEIGHT_RATIO, resolveLocationId, resolveNumberParam, resolveSingleParam } from "@/lib/selfie-route";
+import {
+  PERSON_OVERLAY_HEIGHT_RATIO,
+  PERSON_OVERLAY_SIDE_OFFSET,
+  resolveLocationId,
+  resolveNumberParam,
+  resolveSingleParam,
+} from "@/lib/selfie-route";
 import { shareImageAsync } from "@/lib/share-image";
 
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
@@ -323,7 +329,7 @@ const styles = StyleSheet.create({
   // (not centered), so the saved preview matches what was actually framed.
   photoPersonOverlay: {
     position: "absolute",
-    right: -24,
+    right: PERSON_OVERLAY_SIDE_OFFSET,
     bottom: 0,
     zIndex: 2,
   },
