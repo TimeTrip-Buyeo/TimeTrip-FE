@@ -4,7 +4,13 @@ import { getCollectionItems, getStoryTopics } from "@/lib/api/collections";
 
 const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => location.id));
 
-export const PERSON_OVERLAY_HEIGHT_RATIO = 0.5;
+// Figure height as a fraction of the camera screen height.
+export const PERSON_OVERLAY_HEIGHT_RATIO = 0.48;
+// How far the figure bleeds off the right screen edge, as a fraction of the
+// figure box's OWN width — so the same proportion of every figure stays
+// on-screen regardless of how wide that pose's cutout is (a fixed pixel
+// offset cut narrow figures too much).
+export const PERSON_OVERLAY_BLEED_FRACTION = 0.06;
 
 export function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;
