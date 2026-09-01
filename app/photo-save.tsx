@@ -27,8 +27,8 @@ export default function PhotoSaveScreen() {
     poseImageUrl?: string;
     poseAspectRatio?: string;
     uri?: string;
-    personBottomRatio?: string;
     frameAspectRatio?: string;
+    personOverlayHeightRatio?: string;
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
@@ -48,9 +48,11 @@ export default function PhotoSaveScreen() {
     Number.isFinite(parsedFrameAspectRatio) && parsedFrameAspectRatio > 0
       ? parsedFrameAspectRatio
       : windowWidth / windowHeight;
-  const parsedPersonBottomRatio = Number(params.personBottomRatio);
-  const personBottomRatio =
-    Number.isFinite(parsedPersonBottomRatio) && parsedPersonBottomRatio >= 0 ? parsedPersonBottomRatio : 0;
+  const parsedPersonOverlayHeightRatio = Number(params.personOverlayHeightRatio);
+  const personOverlayHeightRatio =
+    Number.isFinite(parsedPersonOverlayHeightRatio) && parsedPersonOverlayHeightRatio > 0
+      ? parsedPersonOverlayHeightRatio
+      : PERSON_OVERLAY_HEIGHT_RATIO;
   const spotId = resolveNumberParam(params.spotId);
   const storyId = resolveNumberParam(params.storyId);
   const collectionItemId = resolveNumberParam(params.collectionItemId);
@@ -81,16 +83,16 @@ export default function PhotoSaveScreen() {
     setWrapperSize({ width, height });
   };
 
-  // The camera preview filled the whole screen, so the saved frame carries the
-  // screen's aspect ratio. Fit that ratio inside the available area (letterbox
-  // the leftover), then place the person overlay by the same fractions the
-  // camera screen used — so this preview matches the shot exactly.
+  // The saved photo was cropped to the camera screen's visible viewfinder, so
+  // it carries that band's aspect ratio. Fit it inside the available area
+  // (letterbox the leftover); the figure is bottom-anchored here just like its
+  // feet sat on the panel edge during framing, sized by the same fraction of
+  // the viewfinder it took up there.
   const fitsByHeight =
     wrapperSize.width > 0 && wrapperSize.height > 0 && wrapperSize.width / wrapperSize.height > frameAspectRatio;
   const frameHeight = fitsByHeight ? wrapperSize.height : wrapperSize.width / frameAspectRatio;
   const frameWidth = fitsByHeight ? wrapperSize.height * frameAspectRatio : wrapperSize.width;
-  const personOverlayHeight = frameHeight * PERSON_OVERLAY_HEIGHT_RATIO;
-  const personOverlayBottom = frameHeight * personBottomRatio;
+  const personOverlayHeight = frameHeight * personOverlayHeightRatio;
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -216,17 +218,12 @@ export default function PhotoSaveScreen() {
             {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
             {pose && (
               <View
-                style={[
-                  styles.photoPersonOverlay,
-                  { aspectRatio: pose.aspectRatio, height: personOverlayHeight, bottom: personOverlayBottom },
-                ]}
+                style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio, height: personOverlayHeight }]}
                 pointerEvents="none">
                 <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
               </View>
             )}
-            {pose && (
-              <Text style={[styles.photoDisclosureText, { bottom: personOverlayBottom + 8 }]}>{t.aiImageDisclosure}</Text>
-            )}
+            {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
           </View>
 
           {poseLabel && (
@@ -344,12 +341,12 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  // Same right-anchored placement as the live camera overlay (not centered),
-  // so the saved preview matches what was actually framed in the shot. Its
-  // `bottom` is set inline from the camera screen's personBottomRatio.
+  // Same right-anchored, floor-standing placement as the live camera overlay
+  // (not centered), so the saved preview matches what was actually framed.
   photoPersonOverlay: {
     position: "absolute",
     right: -24,
+    bottom: 0,
     zIndex: 2,
   },
   photoPersonOverlayImage: {

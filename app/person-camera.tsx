@@ -44,27 +44,27 @@ function firstText(...values: (string | null | undefined)[]) {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
 }
 
-// The camera preview fills the whole screen (aspect-fill / center-crop), but
-// takePictureAsync returns the sensor's own full frame (often 4:3) — a wider
-// field of view than what was framed, so the saved shot looks "zoomed out"
-// next to the person overlay. Crop the capture back to the preview's aspect
-// ratio, centered, so the saved file matches what the user composed.
-async function cropToPreviewAspect(
+// The preview covers the whole screen, but the only part the user can actually
+// compose against is the band between the top header and the bottom pose panel
+// — and takePictureAsync returns the full sensor frame (wider FOV still). Crop
+// the capture down to exactly that visible band so the saved photo shows the
+// same framing, with the figure landing where its feet were during framing
+// instead of floating mid-photo.
+async function cropToViewfinder(
   photo: { uri: string; width?: number; height?: number },
-  previewAspectRatio: number,
+  frame: { screenWidth: number; screenHeight: number; bandTop: number; bandHeight: number },
 ): Promise<string> {
   const { uri, width, height } = photo;
-  if (!width || !height || !Number.isFinite(previewAspectRatio) || previewAspectRatio <= 0) return uri;
+  const { screenWidth, screenHeight, bandTop, bandHeight } = frame;
+  if (!width || !height || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
 
-  let cropWidth = width;
-  let cropHeight = height;
-  if (width / height > previewAspectRatio) {
-    cropWidth = Math.round(height * previewAspectRatio);
-  } else {
-    cropHeight = Math.round(width / previewAspectRatio);
-  }
+  // The preview scaled the sensor image to the screen height (its taller axis),
+  // cropping left/right — so full image height maps to full screen height.
+  const pxPerScreenUnit = height / screenHeight;
+  const cropWidth = Math.min(width, Math.round(screenWidth * pxPerScreenUnit));
+  const cropHeight = Math.min(height, Math.round(bandHeight * pxPerScreenUnit));
   const originX = Math.round((width - cropWidth) / 2);
-  const originY = Math.round((height - cropHeight) / 2);
+  const originY = Math.round(Math.min(Math.max(bandTop * pxPerScreenUnit, 0), height - cropHeight));
 
   try {
     const image = await ImageManipulator.manipulate(uri)
@@ -73,7 +73,7 @@ async function cropToPreviewAspect(
     const result = await image.saveAsync({ compress: 0.9, format: SaveFormat.JPEG });
     return result.uri;
   } catch (error) {
-    console.error("[person-camera] crop to preview aspect failed, using raw frame", error);
+    console.error("[person-camera] crop to viewfinder failed, using raw frame", error);
     return uri;
   }
 }
@@ -147,6 +147,10 @@ export default function PersonCameraScreen() {
   // is what previously let it silently drift out of sync and clip the
   // figure standing above it.
   const [poseSectionHeight, setPoseSectionHeight] = useState(0);
+  // Same reasoning as poseSectionHeight — the top header's height depends on
+  // the safe-area inset and font metrics, and the saved photo is cropped to
+  // start right below it, so it has to be measured, not guessed.
+  const [headerHeight, setHeaderHeight] = useState(0);
   const cameraRef = useRef<CameraView>(null);
   // Shown only for the first few seconds on entering the screen, then fades
   // out — a persistent instruction pill was in the way once the shot was
@@ -251,6 +255,10 @@ export default function PersonCameraScreen() {
   // section to render at all (poses.length <= 1).
   const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
   const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  // The visible viewfinder: screen minus the top header minus the bottom
+  // panel the figure's feet rest on. The saved photo is cropped to exactly
+  // this band so what you framed is what you get.
+  const viewfinderHeight = Math.max(1, windowHeight - headerHeight - personFloor);
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -258,7 +266,12 @@ export default function PersonCameraScreen() {
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       if (!photo) return;
-      const framedUri = await cropToPreviewAspect(photo, windowWidth / windowHeight);
+      const framedUri = await cropToViewfinder(photo, {
+        screenWidth: windowWidth,
+        screenHeight: windowHeight,
+        bandTop: headerHeight,
+        bandHeight: viewfinderHeight,
+      });
       router.push({
         pathname: "/photo-save",
         params: {
@@ -268,8 +281,8 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
-          personBottomRatio: String(personFloor / windowHeight),
-          frameAspectRatio: String(windowWidth / windowHeight),
+          frameAspectRatio: String(windowWidth / viewfinderHeight),
+          personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
@@ -373,7 +386,9 @@ export default function PersonCameraScreen() {
         </Animated.View>
       </View>
 
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View
+        style={[styles.header, { paddingTop: insets.top + 16 }]}
+        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
         </Pressable>
