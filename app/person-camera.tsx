@@ -143,7 +143,7 @@ export default function PersonCameraScreen() {
   const [remotePoseAspectRatios, setRemotePoseAspectRatios] = useState<Record<string, number>>({});
   const [isCapturing, setIsCapturing] = useState(false);
   const [facing, setFacing] = useState<"front" | "back">("front");
-  const [isPoseSectionExpanded, setIsPoseSectionExpanded] = useState(true);
+  const [isPoseSectionExpanded, setIsPoseSectionExpanded] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 5 | 10>(0);
   const [isTimerMenuOpen, setIsTimerMenuOpen] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -407,7 +407,10 @@ export default function PersonCameraScreen() {
         </Text>
       )}
 
-      <View style={styles.guideFrame} pointerEvents="none">
+      {/* Bottom tracks the pose panel's live top edge (+ gap) so the "take a
+          photo with the figure" pill below it clears the panel instead of
+          hiding behind it. */}
+      <View style={[styles.guideFrame, { bottom: posePanelTop + 44 }]} pointerEvents="none">
         <View style={[styles.guideCorner, styles.guideCornerTL]} />
         <View style={[styles.guideCorner, styles.guideCornerTR]} />
         <View style={[styles.guideCorner, styles.guideCornerBL]} />
@@ -606,7 +609,7 @@ const styles = StyleSheet.create({
   guideFrame: {
     position: "absolute",
     top: "22%",
-    bottom: 210,
+    // `bottom` is set inline — it follows the pose panel's live top edge.
     left: 24,
     right: 24,
   },
