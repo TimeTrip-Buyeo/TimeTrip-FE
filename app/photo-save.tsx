@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -27,7 +27,6 @@ export default function PhotoSaveScreen() {
     poseImageUrl?: string;
     poseAspectRatio?: string;
     uri?: string;
-    frameAspectRatio?: string;
     personOverlayHeightRatio?: string;
     spotId?: string;
     storyId?: string;
@@ -42,12 +41,6 @@ export default function PhotoSaveScreen() {
   const poseImageUrl = params.poseImageUrl ?? "";
   const parsedPoseAspectRatio = Number(params.poseAspectRatio);
   const uri = params.uri ?? "";
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const parsedFrameAspectRatio = Number(params.frameAspectRatio);
-  const frameAspectRatio =
-    Number.isFinite(parsedFrameAspectRatio) && parsedFrameAspectRatio > 0
-      ? parsedFrameAspectRatio
-      : windowWidth / windowHeight;
   const parsedPersonOverlayHeightRatio = Number(params.personOverlayHeightRatio);
   const personOverlayHeightRatio =
     Number.isFinite(parsedPersonOverlayHeightRatio) && parsedPersonOverlayHeightRatio > 0
@@ -83,16 +76,12 @@ export default function PhotoSaveScreen() {
     setWrapperSize({ width, height });
   };
 
-  // The saved photo was cropped to the camera screen's visible viewfinder, so
-  // it carries that band's aspect ratio. Fit it inside the available area
-  // (letterbox the leftover); the figure is bottom-anchored here just like its
-  // feet sat on the panel edge during framing, sized by the same fraction of
-  // the viewfinder it took up there.
-  const fitsByHeight =
-    wrapperSize.width > 0 && wrapperSize.height > 0 && wrapperSize.width / wrapperSize.height > frameAspectRatio;
-  const frameHeight = fitsByHeight ? wrapperSize.height : wrapperSize.width / frameAspectRatio;
-  const frameWidth = fitsByHeight ? wrapperSize.height * frameAspectRatio : wrapperSize.width;
-  const personOverlayHeight = frameHeight * personOverlayHeightRatio;
+  // The saved photo was cropped to the camera screen's visible viewfinder. Here
+  // it fills the whole gray frame (scaled up to the frame height, sides cropped
+  // — no letterbox bars), and since the viewfinder band maps to the full frame
+  // height, the figure is bottom-anchored and sized by the same fraction of the
+  // band it took up while framing.
+  const personOverlayHeight = wrapperSize.height * personOverlayHeightRatio;
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -213,29 +202,27 @@ export default function PhotoSaveScreen() {
       </View>
 
       <View style={styles.photoWrapper} onLayout={handlePhotoWrapperLayout}>
-        <View style={[styles.frameBox, { width: frameWidth, height: frameHeight }]}>
-          <View ref={compositeRef} style={StyleSheet.absoluteFill} collapsable={false}>
-            {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
-            {pose && (
-              <View
-                style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio, height: personOverlayHeight }]}
-                pointerEvents="none">
-                <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
-              </View>
-            )}
-            {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
-          </View>
-
-          {poseLabel && (
-            <View style={styles.captionPill}>
-              <Text style={styles.captionText}>● {poseLabel}</Text>
+        <View ref={compositeRef} style={StyleSheet.absoluteFill} collapsable={false}>
+          {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
+          {pose && (
+            <View
+              style={[styles.photoPersonOverlay, { aspectRatio: pose.aspectRatio, height: personOverlayHeight }]}
+              pointerEvents="none">
+              <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
             </View>
           )}
-
-          <Pressable style={styles.shareCorner} onPress={handleShare} disabled={isSharing}>
-            <FontAwesome5 name="share-alt" size={16} color="#b8860b" solid />
-          </Pressable>
+          {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
         </View>
+
+        {poseLabel && (
+          <View style={styles.captionPill}>
+            <Text style={styles.captionText}>● {poseLabel}</Text>
+          </View>
+        )}
+
+        <Pressable style={styles.shareCorner} onPress={handleShare} disabled={isSharing}>
+          <FontAwesome5 name="share-alt" size={16} color="#b8860b" solid />
+        </Pressable>
 
         {showSaveToast ? (
           <SaveToast title={t.photoSavedToastTitle} body={t.photoSavedToastBody} />
@@ -327,15 +314,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#f3f4f6",
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Locked to the camera preview's aspect ratio and centered in the leftover
-  // space, so the saved photo shows the exact framing the user composed.
-  frameBox: {
-    overflow: "hidden",
-    borderRadius: 16,
-    backgroundColor: "#f3f4f6",
   },
   photoBackground: {
     width: "100%",

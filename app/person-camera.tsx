@@ -281,7 +281,6 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
-          frameAspectRatio: String(windowWidth / viewfinderHeight),
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
@@ -336,7 +335,12 @@ export default function PersonCameraScreen() {
   return (
     <View style={styles.container}>
       {permission?.granted ? (
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          mirror={facing === "front"}
+        />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.cameraFallback]}>
           <FontAwesome5 name="camera" size={40} color="rgba(255,255,255,0.35)" solid />
