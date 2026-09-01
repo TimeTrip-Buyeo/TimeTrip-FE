@@ -142,7 +142,7 @@ export default function PersonCameraScreen() {
   const [remotePoses, setRemotePoses] = useState<CollectionItemPose[]>([]);
   const [remotePoseAspectRatios, setRemotePoseAspectRatios] = useState<Record<string, number>>({});
   const [isCapturing, setIsCapturing] = useState(false);
-  const [facing, setFacing] = useState<"front" | "back">("front");
+  const [facing, setFacing] = useState<"front" | "back">("back");
   const [isPoseSectionExpanded, setIsPoseSectionExpanded] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 5 | 10>(0);
   const [isTimerMenuOpen, setIsTimerMenuOpen] = useState(false);
