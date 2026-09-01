@@ -69,6 +69,10 @@ async function cropToViewfinder(
 
   // The preview scaled the sensor image to the screen height (its taller axis),
   // cropping left/right — so full image height maps to full screen height.
+  // NOTE: this assumes a portrait screen taller than the sensor is wide (true
+  // for phones in portrait). On a tablet or a screen wider than the sensor
+  // aspect, the preview would scale to WIDTH instead and this crop would be
+  // off — revisit height/screenHeight here if targeting tablets.
   const pxPerScreenUnit = height / screenHeight;
   const cropWidth = Math.min(width, Math.round(screenWidth * pxPerScreenUnit));
   const cropHeight = Math.min(height, Math.round(bandHeight * pxPerScreenUnit));
