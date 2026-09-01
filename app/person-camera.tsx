@@ -1,5 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -43,6 +44,40 @@ function firstText(...values: (string | null | undefined)[]) {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
 }
 
+// The camera preview fills the whole screen (aspect-fill / center-crop), but
+// takePictureAsync returns the sensor's own full frame (often 4:3) — a wider
+// field of view than what was framed, so the saved shot looks "zoomed out"
+// next to the person overlay. Crop the capture back to the preview's aspect
+// ratio, centered, so the saved file matches what the user composed.
+async function cropToPreviewAspect(
+  photo: { uri: string; width?: number; height?: number },
+  previewAspectRatio: number,
+): Promise<string> {
+  const { uri, width, height } = photo;
+  if (!width || !height || !Number.isFinite(previewAspectRatio) || previewAspectRatio <= 0) return uri;
+
+  let cropWidth = width;
+  let cropHeight = height;
+  if (width / height > previewAspectRatio) {
+    cropWidth = Math.round(height * previewAspectRatio);
+  } else {
+    cropHeight = Math.round(width / previewAspectRatio);
+  }
+  const originX = Math.round((width - cropWidth) / 2);
+  const originY = Math.round((height - cropHeight) / 2);
+
+  try {
+    const image = await ImageManipulator.manipulate(uri)
+      .crop({ originX, originY, width: cropWidth, height: cropHeight })
+      .renderAsync();
+    const result = await image.saveAsync({ compress: 0.9, format: SaveFormat.JPEG });
+    return result.uri;
+  } catch (error) {
+    console.error("[person-camera] crop to preview aspect failed, using raw frame", error);
+    return uri;
+  }
+}
+
 function getPoseApiId(pose: CollectionItemPose) {
   return pose.poseId ?? pose.id;
 }
@@ -84,7 +119,7 @@ export default function PersonCameraScreen() {
   const locationId = resolveLocationId(params.locationId, params.spotId);
   const collectionItemId = resolveNumberParam(params.collectionItemId);
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { locale } = useLanguage();
 
   const mapT = mapScreenText[locale];
@@ -216,14 +251,14 @@ export default function PersonCameraScreen() {
   // section to render at all (poses.length <= 1).
   const personFloor = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
   const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
-  const visibleCameraFrameHeight = Math.max(1, windowHeight - personFloor);
-  const personOverlayFrameRatio = personOverlayHeight / visibleCameraFrameHeight;
 
   const takePhoto = async () => {
     if (!cameraRef.current || isCapturing) return;
     setIsCapturing(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      if (!photo) return;
+      const framedUri = await cropToPreviewAspect(photo, windowWidth / windowHeight);
       router.push({
         pathname: "/photo-save",
         params: {
@@ -232,8 +267,9 @@ export default function PersonCameraScreen() {
           poseLabel: selectedPose?.label[locale] ?? "",
           ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
-          uri: photo.uri,
-          personOverlayFrameRatio: String(personOverlayFrameRatio),
+          uri: framedUri,
+          personBottomRatio: String(personFloor / windowHeight),
+          frameAspectRatio: String(windowWidth / windowHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
