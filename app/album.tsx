@@ -15,7 +15,7 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
-import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
+import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums, type AlbumResponse } from "@/lib/api/album";
 import { toApiUrl } from "@/lib/api/client";
 import { hideAlbumPhoto } from "@/lib/hidden-album-photos";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
@@ -128,6 +128,35 @@ export default function AlbumScreen() {
   return <AlbumList />;
 }
 
+// The album-list cover: the album's first actual saved photo (skipping any
+// hidden ones), falling back to the server-provided thumbnailUrl while that
+// loads or if the album has none. Locked albums never fetch — their
+// collectionItemId isn't unlocked yet — so they keep the plain thumbnail.
+function AlbumCardCover({ album }: { album: AlbumResponse }) {
+  const { locale } = useLanguage();
+  const t = albumScreenText[locale];
+  const hiddenIds = useHiddenAlbumPhotoIds();
+  const { data } = useApiResource(
+    () => (album.isLocked ? Promise.resolve(null) : getAlbumPhotos(album.collectionItemId, locale)),
+    [album.collectionItemId, album.isLocked, locale],
+    "[album] failed to load album cover",
+  );
+  const firstPhotoUrl = data?.photos.find((photo) => !hiddenIds.has(photo.selfiePhotoId))?.photoUrl;
+  const coverUri = firstPhotoUrl ?? album.thumbnailUrl ?? undefined;
+
+  return (
+    <View style={styles.cardThumb}>
+      {!!coverUri && <Image source={{ uri: coverUri }} style={styles.cardThumbImage} resizeMode="cover" />}
+      <View style={styles.cardPhotoCountBadge}>
+        <Text style={styles.cardPhotoCountText}>
+          {album.photoCount}
+          {t.photoCountSuffix}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function BuyeoCutFab({ bottom, collectionItemId }: { bottom: number; collectionItemId?: number }) {
   return (
     <Pressable
@@ -213,19 +242,7 @@ function AlbumList() {
         ) : (
           <View style={styles.list}>
             {displayedAlbums.map((album) => {
-              const thumb = (
-                <View style={styles.cardThumb}>
-                  {!!album.thumbnailUrl && (
-                    <Image source={{ uri: album.thumbnailUrl }} style={styles.cardThumbImage} resizeMode="cover" />
-                  )}
-                  <View style={styles.cardPhotoCountBadge}>
-                    <Text style={styles.cardPhotoCountText}>
-                      {album.photoCount}
-                      {t.photoCountSuffix}
-                    </Text>
-                  </View>
-                </View>
-              );
+              const thumb = <AlbumCardCover album={album} />;
               const textColumn = (
                 <View style={styles.cardTextColumn}>
                   <Text style={styles.cardTitle}>{album.name}</Text>
