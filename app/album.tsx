@@ -314,7 +314,13 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
           </Pressable>
-          <Text style={styles.headerTitle}>{data?.name ?? mapT.nav.album}</Text>
+          <Text
+            style={styles.detailHeaderTitle}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}>
+            {data?.name ?? mapT.nav.album}
+          </Text>
           <LangPill
             locale={locale}
             isLegendVisible={isLegendVisible}
@@ -462,7 +468,13 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
       <Pressable onPress={() => router.back()} hitSlop={8}>
         <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
       </Pressable>
-      <Text style={styles.headerTitle}>{entry?.name[locale] ?? mapT.pins[locationId]}</Text>
+      <Text
+        style={styles.detailHeaderTitle}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}>
+        {entry?.name[locale] ?? mapT.pins[locationId]}
+      </Text>
       <LangPill
         locale={locale}
         isLegendVisible={isLegendVisible}
@@ -857,6 +869,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 24,
     paddingBottom: 16,
+  },
+  // Centered between the back chevron and the language pill; shrinks/ellipsizes
+  // instead of pushing into the pill when the collection name is long (English).
+  detailHeaderTitle: {
+    flex: 1,
+    marginHorizontal: 8,
+    textAlign: "center",
+    fontFamily: GUNGSEO_FONT_BOLD,
+    fontSize: 24,
+    color: "#1b1b1b",
   },
   emptyScrollContent: {
     flexGrow: 1,

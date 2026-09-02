@@ -356,7 +356,9 @@ export default function ArCameraScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={20} color="#fff" solid />
           </Pressable>
-          <Text style={styles.locationTitle}>{localizedSpotTitle}</Text>
+          <Text style={styles.locationTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {localizedSpotTitle}
+          </Text>
         </View>
         <View style={styles.arActivePill}>
           <View style={styles.arActiveDot} />
@@ -609,16 +611,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   topBarLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
   },
   locationTitle: {
+    flexShrink: 1,
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 24,
     color: "#fff",
   },
   arActivePill: {
+    flexShrink: 0,
+    marginLeft: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,

@@ -257,7 +257,9 @@ function CollectionTopicList() {
             <Pressable onPress={() => router.back()} hitSlop={8}>
               <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
             </Pressable>
-            <Text style={styles.listTitle}>{t.listTitle}</Text>
+            <Text style={styles.listTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {t.listTitle}
+            </Text>
           </View>
           <LangPill
             locale={locale}
@@ -726,11 +728,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   listHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
   },
   listTitle: {
+    flexShrink: 1,
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 24,
     color: "#1b1b1b",
