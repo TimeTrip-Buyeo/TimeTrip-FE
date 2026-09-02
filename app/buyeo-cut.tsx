@@ -175,61 +175,71 @@ export default function BuyeoCutScreen() {
   }, [frames]);
 
   const allSections = useMemo(() => {
-    // All real locations, not just the ones with an ALBUM_ENTRIES entry —
-    // ALBUM_ENTRIES only covers pagoda/gungnamji, so limiting to its keys was
-    // silently hiding every photo (local or server-synced) taken at museum/
-    // royalTombs/busosanseong.
-    return MAP_LOCATIONS.map((location) => location.id)
-      .flatMap((id) => {
-        const entry = ALBUM_ENTRIES[id];
-        const capturedPhotos = photosByLocation[id] ?? [];
-        const filteredCapturedPhotos =
-          selectedCollectionItemId !== undefined
-            ? capturedPhotos.filter((photo) => photo.collectionItemId === selectedCollectionItemId)
-            : capturedPhotos;
-        // photo.uri is already a flattened composite (background + person
-        // cutout baked in by photo-save.tsx's captureRef) — no separate pose
-        // overlay here, same as album.tsx just rendering captured.uri as-is.
-        const localItems: PickerItem[] = filteredCapturedPhotos.map((photo) => ({
-          id: photo.id,
-          locationId: id,
-          source: { uri: photo.uri },
-          collectionItemId: photo.collectionItemId,
-          collectionItemName: photo.collectionItemName,
-          serverSelfiePhotoId: photo.serverSelfiePhotoId,
-        }));
-        // Same dedup rule as album.tsx's useRemoteAlbumPhotos merge: skip a
-        // remote entry if a local capture already synced to that same
-        // selfiePhotoId, so it doesn't show up twice in the grid.
-        const remoteItems: PickerItem[] = remoteSelfies
-          .filter((photo) => SPOT_ID_TO_LOCATION_ID[photo.spotId] === id)
-          .filter(
-            (photo) =>
-              selectedCollectionItemId === undefined || photo.collectionItemId === selectedCollectionItemId,
-          )
-          .filter((photo) => !filteredCapturedPhotos.some((local) => local.serverSelfiePhotoId === photo.selfiePhotoId))
-          .map((photo) => ({
-            id: `remote-${photo.selfiePhotoId}`,
-            locationId: id,
-            source: { uri: toApiUrl(photo.photoUrl) },
-            collectionItemId: photo.collectionItemId,
-            collectionItemName: photo.collectionItemName,
-            serverSelfiePhotoId: photo.selfiePhotoId,
-          }));
-        const groupedItems = [...localItems, ...remoteItems].reduce<Record<string, PickerItem[]>>((groups, item) => {
-          const groupKey =
-            item.collectionItemId !== undefined
-              ? `collection-${item.collectionItemId}`
-              : `location-${id}-${item.id}`;
-          groups[groupKey] = [...(groups[groupKey] ?? []), item];
-          return groups;
-        }, {});
+    // Local captures already carry their own locationId — flatten every
+    // location's bucket (not just the ones with an ALBUM_ENTRIES entry).
+    const localItems: PickerItem[] = MAP_LOCATIONS.flatMap((location) => {
+      const capturedPhotos = photosByLocation[location.id] ?? [];
+      const filtered =
+        selectedCollectionItemId !== undefined
+          ? capturedPhotos.filter((photo) => photo.collectionItemId === selectedCollectionItemId)
+          : capturedPhotos;
+      // photo.uri is already a flattened composite (background + person cutout
+      // baked in by photo-save.tsx's captureRef).
+      return filtered.map((photo) => ({
+        id: photo.id,
+        locationId: location.id,
+        source: { uri: photo.uri },
+        collectionItemId: photo.collectionItemId,
+        collectionItemName: photo.collectionItemName,
+        serverSelfiePhotoId: photo.serverSelfiePhotoId,
+      }));
+    });
 
-        return Object.entries(groupedItems).map(([sectionKey, items]) => {
-          const collectionItemName = items.find((item) => item.collectionItemName)?.collectionItemName;
-          return { sectionKey, id, entry, collectionItemName, items };
-        });
+    // Dedup: drop a remote entry a local capture already synced to the same
+    // selfiePhotoId, so it isn't shown twice.
+    const syncedRemoteIds = new Set(
+      localItems.map((item) => item.serverSelfiePhotoId).filter((id): id is number => id !== undefined),
+    );
+    const remoteItems: PickerItem[] = remoteSelfies
+      .filter((photo) => {
+        // Opened from a specific album: getSelfiePhotoOptions was already called
+        // with that collectionItemId, so trust its narrowing. Don't re-drop a
+        // photo because its spot isn't in SPOT_ID_TO_LOCATION_ID (that map is
+        // deliberately partial) or because the response omitted collectionItemId
+        // — that's what was hiding whole albums' photos here.
+        if (selectedCollectionItemId !== undefined) {
+          return photo.collectionItemId === undefined || photo.collectionItemId === selectedCollectionItemId;
+        }
+        return true;
       })
+      .filter((photo) => !syncedRemoteIds.has(photo.selfiePhotoId))
+      .map((photo) => ({
+        id: `remote-${photo.selfiePhotoId}`,
+        // Unmapped spots fall into the first location so they still render; the
+        // section label prefers collectionItemName anyway.
+        locationId: SPOT_ID_TO_LOCATION_ID[photo.spotId] ?? MAP_LOCATIONS[0].id,
+        source: { uri: toApiUrl(photo.photoUrl) },
+        collectionItemId: photo.collectionItemId,
+        collectionItemName: photo.collectionItemName,
+        serverSelfiePhotoId: photo.selfiePhotoId,
+      }));
+
+    // Group by collection item when known, else by location.
+    const groups = new Map<string, PickerItem[]>();
+    for (const item of [...localItems, ...remoteItems]) {
+      const groupKey =
+        item.collectionItemId !== undefined ? `collection-${item.collectionItemId}` : `location-${item.locationId}`;
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), item]);
+    }
+
+    return [...groups.entries()]
+      .map(([sectionKey, items]) => ({
+        sectionKey,
+        id: items[0].locationId,
+        entry: ALBUM_ENTRIES[items[0].locationId],
+        collectionItemName: items.find((item) => item.collectionItemName)?.collectionItemName,
+        items,
+      }))
       .filter((section) => section.items.length > 0);
   }, [photosByLocation, remoteSelfies, selectedCollectionItemId]);
 
