@@ -377,9 +377,11 @@ export default function ArCameraScreen() {
         </View>
       </LinearGradient>
 
-      {/* Same fading black hint pill as person-camera's guide pill, same design. */}
+      {/* Same fading black hint pill as person-camera's guide pill, same design.
+          Sits in the band the guide area reserves below (guideBoxWrapper's
+          paddingTop), so it never overlaps the overlay image. */}
       <Animated.View
-        style={[styles.hintPill, { top: insets.top + 76, opacity: matchHintOpacity }]}
+        style={[styles.hintPill, { top: insets.top + 52, opacity: matchHintOpacity }]}
         pointerEvents="none">
         <View style={styles.hintPillDot} />
         <Text style={styles.hintPillText}>{t.matchOverlayHintLabel}</Text>
@@ -390,7 +392,7 @@ export default function ArCameraScreen() {
           of the sheet covering the overlay image — both resize in the same
           layout pass toggleSheet's LayoutAnimation already animates. */}
       <View style={styles.contentColumn} pointerEvents="box-none">
-        <View style={styles.guideBoxWrapper} pointerEvents="none">
+        <View style={[styles.guideBoxWrapper, { paddingTop: insets.top + 108 }]} pointerEvents="none">
           {geoState === "ready" && timeslip && timeslip.overlayImageUrl ? (
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
@@ -473,7 +475,9 @@ export default function ArCameraScreen() {
               )}
               <View style={styles.characterBody}>
                 <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
-                {!isCollectionItemAcquired && <Text style={styles.acquireHintText}>{t.acquireHintText}</Text>}
+                {/* Shown on every AR camera, not only spots with an unacquired
+                    item — it's the standing instruction for how to earn it. */}
+                <Text style={styles.acquireHintText}>{t.acquireHintText}</Text>
                 <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
               </View>
             </View>
