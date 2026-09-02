@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   LayoutAnimation,
   Linking,
   Pressable,
@@ -127,6 +128,16 @@ export default function ArCameraScreen() {
   const [retryToken, setRetryToken] = useState(0);
   const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
+  // Same fading black hint pill as person-camera's "take a photo with the
+  // figure!" — shown briefly on entry, then fades out so it's not in the way.
+  const matchHintOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.timing(matchHintOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+    }, 2800);
+    return () => clearTimeout(timer);
+  }, [matchHintOpacity]);
 
   // Keyed by `${spotId}:${month}:${locale}` so a SEARCHING→READY round-trip,
   // or switching back to a previously-viewed language, reuses the cached
@@ -365,6 +376,14 @@ export default function ArCameraScreen() {
           <Text style={styles.arActiveText}>{t.arActiveLabel}</Text>
         </View>
       </LinearGradient>
+
+      {/* Same fading black hint pill as person-camera's guide pill, same design. */}
+      <Animated.View
+        style={[styles.hintPill, { top: insets.top + 76, opacity: matchHintOpacity }]}
+        pointerEvents="none">
+        <View style={styles.hintPillDot} />
+        <Text style={styles.hintPillText}>{t.matchOverlayHintLabel}</Text>
+      </Animated.View>
 
       {/* Guide/overlay area and sheet share one flex column so expanding the
           sheet (which grows taller) shrinks the guide area above it instead
@@ -634,6 +653,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 9999,
+  },
+  // Mirrors person-camera's spotPill / spotDot / spotPillText exactly.
+  hintPill: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 9999,
+    paddingHorizontal: 17,
+    paddingVertical: 7,
+  },
+  hintPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#b8860b",
+  },
+  hintPillText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#fff",
   },
   arActiveDot: {
     width: 8,

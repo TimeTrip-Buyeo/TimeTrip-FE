@@ -518,6 +518,7 @@ type ArCameraText = {
   acquireHintText: string;
   localeRefreshErrorMessage: string;
   aiImageDisclosure: string;
+  matchOverlayHintLabel: string;
 };
 
 export const arCameraText: Record<Locale, ArCameraText> = {
@@ -538,6 +539,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     acquireHintText: '아래 오디오가이드를 끝까지 청취하면 얻을 수 있어요!',
     localeRefreshErrorMessage: '번역을 불러오지 못했어요. 눌러서 다시 시도하세요.',
     aiImageDisclosure: '*AI로 생성된 이미지입니다.',
+    matchOverlayHintLabel: '과거 모습을 현재 배경과 맞춰보세요!',
   },
   en: {
     arActiveLabel: 'AR ACTIVE',
@@ -556,6 +558,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     acquireHintText: 'Listen to the audio guide below all the way through to earn it!',
     localeRefreshErrorMessage: "Couldn't refresh the translation. Tap to try again.",
     aiImageDisclosure: '*AI-generated image.',
+    matchOverlayHintLabel: 'Line up the past view with the scene in front of you!',
   },
   zh: {
     arActiveLabel: 'AR 已启用',
@@ -574,6 +577,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     acquireHintText: '听完下方的语音导览即可获得！',
     localeRefreshErrorMessage: '翻译加载失败，点击重试。',
     aiImageDisclosure: '*AI生成图像。',
+    matchOverlayHintLabel: '将过去的模样与眼前的实景对齐吧！',
   },
   ja: {
     arActiveLabel: 'AR起動中',
@@ -592,6 +596,7 @@ export const arCameraText: Record<Locale, ArCameraText> = {
     acquireHintText: '下の音声ガイドを最後まで聞くと獲得できます！',
     localeRefreshErrorMessage: '翻訳を読み込めませんでした。タップして再試行してください。',
     aiImageDisclosure: '*AI生成画像です。',
+    matchOverlayHintLabel: '過去の姿を目の前の風景に合わせてみましょう！',
   },
 };
 
