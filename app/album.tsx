@@ -48,14 +48,15 @@ function confirmDeleteSelfiePhoto(
       style: "destructive",
       onPress: async () => {
         // Hide it locally straight away (persisted). Also fire the server
-        // delete as best-effort — it's a no-op until that endpoint exists,
-        // and a failure here must not undo the local hide.
+        // delete as best-effort — expected to fail with a plain ApiError until
+        // that endpoint exists, so it's logged quietly (not console.error) and
+        // never undoes the local hide.
         hideAlbumPhoto(selfiePhotoId);
         onDeleted?.();
         try {
           await deleteAlbumPhoto(selfiePhotoId);
-        } catch (error) {
-          console.error("[album] server delete failed (photo hidden locally)", error);
+        } catch {
+          console.log("[album] no server delete endpoint yet — photo hidden locally only");
         }
       },
     },
