@@ -15,7 +15,7 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
-import { deleteAlbumPhoto, getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
+import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
 import { toApiUrl } from "@/lib/api/client";
 import { hideAlbumPhoto } from "@/lib/hidden-album-photos";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
@@ -46,18 +46,12 @@ function confirmDeleteSelfiePhoto(
     {
       text: t.deleteConfirmButton,
       style: "destructive",
-      onPress: async () => {
-        // Hide it locally straight away (persisted). Also fire the server
-        // delete as best-effort — expected to fail with a plain ApiError until
-        // that endpoint exists, so it's logged quietly (not console.error) and
-        // never undoes the local hide.
+      onPress: () => {
+        // Persisted local hide only — there's no server delete endpoint yet.
+        // When one lands, call deleteAlbumPhoto(selfiePhotoId) here (see
+        // lib/api/album.ts).
         hideAlbumPhoto(selfiePhotoId);
         onDeleted?.();
-        try {
-          await deleteAlbumPhoto(selfiePhotoId);
-        } catch {
-          console.log("[album] no server delete endpoint yet — photo hidden locally only");
-        }
       },
     },
   ]);
@@ -478,18 +472,18 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
             <View style={styles.viewerCaptionPill}>
               <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
             </View>
+            <Pressable style={styles.viewerDeleteCorner} onPress={handleDelete} hitSlop={10}>
+              <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
+            </Pressable>
           </View>
 
-          <View style={[styles.viewerActions, { justifyContent: "center", paddingBottom: insets.bottom + 16 }]}>
-            <Pressable style={styles.viewerDeleteButton} onPress={handleDelete} hitSlop={8}>
-              <FontAwesome5 name="trash-alt" size={16} color="#b91c1c" solid />
-            </Pressable>
-            {photo.shareable && (
+          {photo.shareable && (
+            <View style={[styles.viewerActions, { justifyContent: "center", paddingBottom: insets.bottom + 16 }]}>
               <Pressable style={styles.viewerDownloadButton} onPress={handleShare}>
                 <FontAwesome5 name="share-alt" size={20} color="#fff" solid />
               </Pressable>
-            )}
-          </View>
+            </View>
+          )}
         </>
       )}
     </View>
@@ -1044,16 +1038,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  viewerDeleteButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: "#b91c1c",
-    backgroundColor: "#fff",
+  // Small delete affordance in the photo's own top-right corner (the "편집"
+  // button), rather than a big button in the action row.
+  viewerDeleteCorner: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(185,28,28,0.92)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
   },
   editControls: {
     flexDirection: "row",
