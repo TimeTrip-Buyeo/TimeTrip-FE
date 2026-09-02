@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useReducer, useState } from "react";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -14,7 +14,7 @@ import { albumScreenText, mapScreenText, type Locale } from "@/constants/transla
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
+import { deleteAlbumPhoto, getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
 import { toApiUrl } from "@/lib/api/client";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
@@ -32,6 +32,53 @@ function parseId(value: string | undefined): number | undefined {
 
 function getTakenAtMillis(takenAt: number | string): number {
   return typeof takenAt === "number" ? takenAt : new Date(takenAt).getTime();
+}
+
+// Server photos deleted this session. useApiResource caches getAlbumPhotos by
+// [collectionItemId, locale] and won't refetch on back-navigation, so the grid
+// and the viewer both filter against this set (and re-render via the listeners)
+// instead of relying on a refetch.
+const deletedSelfiePhotoIds = new Set<number>();
+const deletedPhotoListeners = new Set<() => void>();
+
+function markSelfiePhotoDeleted(selfiePhotoId: number) {
+  deletedSelfiePhotoIds.add(selfiePhotoId);
+  deletedPhotoListeners.forEach((listener) => listener());
+}
+
+function useDeletedSelfiePhotoIds() {
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    deletedPhotoListeners.add(bump);
+    return () => {
+      deletedPhotoListeners.delete(bump);
+    };
+  }, []);
+  return deletedSelfiePhotoIds;
+}
+
+function confirmDeleteSelfiePhoto(
+  selfiePhotoId: number,
+  t: (typeof albumScreenText)[Locale],
+  onDeleted?: () => void,
+) {
+  Alert.alert(t.deleteConfirmTitle, t.deleteConfirmMessage, [
+    { text: t.deleteCancelButton, style: "cancel" },
+    {
+      text: t.deleteConfirmButton,
+      style: "destructive",
+      onPress: async () => {
+        try {
+          await deleteAlbumPhoto(selfiePhotoId);
+          markSelfiePhotoDeleted(selfiePhotoId);
+          onDeleted?.();
+        } catch (error) {
+          console.error("[album] delete photo failed", error);
+          Alert.alert(t.deleteConfirmTitle, t.deleteErrorMessage);
+        }
+      },
+    },
+  ]);
 }
 
 function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
@@ -297,6 +344,8 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const deletedIds = useDeletedSelfiePhotoIds();
   const { data, loadError } = useApiResource(
     () => getAlbumPhotos(collectionItemId, locale),
     [collectionItemId, locale],
@@ -306,6 +355,8 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
+
+  const photos = (data?.photos ?? []).filter((photo) => !deletedIds.has(photo.selfiePhotoId));
 
   return (
     <View style={styles.container}>
@@ -330,6 +381,19 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
         </View>
         <View style={styles.photoSectionHeader}>
           <Text style={styles.themeLabel}>{data?.name ?? t.themeLabel}</Text>
+          {photos.length > 0 && (
+            <Pressable
+              style={[styles.editToggleButton, isEditMode && styles.editToggleButtonActive]}
+              onPress={() => setIsEditMode((current) => !current)}
+              hitSlop={8}>
+              <FontAwesome5
+                name={isEditMode ? "check" : "pen"}
+                size={12}
+                color={isEditMode ? "#fff" : "#9ca3af"}
+                solid
+              />
+            </Pressable>
+          )}
         </View>
 
         {loadError ? (
@@ -342,20 +406,27 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
           </View>
         ) : (
           <View style={styles.photoGrid}>
-            {data.photos.map((photo) => (
+            {photos.map((photo) => (
               <Pressable
                 key={photo.selfiePhotoId}
                 style={({ pressed }) => [styles.photoCard, pressed && styles.photoCardPressed]}
                 onPress={() =>
-                  router.push({
-                    pathname: "/album",
-                    params: {
-                      collectionItemId: String(collectionItemId),
-                      selfiePhotoId: String(photo.selfiePhotoId),
-                    },
-                  })
+                  isEditMode
+                    ? confirmDeleteSelfiePhoto(photo.selfiePhotoId, t)
+                    : router.push({
+                        pathname: "/album",
+                        params: {
+                          collectionItemId: String(collectionItemId),
+                          selfiePhotoId: String(photo.selfiePhotoId),
+                        },
+                      })
                 }>
                 <Image source={{ uri: photo.photoUrl }} style={styles.photoImage} resizeMode="cover" />
+                {isEditMode && (
+                  <View style={styles.photoDeleteBadge}>
+                    <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>
@@ -396,6 +467,8 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
     }
   };
 
+  const handleDelete = () => confirmDeleteSelfiePhoto(selfiePhotoId, t, () => router.back());
+
   return (
     <View style={styles.container}>
       <View style={[styles.viewerHeader, { paddingTop: insets.top + 16 }]}>
@@ -425,13 +498,16 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
             </View>
           </View>
 
-          {photo.shareable && (
-            <View style={[styles.viewerActions, { justifyContent: "center", paddingBottom: insets.bottom + 16 }]}>
+          <View style={[styles.viewerActions, { justifyContent: "center", paddingBottom: insets.bottom + 16 }]}>
+            <Pressable style={styles.viewerDeleteButton} onPress={handleDelete} hitSlop={8}>
+              <FontAwesome5 name="trash-alt" size={16} color="#b91c1c" solid />
+            </Pressable>
+            {photo.shareable && (
               <Pressable style={styles.viewerDownloadButton} onPress={handleShare}>
                 <FontAwesome5 name="share-alt" size={20} color="#fff" solid />
               </Pressable>
-            </View>
-          )}
+            )}
+          </View>
         </>
       )}
     </View>
@@ -963,6 +1039,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 12,
     marginBottom: 12,
+  },
+  editToggleButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#f5f5f4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editToggleButtonActive: {
+    backgroundColor: "#800000",
+  },
+  photoDeleteBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#b91c1c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerDeleteButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: "#b91c1c",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
   },
   editControls: {
     flexDirection: "row",

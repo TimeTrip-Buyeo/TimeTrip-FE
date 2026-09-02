@@ -1,4 +1,4 @@
-import { apiGet } from "@/lib/api/client";
+import { apiDelete, apiGet } from "@/lib/api/client";
 
 export type AlbumResponse = {
   collectionItemId: number;
@@ -50,4 +50,10 @@ export function getAlbumPhotos(collectionItemId: number, language?: string): Pro
 
 export function getAlbumPhotoDetail(selfiePhotoId: number, language?: string): Promise<AlbumPhotoDetailResponse> {
   return apiGet<AlbumPhotoDetailResponse>(`/api/albums/photos/${selfiePhotoId}${languageQuery(language)}`);
+}
+
+// Counterpart to POST /api/selfie-photos (lib/api/selfies.ts). If the backend
+// exposes deletion under a different path, only this line needs to change.
+export function deleteAlbumPhoto(selfiePhotoId: number): Promise<null> {
+  return apiDelete<null>(`/api/selfie-photos/${selfiePhotoId}`);
 }

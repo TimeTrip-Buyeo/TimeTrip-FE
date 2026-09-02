@@ -816,6 +816,11 @@ type AlbumScreenText = {
   emptyBodyLine2: string;
   emptyPrimaryButton: string;
   emptySecondaryButton: string;
+  deleteConfirmTitle: string;
+  deleteConfirmMessage: string;
+  deleteConfirmButton: string;
+  deleteCancelButton: string;
+  deleteErrorMessage: string;
 };
 
 export const albumScreenText: Record<Locale, AlbumScreenText> = {
@@ -831,6 +836,11 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     emptyBodyLine2: '획득 후, 소중한 기념사진을 촬영하여 앨범에 보관할 수 있습니다.',
     emptyPrimaryButton: '유물 · 인물 획득하러 가기',
     emptySecondaryButton: '지도 홈',
+    deleteConfirmTitle: '사진 삭제',
+    deleteConfirmMessage: '이 사진을 삭제할까요? 되돌릴 수 없어요.',
+    deleteConfirmButton: '삭제',
+    deleteCancelButton: '취소',
+    deleteErrorMessage: '사진을 삭제하지 못했어요. 잠시 후 다시 시도해주세요.',
   },
   en: {
     subtitle: "Gather the precious traces you've collected from Buyeo's storied heritage sites.",
@@ -844,6 +854,11 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     emptyBodyLine2: 'Once collected, capture a keepsake photo to save here in your album.',
     emptyPrimaryButton: 'Go Collect Artifacts & Figures',
     emptySecondaryButton: 'Map Home',
+    deleteConfirmTitle: 'Delete photo',
+    deleteConfirmMessage: 'Delete this photo? This can\'t be undone.',
+    deleteConfirmButton: 'Delete',
+    deleteCancelButton: 'Cancel',
+    deleteErrorMessage: "Couldn't delete the photo. Please try again in a moment.",
   },
   zh: {
     subtitle: '收集在扶余悠久遗迹中留下的珍贵痕迹吧。',
@@ -857,6 +872,11 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     emptyBodyLine2: '收集后可以拍摄珍贵的纪念照并保存在相册中。',
     emptyPrimaryButton: '去收集文物·人物',
     emptySecondaryButton: '地图首页',
+    deleteConfirmTitle: '删除照片',
+    deleteConfirmMessage: '要删除这张照片吗？此操作无法撤销。',
+    deleteConfirmButton: '删除',
+    deleteCancelButton: '取消',
+    deleteErrorMessage: '照片删除失败，请稍后再试。',
   },
   ja: {
     subtitle: '扶余の由緒ある遺跡地で集めた大切な痕跡を集めてみよう。',
@@ -870,6 +890,11 @@ export const albumScreenText: Record<Locale, AlbumScreenText> = {
     emptyBodyLine2: '獲得後は大切な記念写真を撮影してアルバムに保存できます。',
     emptyPrimaryButton: '遺物・人物を獲得しに行く',
     emptySecondaryButton: '地図ホーム',
+    deleteConfirmTitle: '写真を削除',
+    deleteConfirmMessage: 'この写真を削除しますか？元に戻せません。',
+    deleteConfirmButton: '削除',
+    deleteCancelButton: 'キャンセル',
+    deleteErrorMessage: '写真を削除できませんでした。しばらくしてからもう一度お試しください。',
   },
 };
 
