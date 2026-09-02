@@ -144,7 +144,10 @@ export default function MapScreen() {
     Promise.allSettled([
       getSpotDetail(selectedSpotId),
       isTourSummary ? Promise.resolve(null) : getSpotStory(selectedSpotId, locale),
-      isTourSummary ? Promise.resolve(null) : getSpotAudioGuide(selectedSpotId, { language: locale }),
+      // Fetched for TOUR spots too (e.g. the museum) — they have no "story" but
+      // they DO have a basic audio guide, and skipping it left their play
+      // button permanently disabled.
+      getSpotAudioGuide(selectedSpotId, { language: locale }),
     ])
       .then(([detailResult, storyResult, audioResult]) => {
         if (!isActive) return;
