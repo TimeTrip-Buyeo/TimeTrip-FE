@@ -14,6 +14,7 @@ import { MAP_LOCATIONS, SPOT_ID_TO_LOCATION_ID, type LocationId } from "@/consta
 import { buyeoCutScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
+import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { toApiUrl } from "@/lib/api/client";
 import { getFrames } from "@/lib/api/collage";
@@ -117,6 +118,7 @@ export default function BuyeoCutScreen() {
   const t = buyeoCutScreenText[locale];
   const mapT = mapScreenText[locale];
   const { photosByLocation } = useCapturedPhotos();
+  const hiddenPhotoIds = useHiddenAlbumPhotoIds();
   const [selected, setSelected] = useState<PickerItem[]>([]);
   const [view, setView] = useState<"pick" | "collage">("pick");
   const { data: framesData, loadError: framesLoadError } = useApiResource(
@@ -136,7 +138,10 @@ export default function BuyeoCutScreen() {
     [locale, selectedCollectionItemId],
     "[buyeo-cut] failed to load selfie photos",
   );
-  const remoteSelfies = useMemo(() => selfiesData?.selfiePhotos ?? [], [selfiesData]);
+  const remoteSelfies = useMemo(
+    () => (selfiesData?.selfiePhotos ?? []).filter((photo) => !hiddenPhotoIds.has(photo.selfiePhotoId)),
+    [selfiesData, hiddenPhotoIds],
+  );
   // Excludes the server's "기본" (plain/default) frame — only real 부여세컷
   // frames should be selectable here.
   const frames = useMemo(() => (framesData?.frames ?? []).filter((frame) => !frame.name.includes("기본")), [framesData]);

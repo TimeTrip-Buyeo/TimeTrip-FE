@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,8 +14,10 @@ import { albumScreenText, mapScreenText, type Locale } from "@/constants/transla
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
+import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
 import { deleteAlbumPhoto, getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
 import { toApiUrl } from "@/lib/api/client";
+import { hideAlbumPhoto } from "@/lib/hidden-album-photos";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
 import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route";
@@ -34,29 +36,6 @@ function getTakenAtMillis(takenAt: number | string): number {
   return typeof takenAt === "number" ? takenAt : new Date(takenAt).getTime();
 }
 
-// Server photos deleted this session. useApiResource caches getAlbumPhotos by
-// [collectionItemId, locale] and won't refetch on back-navigation, so the grid
-// and the viewer both filter against this set (and re-render via the listeners)
-// instead of relying on a refetch.
-const deletedSelfiePhotoIds = new Set<number>();
-const deletedPhotoListeners = new Set<() => void>();
-
-function markSelfiePhotoDeleted(selfiePhotoId: number) {
-  deletedSelfiePhotoIds.add(selfiePhotoId);
-  deletedPhotoListeners.forEach((listener) => listener());
-}
-
-function useDeletedSelfiePhotoIds() {
-  const [, bump] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => {
-    deletedPhotoListeners.add(bump);
-    return () => {
-      deletedPhotoListeners.delete(bump);
-    };
-  }, []);
-  return deletedSelfiePhotoIds;
-}
-
 function confirmDeleteSelfiePhoto(
   selfiePhotoId: number,
   t: (typeof albumScreenText)[Locale],
@@ -68,13 +47,15 @@ function confirmDeleteSelfiePhoto(
       text: t.deleteConfirmButton,
       style: "destructive",
       onPress: async () => {
+        // Hide it locally straight away (persisted). Also fire the server
+        // delete as best-effort — it's a no-op until that endpoint exists,
+        // and a failure here must not undo the local hide.
+        hideAlbumPhoto(selfiePhotoId);
+        onDeleted?.();
         try {
           await deleteAlbumPhoto(selfiePhotoId);
-          markSelfiePhotoDeleted(selfiePhotoId);
-          onDeleted?.();
         } catch (error) {
-          console.error("[album] delete photo failed", error);
-          Alert.alert(t.deleteConfirmTitle, t.deleteErrorMessage);
+          console.error("[album] server delete failed (photo hidden locally)", error);
         }
       },
     },
@@ -345,7 +326,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const deletedIds = useDeletedSelfiePhotoIds();
+  const hiddenIds = useHiddenAlbumPhotoIds();
   const { data, loadError } = useApiResource(
     () => getAlbumPhotos(collectionItemId, locale),
     [collectionItemId, locale],
@@ -356,7 +337,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
     setIsLegendVisible(false);
   };
 
-  const photos = (data?.photos ?? []).filter((photo) => !deletedIds.has(photo.selfiePhotoId));
+  const photos = (data?.photos ?? []).filter((photo) => !hiddenIds.has(photo.selfiePhotoId));
 
   return (
     <View style={styles.container}>
