@@ -15,6 +15,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { toApiUrl } from "@/lib/api/client";
 import {
   getLocalizedSpotName,
+  getSpotAudioGuide,
   getSpotDetail,
   getSpots,
   getSpotStory,
@@ -22,6 +23,7 @@ import {
   type Spot,
   type SpotDetail,
   type SpotStory,
+  type StoryAudioGuide,
 } from "@/lib/api/spots";
 
 // "화면 2" per the AR-camera integration spec — the map pin's audio card is
@@ -35,7 +37,7 @@ function SpotDetailPlayButton({
   onNavigateToArCamera,
 }: {
   isSpecial: boolean;
-  audioGuide: SpotStory["audioGuide"];
+  audioGuide: StoryAudioGuide | null;
   onNavigateToArCamera: () => void;
 }) {
   const source = useMemo(() => (audioGuide ? { uri: toApiUrl(audioGuide.filePath) } : undefined), [audioGuide]);
@@ -79,6 +81,7 @@ export default function MapScreen() {
   const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
   const [selectedSpotDetail, setSelectedSpotDetail] = useState<SpotDetail | null>(null);
   const [selectedSpotStory, setSelectedSpotStory] = useState<SpotStory | null>(null);
+  const [selectedSpotAudioGuide, setSelectedSpotAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isLoadingSpots, setIsLoadingSpots] = useState(true);
   const [hasMapError, setHasMapError] = useState(false);
 
@@ -123,37 +126,41 @@ export default function MapScreen() {
     if (selectedSpotId === null) {
       setSelectedSpotDetail(null);
       setSelectedSpotStory(null);
+      setSelectedSpotAudioGuide(null);
       return;
     }
 
     let isActive = true;
     setSelectedSpotDetail(null);
     setSelectedSpotStory(null);
+    setSelectedSpotAudioGuide(null);
 
-    const spotSummary = spots.find((spot) => spot.id === selectedSpotId);
-    const isTourSummary = spotSummary?.spotType === "TOUR";
-
-    Promise.allSettled([
-      getSpotDetail(selectedSpotId),
-      isTourSummary ? Promise.resolve(null) : getSpotStory(selectedSpotId, locale),
-    ])
-      .then(([detailResult, storyResult]) => {
+    const loadSelectedSpotGuide = async () => {
+      try {
+        const detail = await getSpotDetail(selectedSpotId);
         if (!isActive) return;
 
-        if (detailResult.status === "fulfilled") {
-          setSelectedSpotDetail(detailResult.value);
-        } else {
-          const message = detailResult.reason instanceof Error ? detailResult.reason.message : t.mapLoadError;
-          console.error(`[map] spot detail failed ${message}`);
+        setSelectedSpotDetail(detail);
+
+        const shouldOpenArCamera = detail.spotType !== "TOUR" && isCurrentSpecialSpot(detail);
+        if (shouldOpenArCamera) {
+          const story = await getSpotStory(selectedSpotId, locale);
+          if (!isActive) return;
+          setSelectedSpotStory(story);
+          return;
         }
 
-        if (storyResult.status === "fulfilled") {
-          setSelectedSpotStory(storyResult.value);
-        } else {
-          const message = storyResult.reason instanceof Error ? storyResult.reason.message : t.mapLoadError;
-          console.error(`[map] spot story failed ${message}`);
-        }
-      })
+        const audioGuide = await getSpotAudioGuide(selectedSpotId, { language: locale });
+        if (!isActive) return;
+        setSelectedSpotAudioGuide(audioGuide);
+      } catch (error) {
+        if (!isActive) return;
+        const message = error instanceof Error ? error.message : t.mapLoadError;
+        console.error(`[map] selected spot guide failed ${message}`);
+      }
+    };
+
+    loadSelectedSpotGuide();
 
     return () => {
       isActive = false;
@@ -245,9 +252,9 @@ export default function MapScreen() {
                   spots never navigate — they just play the audio guide right
                   here, per the spec's independent "화면 2" entry point. */}
               <SpotDetailPlayButton
-                key={`${selectedSpot.id}-${selectedSpotStory?.audioGuide?.filePath ?? "none"}`}
+                key={`${selectedSpot.id}-${selectedSpotAudioGuide?.filePath ?? selectedSpotStory?.storyId ?? "none"}`}
                 isSpecial={isSelectedSpecial}
-                audioGuide={selectedSpotStory?.audioGuide ?? null}
+                audioGuide={selectedSpotAudioGuide}
                 onNavigateToArCamera={() =>
                   router.push({
                     pathname: "/ar-camera",
