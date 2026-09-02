@@ -445,6 +445,7 @@ export default function ArCameraScreen() {
                   source={{ uri: characterCardImageUrl }}
                   style={styles.characterAvatarImage}
                   contentFit="cover"
+                  contentPosition="top"
                 />
               ) : (
                 <View style={styles.characterAvatar}>
@@ -762,6 +763,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Same 64x64 box as before, but cropped from the top (contentPosition="top")
+  // so a full-body figure shows its face — the legs get cut, not the head.
   characterAvatarImage: {
     width: 64,
     height: 64,
