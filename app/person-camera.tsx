@@ -26,7 +26,6 @@ import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
 import { toApiUrl } from "@/lib/api/client";
 import {
-  FIGURE_MAX_ASPECT_RATIO,
   PERSON_OVERLAY_BLEED_FRACTION,
   PERSON_OVERLAY_HEIGHT_RATIO,
   resolveLocationId,
@@ -103,9 +102,7 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
 
     const apiPoseId = getPoseApiId(pose);
     const id = String(apiPoseId ?? `remote-${index}`);
-    // The backend names these "프레임1", "프레임2"… but here they're poses, not
-    // frames — relabel so the picker and the saved caption read "포즈".
-    const label = (firstText(pose.name)?.replace(/프레임/g, "포즈") ?? `포즈 ${index + 1}`).trim();
+    const label = firstText(pose.name) ?? `Pose ${index + 1}`;
     const resolvedImageUrl = toApiUrl(imageUrl);
 
     return [
@@ -276,13 +273,8 @@ export default function PersonCameraScreen() {
   // saved photo. Falls back to just the action bar when there's no pose
   // section to render at all (poses.length <= 1).
   const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
-  const rawAspectRatio = selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO;
-  // Cap the figure at the "백제 백성" size: a pose whose cutout is wider than
-  // FIGURE_MAX_ASPECT_RATIO gets its height scaled down so its rendered width
-  // matches the cap — nothing renders bigger than a standard standing figure.
-  const figureScale = rawAspectRatio > FIGURE_MAX_ASPECT_RATIO ? FIGURE_MAX_ASPECT_RATIO / rawAspectRatio : 1;
-  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO * figureScale;
-  const personOverlayWidth = personOverlayHeight * rawAspectRatio;
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
   // Bleed a fixed FRACTION of the figure's own width off the right edge, so
   // wide and narrow poses alike keep the same proportion on-screen instead of
   // some getting clipped by a one-size pixel offset.
@@ -317,7 +309,6 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
-          frameAspectRatio: String(windowWidth / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
