@@ -45,8 +45,9 @@ export function getSpots(): Promise<Spot[]> {
   return apiGet<Spot[]>("/api/spots");
 }
 
-export function getSpotDetail(spotId: number): Promise<SpotDetail> {
-  return apiGet<SpotDetail>(`/api/spots/${spotId}`);
+export function getSpotDetail(spotId: number, language?: string): Promise<SpotDetail> {
+  const query = language ? `?language=${encodeURIComponent(language)}` : "";
+  return apiGet<SpotDetail>(`/api/spots/${spotId}${query}`);
 }
 
 export async function getSpotStory(spotId: number, locale: Locale, month?: number): Promise<SpotStory | null> {

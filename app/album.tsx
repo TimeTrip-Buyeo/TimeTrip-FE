@@ -16,6 +16,7 @@ import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-phot
 import { useLanguage } from "@/hooks/use-language";
 import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
 import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums, type AlbumResponse } from "@/lib/api/album";
+import { getCollectionItemDetail } from "@/lib/api/collections";
 import { toApiUrl } from "@/lib/api/client";
 import { hideAlbumPhoto } from "@/lib/hidden-album-photos";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
@@ -157,6 +158,45 @@ function AlbumCardCover({ album }: { album: AlbumResponse }) {
   );
 }
 
+// The /api/albums endpoints don't localize `name` / `spotName` (they come back
+// Korean whatever the language param). The collection-item detail endpoint
+// does, so fall back to that for the displayed text.
+function useLocalizedAlbumName(
+  collectionItemId: number,
+  fallbackName: string,
+  fallbackSpotName: string,
+  enabled = true,
+) {
+  const { locale } = useLanguage();
+  const { data } = useApiResource(
+    () => (enabled ? getCollectionItemDetail(collectionItemId, { locale }) : Promise.resolve(null)),
+    [collectionItemId, locale, enabled],
+    "[album] failed to load localized album name",
+  );
+  return {
+    name: data?.name ?? fallbackName,
+    spotName: data?.spotName ?? fallbackSpotName,
+  };
+}
+
+function AlbumCardText({ album }: { album: AlbumResponse }) {
+  const { name, spotName } = useLocalizedAlbumName(
+    album.collectionItemId,
+    album.name,
+    album.spotName,
+    !album.isLocked,
+  );
+  return (
+    <View style={styles.cardTextColumn}>
+      <Text style={styles.cardTitle}>{name}</Text>
+      <View style={styles.cardLocationRow}>
+        <FontAwesome5 name="medal" size={11} color="#b8860b" solid />
+        <Text style={styles.cardLocation}>{spotName}</Text>
+      </View>
+    </View>
+  );
+}
+
 function BuyeoCutFab({ bottom, collectionItemId }: { bottom: number; collectionItemId?: number }) {
   return (
     <Pressable
@@ -243,15 +283,7 @@ function AlbumList() {
           <View style={styles.list}>
             {displayedAlbums.map((album) => {
               const thumb = <AlbumCardCover album={album} />;
-              const textColumn = (
-                <View style={styles.cardTextColumn}>
-                  <Text style={styles.cardTitle}>{album.name}</Text>
-                  <View style={styles.cardLocationRow}>
-                    <FontAwesome5 name="medal" size={11} color="#b8860b" solid />
-                    <Text style={styles.cardLocation}>{album.spotName}</Text>
-                  </View>
-                </View>
-              );
+              const textColumn = <AlbumCardText album={album} />;
 
               // Locked albums have no unlocked content behind them yet — rendered as a
               // plain View (no Pressable) so tapping can't reach AlbumServerDetail and
@@ -344,11 +376,13 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
     [collectionItemId, locale],
     "[album] failed to load album photos",
   );
+  const { name: localizedName } = useLocalizedAlbumName(collectionItemId, data?.name ?? "", "");
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
 
+  const albumTitle = localizedName || data?.name || mapT.nav.album;
   const photos = (data?.photos ?? []).filter((photo) => !hiddenIds.has(photo.selfiePhotoId));
 
   return (
@@ -363,7 +397,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.7}>
-            {data?.name ?? mapT.nav.album}
+            {albumTitle}
           </Text>
           <LangPill
             locale={locale}
@@ -373,7 +407,7 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
           />
         </View>
         <View style={styles.photoSectionHeader}>
-          <Text style={styles.themeLabel}>{data?.name ?? t.themeLabel}</Text>
+          <Text style={styles.themeLabel}>{localizedName || data?.name || t.themeLabel}</Text>
           {photos.length > 0 && (
             <Pressable
               style={[styles.editToggleButton, isEditMode && styles.editToggleButtonActive]}

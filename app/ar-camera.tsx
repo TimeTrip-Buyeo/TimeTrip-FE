@@ -161,7 +161,7 @@ export default function ArCameraScreen() {
   useEffect(() => {
     if (spotId === null) return;
     let isActive = true;
-    getSpotDetail(spotId)
+    getSpotDetail(spotId, locale)
       .then((detail) => {
         if (isActive) setSpotDetail(detail);
       })
@@ -169,7 +169,7 @@ export default function ArCameraScreen() {
     return () => {
       isActive = false;
     };
-  }, [spotId]);
+  }, [spotId, locale]);
 
   useEffect(() => {
     if (!locationPermission?.granted) return;

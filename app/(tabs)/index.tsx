@@ -142,7 +142,7 @@ export default function MapScreen() {
     const isTourSummary = spotSummary?.spotType === "TOUR";
 
     Promise.allSettled([
-      getSpotDetail(selectedSpotId),
+      getSpotDetail(selectedSpotId, locale),
       isTourSummary ? Promise.resolve(null) : getSpotStory(selectedSpotId, locale),
       // Fetched for TOUR spots too (e.g. the museum) — they have no "story" but
       // they DO have a basic audio guide, and skipping it left their play
