@@ -20,6 +20,7 @@ import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
 import { LangPill } from "@/components/lang-pill";
 import { GUNGSEO_FONT, GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { SPOT_ID_TO_LOCATION_ID } from "@/constants/locations";
+import { localizeStoryTopicTitle } from "@/constants/story-topics";
 import { collectionScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 import { ApiError, toApiUrl } from "@/lib/api/client";
@@ -287,7 +288,7 @@ function CollectionTopicList() {
                     pathname: "/collection",
                     params: {
                       storyId: String(topic.storyIds[0]),
-                      title: topic.title,
+                      title: localizeStoryTopicTitle(topic.title, locale),
                     },
                   })
                 }>
@@ -301,7 +302,7 @@ function CollectionTopicList() {
                   <View style={styles.listItemThumb} />
                 )}
                 <View style={styles.listItemTextColumn}>
-                  <Text style={styles.listItemTitle}>{topic.title}</Text>
+                  <Text style={styles.listItemTitle}>{localizeStoryTopicTitle(topic.title, locale)}</Text>
                   <Text style={styles.listItemProgress}>
                     {topic.acquiredCollectionCount}/{topic.totalCollectionCount}
                   </Text>
