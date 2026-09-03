@@ -383,7 +383,7 @@ function CollectionItemGrid({ storyId, title }: { storyId: number; title?: strin
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
           </Pressable>
-          <Text style={styles.gridTitle}>{title ?? t.listTitle}</Text>
+          <Text style={styles.gridTitle}>{title ? localizeStoryTopicTitle(title, locale) : t.listTitle}</Text>
         </View>
 
         <View style={styles.grid}>
