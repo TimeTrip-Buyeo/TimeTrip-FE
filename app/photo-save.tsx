@@ -89,14 +89,15 @@ export default function PhotoSaveScreen() {
     setWrapperSize({ width, height });
   };
 
-  // Frame = the raw photo's own aspect ratio, fit ENTIRELY inside the
-  // available area (never cropped; the spare dimension just gets a thin grey
-  // margin). Scales to any screen size.
+  // Frame = the raw photo's own aspect ratio. Fill the FULL width (edge to
+  // edge) and let the height follow from the photo's ratio — the photo is as
+  // big as it can be without cropping, top-aligned, spare space falls below.
+  // Only if that height won't fit is it scaled down to fit (still no crop).
   const { width: wrapW, height: wrapH } = wrapperSize;
   const ready = wrapW > 0 && wrapH > 0;
-  const widthBound = ready && wrapW / wrapH <= photoAspectRatio;
-  const frameWidth = !ready ? wrapW : widthBound ? wrapW : wrapH * photoAspectRatio;
-  const frameHeight = !ready ? wrapH : widthBound ? wrapW / photoAspectRatio : wrapH;
+  const naturalHeight = wrapW / photoAspectRatio;
+  const frameWidth = !ready ? wrapW : naturalHeight <= wrapH ? wrapW : wrapH * photoAspectRatio;
+  const frameHeight = !ready ? wrapH : naturalHeight <= wrapH ? naturalHeight : wrapH;
 
   // The figure stands bottom-right on the photo, a fixed fraction of the
   // photo's height tall — same as the live camera overlay.
@@ -335,12 +336,10 @@ const styles = StyleSheet.create({
   },
   photoWrapper: {
     flex: 1,
-    marginHorizontal: 16,
-    borderRadius: 16,
     backgroundColor: "#f3f4f6",
     overflow: "hidden",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   photoFrame: {
     overflow: "hidden",
