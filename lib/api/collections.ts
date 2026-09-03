@@ -93,21 +93,31 @@ export async function getStoryTopics(options: {
 
   // The list endpoint returns titles in Korean whatever the language. Pull the
   // localized title from each story's own /api/collections/{storyId} response
-  // (same trick as the album screen uses getCollectionItemDetail).
+  // (same trick the album screen uses via getCollectionItemDetail).
+  //
+  // Guarded so it's a no-op — no extra requests — when it isn't needed: for
+  // Korean, and for titles that already came back non-Korean (i.e. the list
+  // endpoint DID localize, or there's just nothing to translate). So the day
+  // /api/collections localizes titles itself, this whole fan-out disappears
+  // on its own and the N+1 can then be deleted.
+  if (options.locale === "ko") return topics;
   return Promise.all(
     topics.map(async (topic) => {
+      if (!HANGUL_RE.test(topic.title)) return topic;
       try {
         const detail = await apiGet<CollectionItemListResponse>(
           `/api/collections/${topic.storyIds[0]}?language=${encodeURIComponent(options.locale)}`,
         );
         const localized = detail.title ?? detail.storyTitle ?? detail.name;
-        return localized ? { ...topic, title: localized } : topic;
+        return localized && !HANGUL_RE.test(localized) ? { ...topic, title: localized } : topic;
       } catch {
         return topic;
       }
     }),
   );
 }
+
+const HANGUL_RE = /[가-힣]/;
 
 function normalizeStoryTopic(topic: StoryTopic): StoryTopic {
   if (Array.isArray(topic.storyIds)) {

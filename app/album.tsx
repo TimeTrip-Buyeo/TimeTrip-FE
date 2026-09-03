@@ -15,7 +15,7 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
-import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums, type AlbumResponse } from "@/lib/api/album";
+import { deleteAlbumPhoto, getAlbumPhotoDetail, getAlbumPhotos, getAlbums, type AlbumResponse } from "@/lib/api/album";
 import { getCollectionItemDetail } from "@/lib/api/collections";
 import { toApiUrl } from "@/lib/api/client";
 import { hideAlbumPhoto } from "@/lib/hidden-album-photos";
@@ -48,11 +48,15 @@ function confirmDeleteSelfiePhoto(
       text: t.deleteConfirmButton,
       style: "destructive",
       onPress: () => {
-        // Persisted local hide only — there's no server delete endpoint yet.
-        // When one lands, call deleteAlbumPhoto(selfiePhotoId) here (see
-        // lib/api/album.ts).
+        // Persisted local hide — the reliable part. This is per-device: the
+        // photo still lives on the server, so it reappears on another device
+        // or a reinstall (product decision — no server delete endpoint yet).
         hideAlbumPhoto(selfiePhotoId);
         onDeleted?.();
+        // Best-effort real delete: silently succeeds the moment the backend
+        // adds DELETE /api/selfie-photos/{id} (see lib/api/album.ts). Fails
+        // quietly until then — the local hide already covers the UX.
+        void deleteAlbumPhoto(selfiePhotoId).catch(() => {});
       },
     },
   ]);

@@ -38,5 +38,12 @@ const NORMALIZED_TITLES: Record<string, Record<Locale, string>> = Object.fromEnt
 
 export function localizeStoryTopicTitle(title: string | null | undefined, locale: Locale): string {
   if (!title) return title ?? "";
-  return NORMALIZED_TITLES[stripSpaces(title)]?.[locale] ?? title;
+  const mapped = NORMALIZED_TITLES[stripSpaces(title)]?.[locale];
+  if (mapped) return mapped;
+  // Surface new backend titles that slipped through untranslated so they can be
+  // added to the map above (or, ideally, fixed on the backend).
+  if (__DEV__ && locale !== "ko" && /[가-힣]/.test(title)) {
+    console.warn(`[story-topics] no translation for "${title}" — add it to STORY_TOPIC_TITLES`);
+  }
+  return title;
 }
