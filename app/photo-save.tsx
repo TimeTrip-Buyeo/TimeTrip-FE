@@ -86,13 +86,14 @@ export default function PhotoSaveScreen() {
     setWrapperSize({ width, height });
   };
 
-  // Lock the frame to the camera band's aspect ratio and fill the full
-  // available HEIGHT (so the saved shot keeps its vertical size, exactly as
-  // captured), centring it — if the width then overflows it's only by a little
-  // and the wrapper clips it symmetrically.
+  // Lock the frame to the camera band's aspect ratio and fit it ENTIRELY
+  // inside the available area — nothing is ever cropped; whichever dimension
+  // has room just gets a thin grey margin. Scales to any screen size.
   const { width: wrapW, height: wrapH } = wrapperSize;
-  const frameHeight = wrapH;
-  const frameWidth = wrapH === 0 ? wrapW : wrapH * frameAspectRatio;
+  const ready = wrapW > 0 && wrapH > 0;
+  const widthBound = ready && wrapW / wrapH <= frameAspectRatio;
+  const frameWidth = !ready ? wrapW : widthBound ? wrapW : wrapH * frameAspectRatio;
+  const frameHeight = !ready ? wrapH : widthBound ? wrapW / frameAspectRatio : wrapH;
 
   const personOverlayHeight = frameHeight * personOverlayHeightRatio;
   // Same auto-placement rule as the camera screen (figureRightOffset), against

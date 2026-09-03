@@ -273,15 +273,18 @@ export default function PersonCameraScreen() {
   // saved photo. Falls back to just the action bar when there's no pose
   // section to render at all (poses.length <= 1).
   const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
-  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
-  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
-  // Auto-place the figure toward the right: narrow cutouts sit flush at the
-  // edge, wide ones bleed off (capped) so the person stays framed either way.
-  const personOverlayRight = figureRightOffset(personOverlayWidth, windowWidth);
   // The visible viewfinder: screen minus the top header minus that floor. The
   // saved photo is cropped to exactly this band, so what you framed is what
   // you get — and it doesn't move when the pose panel does.
   const viewfinderHeight = Math.max(1, windowHeight - headerHeight - captureFloor);
+  // Figure height: the usual fraction of the screen, but never taller than the
+  // visible band — otherwise on a small screen (where the band is a small
+  // slice of the screen) the figure would overflow the frame on the save page.
+  const personOverlayHeight = Math.min(windowHeight * PERSON_OVERLAY_HEIGHT_RATIO, viewfinderHeight * 0.92);
+  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
+  // Auto-place the figure toward the right: narrow cutouts sit flush at the
+  // edge, wide ones bleed off (capped) so the person stays framed either way.
+  const personOverlayRight = figureRightOffset(personOverlayWidth, windowWidth);
   // The pose panel's live top edge — the "AI image" disclosure rides just
   // above it so an expanded panel can't cover it.
   const posePanelTop = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
