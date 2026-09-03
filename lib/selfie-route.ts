@@ -6,30 +6,11 @@ const KNOWN_LOCATION_IDS = new Set<string>(MAP_LOCATIONS.map((location) => locat
 
 // Figure height as a fraction of the camera screen height.
 export const PERSON_OVERLAY_HEIGHT_RATIO = 0.48;
-
-// Figure horizontal placement. The figure hugs the right side: it's positioned
-// so it takes up roughly this fraction of the frame width...
-const FIGURE_SIDE_ZONE_FRACTION = 0.44;
-// ...but never bleeds more than this fraction of its OWN width off the edge, so
-// a wide cutout keeps its body on-screen instead of getting clipped.
-const FIGURE_MAX_BLEED_FRACTION = 0.33;
-
-/**
- * `right` offset (px, negative = bleeds off the right edge) for the figure
- * overlay, given the figure box's rendered width and the frame width. Narrow
- * cutouts sit flush against the right edge; wide ones bleed off, but only up to
- * the max so the person stays visible. Used identically on the camera preview
- * and the saved photo so the placement matches.
- */
-export function figureRightOffset(figureWidth: number, frameWidth: number): number {
-  if (!(figureWidth > 0) || !(frameWidth > 0)) return 0;
-  const targetVisibleWidth = frameWidth * FIGURE_SIDE_ZONE_FRACTION;
-  const bleed = Math.max(
-    0,
-    Math.min(figureWidth - targetVisibleWidth, figureWidth * FIGURE_MAX_BLEED_FRACTION),
-  );
-  return -bleed;
-}
+// How far the figure bleeds off the right screen edge, as a fraction of the
+// figure box's OWN width — so the same proportion of every figure stays
+// on-screen regardless of how wide that pose's cutout is (a fixed pixel
+// offset cut narrow figures too much).
+export const PERSON_OVERLAY_BLEED_FRACTION = 0.06;
 
 export function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;

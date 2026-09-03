@@ -26,7 +26,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
 import { toApiUrl } from "@/lib/api/client";
 import {
-  figureRightOffset,
+  PERSON_OVERLAY_BLEED_FRACTION,
   PERSON_OVERLAY_HEIGHT_RATIO,
   resolveLocationId,
   resolveNumberParam,
@@ -67,13 +67,13 @@ async function cropToViewfinder(
   const { screenWidth, screenHeight, bandTop, bandHeight } = frame;
   if (!width || !height || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
 
-  // The preview covers the screen (aspect-fill), so it scales the sensor image
-  // up until BOTH axes are covered — i.e. by whichever axis needs the least
-  // scaling. In photo-pixels-per-screen-unit that's the smaller of the two
-  // ratios. Using this instead of always height/screenHeight is what makes the
-  // front (selfie) camera line up too — its capture aspect differs from the
-  // back camera's, so the assumed axis was wrong for it.
-  const pxPerScreenUnit = Math.min(width / screenWidth, height / screenHeight);
+  // The preview scaled the sensor image to the screen height (its taller axis),
+  // cropping left/right — so full image height maps to full screen height.
+  // NOTE: this assumes a portrait screen taller than the sensor is wide (true
+  // for phones in portrait). On a tablet or a screen wider than the sensor
+  // aspect, the preview would scale to WIDTH instead and this crop would be
+  // off — revisit height/screenHeight here if targeting tablets.
+  const pxPerScreenUnit = height / screenHeight;
   const cropWidth = Math.min(width, Math.round(screenWidth * pxPerScreenUnit));
   const cropHeight = Math.min(height, Math.round(bandHeight * pxPerScreenUnit));
   const originX = Math.round((width - cropWidth) / 2);
@@ -273,18 +273,16 @@ export default function PersonCameraScreen() {
   // saved photo. Falls back to just the action bar when there's no pose
   // section to render at all (poses.length <= 1).
   const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
+  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
+  // Bleed a fixed FRACTION of the figure's own width off the right edge, so
+  // wide and narrow poses alike keep the same proportion on-screen instead of
+  // some getting clipped by a one-size pixel offset.
+  const personOverlayRight = -(personOverlayWidth * PERSON_OVERLAY_BLEED_FRACTION);
   // The visible viewfinder: screen minus the top header minus that floor. The
   // saved photo is cropped to exactly this band, so what you framed is what
   // you get — and it doesn't move when the pose panel does.
   const viewfinderHeight = Math.max(1, windowHeight - headerHeight - captureFloor);
-  // Figure height: the usual fraction of the screen, but never taller than the
-  // visible band — otherwise on a small screen (where the band is a small
-  // slice of the screen) the figure would overflow the frame on the save page.
-  const personOverlayHeight = Math.min(windowHeight * PERSON_OVERLAY_HEIGHT_RATIO, viewfinderHeight * 0.92);
-  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
-  // Auto-place the figure toward the right: narrow cutouts sit flush at the
-  // edge, wide ones bleed off (capped) so the person stays framed either way.
-  const personOverlayRight = figureRightOffset(personOverlayWidth, windowWidth);
   // The pose panel's live top edge — the "AI image" disclosure rides just
   // above it so an expanded panel can't cover it.
   const posePanelTop = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
@@ -311,7 +309,6 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
-          frameAspectRatio: String(windowWidth / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
