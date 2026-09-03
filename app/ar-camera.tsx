@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   LayoutAnimation,
   Linking,
   Pressable,
@@ -127,6 +128,16 @@ export default function ArCameraScreen() {
   const [retryToken, setRetryToken] = useState(0);
   const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
+  // Same fading black hint pill as person-camera's "take a photo with the
+  // figure!" — shown briefly on entry, then fades out so it's not in the way.
+  const matchHintOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.timing(matchHintOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+    }, 2800);
+    return () => clearTimeout(timer);
+  }, [matchHintOpacity]);
 
   // Keyed by `${spotId}:${month}:${locale}` so a SEARCHING→READY round-trip,
   // or switching back to a previously-viewed language, reuses the cached
@@ -150,7 +161,7 @@ export default function ArCameraScreen() {
   useEffect(() => {
     if (spotId === null) return;
     let isActive = true;
-    getSpotDetail(spotId)
+    getSpotDetail(spotId, locale)
       .then((detail) => {
         if (isActive) setSpotDetail(detail);
       })
@@ -158,7 +169,7 @@ export default function ArCameraScreen() {
     return () => {
       isActive = false;
     };
-  }, [spotId]);
+  }, [spotId, locale]);
 
   useEffect(() => {
     if (!locationPermission?.granted) return;
@@ -356,7 +367,9 @@ export default function ArCameraScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={20} color="#fff" solid />
           </Pressable>
-          <Text style={styles.locationTitle}>{localizedSpotTitle}</Text>
+          <Text style={styles.locationTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {localizedSpotTitle}
+          </Text>
         </View>
         <View style={styles.arActivePill}>
           <View style={styles.arActiveDot} />
@@ -364,12 +377,22 @@ export default function ArCameraScreen() {
         </View>
       </LinearGradient>
 
+      {/* Same fading black hint pill as person-camera's guide pill, same design.
+          Sits in the band the guide area reserves below (guideBoxWrapper's
+          paddingTop), so it never overlaps the overlay image. */}
+      <Animated.View
+        style={[styles.hintPill, { top: insets.top + 52, opacity: matchHintOpacity }]}
+        pointerEvents="none">
+        <View style={styles.hintPillDot} />
+        <Text style={styles.hintPillText}>{t.matchOverlayHintLabel}</Text>
+      </Animated.View>
+
       {/* Guide/overlay area and sheet share one flex column so expanding the
           sheet (which grows taller) shrinks the guide area above it instead
           of the sheet covering the overlay image — both resize in the same
           layout pass toggleSheet's LayoutAnimation already animates. */}
       <View style={styles.contentColumn} pointerEvents="box-none">
-        <View style={styles.guideBoxWrapper} pointerEvents="none">
+        <View style={[styles.guideBoxWrapper, { paddingTop: insets.top + 108 }]} pointerEvents="none">
           {geoState === "ready" && timeslip && timeslip.overlayImageUrl ? (
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
@@ -443,6 +466,7 @@ export default function ArCameraScreen() {
                   source={{ uri: characterCardImageUrl }}
                   style={styles.characterAvatarImage}
                   contentFit="cover"
+                  contentPosition="top"
                 />
               ) : (
                 <View style={styles.characterAvatar}>
@@ -451,7 +475,9 @@ export default function ArCameraScreen() {
               )}
               <View style={styles.characterBody}>
                 <Text style={styles.characterName}>{timeslip.collectionItem.name}</Text>
-                {!isCollectionItemAcquired && <Text style={styles.acquireHintText}>{t.acquireHintText}</Text>}
+                {/* Shown on every AR camera, not only spots with an unacquired
+                    item — it's the standing instruction for how to earn it. */}
+                <Text style={styles.acquireHintText}>{t.acquireHintText}</Text>
                 <Text style={styles.characterDescription}>{timeslip.guideText}</Text>
               </View>
             </View>
@@ -609,16 +635,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   topBarLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
   },
   locationTitle: {
+    flexShrink: 1,
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 24,
     color: "#fff",
   },
   arActivePill: {
+    flexShrink: 0,
+    marginLeft: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -626,6 +657,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 9999,
+  },
+  // Mirrors person-camera's spotPill / spotDot / spotPillText exactly.
+  hintPill: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 9999,
+    paddingHorizontal: 17,
+    paddingVertical: 7,
+  },
+  hintPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#b8860b",
+  },
+  hintPillText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#fff",
   },
   arActiveDot: {
     width: 8,
@@ -755,6 +811,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Same 64x64 box as before, but cropped from the top (contentPosition="top")
+  // so a full-body figure shows its face — the legs get cut, not the head.
   characterAvatarImage: {
     width: 64,
     height: 64,

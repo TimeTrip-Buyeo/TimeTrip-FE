@@ -81,6 +81,9 @@ export default function MapScreen() {
   const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
   const [selectedSpotDetail, setSelectedSpotDetail] = useState<SpotDetail | null>(null);
   const [selectedSpotStory, setSelectedSpotStory] = useState<SpotStory | null>(null);
+  // The basic guide audio now comes from its own /spots/{id}/audio-guide
+  // endpoint (same as collection detail) — getSpotStory().audioGuide is no
+  // longer populated, which is why the map's basic guide had gone silent.
   const [selectedSpotAudioGuide, setSelectedSpotAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isLoadingSpots, setIsLoadingSpots] = useState(true);
   const [hasMapError, setHasMapError] = useState(false);
@@ -137,7 +140,8 @@ export default function MapScreen() {
 
     const loadSelectedSpotGuide = async () => {
       try {
-        const detail = await getSpotDetail(selectedSpotId);
+        // `locale` so the spot card's address comes back localized too.
+        const detail = await getSpotDetail(selectedSpotId, locale);
         if (!isActive) return;
 
         setSelectedSpotDetail(detail);

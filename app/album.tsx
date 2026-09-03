@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -14,8 +14,11 @@ import { albumScreenText, mapScreenText, type Locale } from "@/constants/transla
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
-import { getAlbumPhotoDetail, getAlbumPhotos, getAlbums } from "@/lib/api/album";
+import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
+import { deleteAlbumPhoto, getAlbumPhotoDetail, getAlbumPhotos, getAlbums, type AlbumResponse } from "@/lib/api/album";
+import { getCollectionItemDetail } from "@/lib/api/collections";
 import { toApiUrl } from "@/lib/api/client";
+import { hideAlbumPhoto } from "@/lib/hidden-album-photos";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getCachedRemoteAlbumPhotos, setCachedRemoteAlbumPhotos, type RemoteAlbumPhoto } from "@/lib/remote-album-cache";
 import { getSelfieRouteParams, type SelfieRouteParams } from "@/lib/selfie-route";
@@ -32,6 +35,31 @@ function parseId(value: string | undefined): number | undefined {
 
 function getTakenAtMillis(takenAt: number | string): number {
   return typeof takenAt === "number" ? takenAt : new Date(takenAt).getTime();
+}
+
+function confirmDeleteSelfiePhoto(
+  selfiePhotoId: number,
+  t: (typeof albumScreenText)[Locale],
+  onDeleted?: () => void,
+) {
+  Alert.alert(t.deleteConfirmTitle, t.deleteConfirmMessage, [
+    { text: t.deleteCancelButton, style: "cancel" },
+    {
+      text: t.deleteConfirmButton,
+      style: "destructive",
+      onPress: () => {
+        // Persisted local hide — the reliable part. This is per-device: the
+        // photo still lives on the server, so it reappears on another device
+        // or a reinstall (product decision — no server delete endpoint yet).
+        hideAlbumPhoto(selfiePhotoId);
+        onDeleted?.();
+        // Best-effort real delete: silently succeeds the moment the backend
+        // adds DELETE /api/selfie-photos/{id} (see lib/api/album.ts). Fails
+        // quietly until then — the local hide already covers the UX.
+        void deleteAlbumPhoto(selfiePhotoId).catch(() => {});
+      },
+    },
+  ]);
 }
 
 function useRemoteAlbumPhotos(locationId: LocationId, locale: Locale) {
@@ -103,6 +131,74 @@ export default function AlbumScreen() {
   }
   if (collectionItemId !== undefined) return <AlbumServerDetail collectionItemId={collectionItemId} />;
   return <AlbumList />;
+}
+
+// The album-list cover: the album's first actual saved photo (skipping any
+// hidden ones), falling back to the server-provided thumbnailUrl while that
+// loads or if the album has none. Locked albums never fetch — their
+// collectionItemId isn't unlocked yet — so they keep the plain thumbnail.
+function AlbumCardCover({ album }: { album: AlbumResponse }) {
+  const { locale } = useLanguage();
+  const t = albumScreenText[locale];
+  const hiddenIds = useHiddenAlbumPhotoIds();
+  const { data } = useApiResource(
+    () => (album.isLocked ? Promise.resolve(null) : getAlbumPhotos(album.collectionItemId, locale)),
+    [album.collectionItemId, album.isLocked, locale],
+    "[album] failed to load album cover",
+  );
+  const firstPhotoUrl = data?.photos.find((photo) => !hiddenIds.has(photo.selfiePhotoId))?.photoUrl;
+  const coverUri = firstPhotoUrl ?? album.thumbnailUrl ?? undefined;
+
+  return (
+    <View style={styles.cardThumb}>
+      {!!coverUri && <Image source={{ uri: coverUri }} style={styles.cardThumbImage} resizeMode="cover" />}
+      <View style={styles.cardPhotoCountBadge}>
+        <Text style={styles.cardPhotoCountText}>
+          {album.photoCount}
+          {t.photoCountSuffix}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// The /api/albums endpoints don't localize `name` / `spotName` (they come back
+// Korean whatever the language param). The collection-item detail endpoint
+// does, so fall back to that for the displayed text.
+function useLocalizedAlbumName(
+  collectionItemId: number,
+  fallbackName: string,
+  fallbackSpotName: string,
+  enabled = true,
+) {
+  const { locale } = useLanguage();
+  const { data } = useApiResource(
+    () => (enabled ? getCollectionItemDetail(collectionItemId, { locale }) : Promise.resolve(null)),
+    [collectionItemId, locale, enabled],
+    "[album] failed to load localized album name",
+  );
+  return {
+    name: data?.name ?? fallbackName,
+    spotName: data?.spotName ?? fallbackSpotName,
+  };
+}
+
+function AlbumCardText({ album }: { album: AlbumResponse }) {
+  const { name, spotName } = useLocalizedAlbumName(
+    album.collectionItemId,
+    album.name,
+    album.spotName,
+    !album.isLocked,
+  );
+  return (
+    <View style={styles.cardTextColumn}>
+      <Text style={styles.cardTitle}>{name}</Text>
+      <View style={styles.cardLocationRow}>
+        <FontAwesome5 name="medal" size={11} color="#b8860b" solid />
+        <Text style={styles.cardLocation}>{spotName}</Text>
+      </View>
+    </View>
+  );
 }
 
 function BuyeoCutFab({ bottom, collectionItemId }: { bottom: number; collectionItemId?: number }) {
@@ -190,28 +286,8 @@ function AlbumList() {
         ) : (
           <View style={styles.list}>
             {displayedAlbums.map((album) => {
-              const thumb = (
-                <View style={styles.cardThumb}>
-                  {!!album.thumbnailUrl && (
-                    <Image source={{ uri: album.thumbnailUrl }} style={styles.cardThumbImage} resizeMode="cover" />
-                  )}
-                  <View style={styles.cardPhotoCountBadge}>
-                    <Text style={styles.cardPhotoCountText}>
-                      {album.photoCount}
-                      {t.photoCountSuffix}
-                    </Text>
-                  </View>
-                </View>
-              );
-              const textColumn = (
-                <View style={styles.cardTextColumn}>
-                  <Text style={styles.cardTitle}>{album.name}</Text>
-                  <View style={styles.cardLocationRow}>
-                    <FontAwesome5 name="medal" size={11} color="#b8860b" solid />
-                    <Text style={styles.cardLocation}>{album.spotName}</Text>
-                  </View>
-                </View>
-              );
+              const thumb = <AlbumCardCover album={album} />;
+              const textColumn = <AlbumCardText album={album} />;
 
               // Locked albums have no unlocked content behind them yet — rendered as a
               // plain View (no Pressable) so tapping can't reach AlbumServerDetail and
@@ -297,15 +373,21 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
   const t = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const hiddenIds = useHiddenAlbumPhotoIds();
   const { data, loadError } = useApiResource(
     () => getAlbumPhotos(collectionItemId, locale),
     [collectionItemId, locale],
     "[album] failed to load album photos",
   );
+  const { name: localizedName } = useLocalizedAlbumName(collectionItemId, data?.name ?? "", "");
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
     setIsLegendVisible(false);
   };
+
+  const albumTitle = localizedName || data?.name || mapT.nav.album;
+  const photos = (data?.photos ?? []).filter((photo) => !hiddenIds.has(photo.selfiePhotoId));
 
   return (
     <View style={styles.container}>
@@ -314,7 +396,13 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
           </Pressable>
-          <Text style={styles.headerTitle}>{data?.name ?? mapT.nav.album}</Text>
+          <Text
+            style={styles.detailHeaderTitle}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}>
+            {albumTitle}
+          </Text>
           <LangPill
             locale={locale}
             isLegendVisible={isLegendVisible}
@@ -323,7 +411,20 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
           />
         </View>
         <View style={styles.photoSectionHeader}>
-          <Text style={styles.themeLabel}>{data?.name ?? t.themeLabel}</Text>
+          <Text style={styles.themeLabel}>{localizedName || data?.name || t.themeLabel}</Text>
+          {photos.length > 0 && (
+            <Pressable
+              style={[styles.editToggleButton, isEditMode && styles.editToggleButtonActive]}
+              onPress={() => setIsEditMode((current) => !current)}
+              hitSlop={8}>
+              <FontAwesome5
+                name={isEditMode ? "check" : "pen"}
+                size={12}
+                color={isEditMode ? "#fff" : "#9ca3af"}
+                solid
+              />
+            </Pressable>
+          )}
         </View>
 
         {loadError ? (
@@ -336,20 +437,27 @@ function AlbumServerDetail({ collectionItemId }: { collectionItemId: number }) {
           </View>
         ) : (
           <View style={styles.photoGrid}>
-            {data.photos.map((photo) => (
+            {photos.map((photo) => (
               <Pressable
                 key={photo.selfiePhotoId}
                 style={({ pressed }) => [styles.photoCard, pressed && styles.photoCardPressed]}
                 onPress={() =>
-                  router.push({
-                    pathname: "/album",
-                    params: {
-                      collectionItemId: String(collectionItemId),
-                      selfiePhotoId: String(photo.selfiePhotoId),
-                    },
-                  })
+                  isEditMode
+                    ? confirmDeleteSelfiePhoto(photo.selfiePhotoId, t)
+                    : router.push({
+                        pathname: "/album",
+                        params: {
+                          collectionItemId: String(collectionItemId),
+                          selfiePhotoId: String(photo.selfiePhotoId),
+                        },
+                      })
                 }>
                 <Image source={{ uri: photo.photoUrl }} style={styles.photoImage} resizeMode="cover" />
+                {isEditMode && (
+                  <View style={styles.photoDeleteBadge}>
+                    <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>
@@ -390,6 +498,8 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
     }
   };
 
+  const handleDelete = () => confirmDeleteSelfiePhoto(selfiePhotoId, t, () => router.back());
+
   return (
     <View style={styles.container}>
       <View style={[styles.viewerHeader, { paddingTop: insets.top + 16 }]}>
@@ -417,6 +527,9 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
             <View style={styles.viewerCaptionPill}>
               <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
             </View>
+            <Pressable style={styles.viewerDeleteCorner} onPress={handleDelete} hitSlop={10}>
+              <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
+            </Pressable>
           </View>
 
           {photo.shareable && (
@@ -462,7 +575,13 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
       <Pressable onPress={() => router.back()} hitSlop={8}>
         <FontAwesome5 name="chevron-left" size={18} color="#1b1b1b" solid />
       </Pressable>
-      <Text style={styles.headerTitle}>{entry?.name[locale] ?? mapT.pins[locationId]}</Text>
+      <Text
+        style={styles.detailHeaderTitle}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}>
+        {entry?.name[locale] ?? mapT.pins[locationId]}
+      </Text>
       <LangPill
         locale={locale}
         isLegendVisible={isLegendVisible}
@@ -858,6 +977,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
   },
+  // Centered between the back chevron and the language pill; shrinks/ellipsizes
+  // instead of pushing into the pill when the collection name is long (English).
+  detailHeaderTitle: {
+    flex: 1,
+    marginHorizontal: 8,
+    textAlign: "center",
+    fontFamily: GUNGSEO_FONT_BOLD,
+    fontSize: 24,
+    color: "#1b1b1b",
+  },
   emptyScrollContent: {
     flexGrow: 1,
   },
@@ -941,6 +1070,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 12,
     marginBottom: 12,
+  },
+  editToggleButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#f5f5f4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editToggleButtonActive: {
+    backgroundColor: "#800000",
+  },
+  photoDeleteBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#b91c1c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Small delete affordance in the photo's own top-right corner (the "편집"
+  // button), rather than a big button in the action row.
+  viewerDeleteCorner: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(185,28,28,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   editControls: {
     flexDirection: "row",
