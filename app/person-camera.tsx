@@ -103,7 +103,9 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
 
     const apiPoseId = getPoseApiId(pose);
     const id = String(apiPoseId ?? `remote-${index}`);
-    const label = firstText(pose.name) ?? `Pose ${index + 1}`;
+    // The backend names these "프레임1", "프레임2"… but here they're poses, not
+    // frames — relabel so the picker and the saved caption read "포즈".
+    const label = (firstText(pose.name)?.replace(/프레임/g, "포즈") ?? `포즈 ${index + 1}`).trim();
     const resolvedImageUrl = toApiUrl(imageUrl);
 
     return [
@@ -315,6 +317,7 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
+          frameAspectRatio: String(windowWidth / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
