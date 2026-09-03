@@ -14,7 +14,7 @@ import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { saveSelfiePhoto } from "@/lib/api/selfies";
 import {
-  PERSON_OVERLAY_BLEED_FRACTION,
+  figureRightOffset,
   PERSON_OVERLAY_HEIGHT_RATIO,
   resolveLocationId,
   resolveNumberParam,
@@ -88,10 +88,10 @@ export default function PhotoSaveScreen() {
   // height, the figure is bottom-anchored and sized by the same fraction of the
   // band it took up while framing.
   const personOverlayHeight = wrapperSize.height * personOverlayHeightRatio;
-  // Same rule as the camera screen: bleed a fraction of the figure's own width
-  // off the edge, so wide/narrow poses keep the same proportion on-screen.
+  // Same auto-placement rule as the camera screen (figureRightOffset), against
+  // this frame's width so the figure sits the same distance toward the side.
   const personOverlayRight = pose
-    ? -(personOverlayHeight * pose.aspectRatio * PERSON_OVERLAY_BLEED_FRACTION)
+    ? figureRightOffset(personOverlayHeight * pose.aspectRatio, wrapperSize.width)
     : 0;
 
   const { addPhoto } = useCapturedPhotos();
