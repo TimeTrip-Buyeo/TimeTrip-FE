@@ -11,6 +11,11 @@ export const PERSON_OVERLAY_HEIGHT_RATIO = 0.48;
 // on-screen regardless of how wide that pose's cutout is (a fixed pixel
 // offset cut narrow figures too much).
 export const PERSON_OVERLAY_BLEED_FRACTION = 0.06;
+// A pose whose trimmed cutout is wider than this (width / height) is scaled
+// DOWN — its height shrinks so its rendered width comes back to this cap,
+// keeping the pose's own proportions. Tuned so a standard standing figure
+// like "백제 백성" is untouched and only visibly-wider poses get reined in.
+export const FIGURE_MAX_ASPECT_RATIO = 0.55;
 
 export function resolveSingleParam(raw: string | string[] | undefined) {
   return Array.isArray(raw) ? raw[0] : raw;

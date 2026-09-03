@@ -26,6 +26,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
 import { toApiUrl } from "@/lib/api/client";
 import {
+  FIGURE_MAX_ASPECT_RATIO,
   PERSON_OVERLAY_BLEED_FRACTION,
   PERSON_OVERLAY_HEIGHT_RATIO,
   resolveLocationId,
@@ -273,8 +274,13 @@ export default function PersonCameraScreen() {
   // saved photo. Falls back to just the action bar when there's no pose
   // section to render at all (poses.length <= 1).
   const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
-  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
-  const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
+  const rawAspectRatio = selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO;
+  // Cap the figure at the "백제 백성" size: a pose whose cutout is wider than
+  // FIGURE_MAX_ASPECT_RATIO gets its height scaled down so its rendered width
+  // matches the cap — nothing renders bigger than a standard standing figure.
+  const figureScale = rawAspectRatio > FIGURE_MAX_ASPECT_RATIO ? FIGURE_MAX_ASPECT_RATIO / rawAspectRatio : 1;
+  const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO * figureScale;
+  const personOverlayWidth = personOverlayHeight * rawAspectRatio;
   // Bleed a fixed FRACTION of the figure's own width off the right edge, so
   // wide and narrow poses alike keep the same proportion on-screen instead of
   // some getting clipped by a one-size pixel offset.
