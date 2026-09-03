@@ -86,15 +86,13 @@ export default function PhotoSaveScreen() {
     setWrapperSize({ width, height });
   };
 
-  // Show the whole viewfinder band the camera cropped to — lock the frame to
-  // that band's aspect ratio and fill the available WIDTH (so nothing is
-  // cropped off the sides and it's not zoomed in), centring it with a thin
-  // grey margin top/bottom. Only if it can't fit vertically does it fall back
-  // to filling the height (cropping the sides).
+  // Lock the frame to the camera band's aspect ratio and fill the full
+  // available HEIGHT (so the saved shot keeps its vertical size, exactly as
+  // captured), centring it — if the width then overflows it's only by a little
+  // and the wrapper clips it symmetrically.
   const { width: wrapW, height: wrapH } = wrapperSize;
-  const widthBound = wrapW > 0 && wrapH > 0 && wrapW / wrapH <= frameAspectRatio;
-  const frameWidth = wrapW === 0 ? 0 : widthBound ? wrapW : wrapH * frameAspectRatio;
-  const frameHeight = wrapH === 0 ? 0 : widthBound ? wrapW / frameAspectRatio : wrapH;
+  const frameHeight = wrapH;
+  const frameWidth = wrapH === 0 ? wrapW : wrapH * frameAspectRatio;
 
   const personOverlayHeight = frameHeight * personOverlayHeightRatio;
   // Same auto-placement rule as the camera screen (figureRightOffset), against
@@ -334,13 +332,13 @@ const styles = StyleSheet.create({
   photoWrapper: {
     flex: 1,
     marginHorizontal: 16,
+    borderRadius: 16,
     backgroundColor: "#f3f4f6",
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
   photoFrame: {
-    borderRadius: 16,
     overflow: "hidden",
     backgroundColor: "#f3f4f6",
   },
