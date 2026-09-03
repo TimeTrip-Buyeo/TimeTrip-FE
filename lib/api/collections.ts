@@ -71,9 +71,14 @@ type StoryTopicListResponse = {
 
 type CollectionItemListResponse = {
   items: CollectionItem[];
+  // /api/collections/{storyId} localizes these even though the list endpoint
+  // (/api/collections) doesn't localize StoryTopic.title.
+  title?: string | null;
+  storyTitle?: string | null;
+  name?: string | null;
 };
 
-export function getStoryTopics(options: {
+export async function getStoryTopics(options: {
   locale: Locale;
   spotId?: number;
   storyType?: "special" | "normal";
@@ -82,10 +87,26 @@ export function getStoryTopics(options: {
   if (options.spotId !== undefined) params.set("spotId", String(options.spotId));
   if (options.storyType) params.set("storyType", options.storyType);
 
-  return apiGet<StoryTopicListResponse | StoryTopic[]>(`/api/collections?${params.toString()}`).then((result) => {
-    const topics = Array.isArray(result) ? result : result.stories ?? result.topics ?? [];
-    return topics.map(normalizeStoryTopic).filter((topic) => topic.storyIds.length > 0);
-  });
+  const result = await apiGet<StoryTopicListResponse | StoryTopic[]>(`/api/collections?${params.toString()}`);
+  const raw = Array.isArray(result) ? result : result.stories ?? result.topics ?? [];
+  const topics = raw.map(normalizeStoryTopic).filter((topic) => topic.storyIds.length > 0);
+
+  // The list endpoint returns titles in Korean whatever the language. Pull the
+  // localized title from each story's own /api/collections/{storyId} response
+  // (same trick as the album screen uses getCollectionItemDetail).
+  return Promise.all(
+    topics.map(async (topic) => {
+      try {
+        const detail = await apiGet<CollectionItemListResponse>(
+          `/api/collections/${topic.storyIds[0]}?language=${encodeURIComponent(options.locale)}`,
+        );
+        const localized = detail.title ?? detail.storyTitle ?? detail.name;
+        return localized ? { ...topic, title: localized } : topic;
+      } catch {
+        return topic;
+      }
+    }),
+  );
 }
 
 function normalizeStoryTopic(topic: StoryTopic): StoryTopic {
