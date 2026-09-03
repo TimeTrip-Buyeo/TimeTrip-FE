@@ -1,6 +1,5 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -51,44 +50,6 @@ type RuntimePersonPose = {
 
 function firstText(...values: (string | null | undefined)[]) {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
-}
-
-// The preview covers the whole screen, but the only part the user can actually
-// compose against is the band between the top header and the bottom pose panel
-// — and takePictureAsync returns the full sensor frame (wider FOV still). Crop
-// the capture down to exactly that visible band so the saved photo shows the
-// same framing, with the figure landing where its feet were during framing
-// instead of floating mid-photo.
-async function cropToViewfinder(
-  photo: { uri: string; width?: number; height?: number },
-  frame: { screenWidth: number; screenHeight: number; bandTop: number; bandHeight: number },
-): Promise<string> {
-  const { uri, width, height } = photo;
-  const { screenWidth, screenHeight, bandTop, bandHeight } = frame;
-  if (!width || !height || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
-
-  // The preview covers the screen (aspect-fill), so it scales the sensor image
-  // up until BOTH axes are covered — i.e. by whichever axis needs the least
-  // scaling. In photo-pixels-per-screen-unit that's the smaller of the two
-  // ratios. Using this instead of always height/screenHeight is what makes the
-  // front (selfie) camera line up too — its capture aspect differs from the
-  // back camera's, so the assumed axis was wrong for it.
-  const pxPerScreenUnit = Math.min(width / screenWidth, height / screenHeight);
-  const cropWidth = Math.min(width, Math.round(screenWidth * pxPerScreenUnit));
-  const cropHeight = Math.min(height, Math.round(bandHeight * pxPerScreenUnit));
-  const originX = Math.round((width - cropWidth) / 2);
-  const originY = Math.round(Math.min(Math.max(bandTop * pxPerScreenUnit, 0), height - cropHeight));
-
-  try {
-    const image = await ImageManipulator.manipulate(uri)
-      .crop({ originX, originY, width: cropWidth, height: cropHeight })
-      .renderAsync();
-    const result = await image.saveAsync({ compress: 0.9, format: SaveFormat.JPEG });
-    return result.uri;
-  } catch (error) {
-    console.error("[person-camera] crop to viewfinder failed, using raw frame", error);
-    return uri;
-  }
 }
 
 function getPoseApiId(pose: CollectionItemPose) {
@@ -293,14 +254,11 @@ export default function PersonCameraScreen() {
     if (!cameraRef.current || isCapturing) return;
     setIsCapturing(true);
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      // No cropping — the raw capture is saved as-is (like any phone camera);
+      // the save page just displays it at its own aspect ratio and lays the
+      // figure over it. Pass the pixel dims so it knows that ratio.
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
       if (!photo) return;
-      const framedUri = await cropToViewfinder(photo, {
-        screenWidth: windowWidth,
-        screenHeight: windowHeight,
-        bandTop: headerHeight,
-        bandHeight: viewfinderHeight,
-      });
       router.push({
         pathname: "/photo-save",
         params: {
@@ -309,9 +267,10 @@ export default function PersonCameraScreen() {
           poseLabel: selectedPose?.label[locale] ?? "",
           ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
-          uri: framedUri,
-          personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
-          frameAspectRatio: String(windowWidth / viewfinderHeight),
+          uri: photo.uri,
+          ...(photo.width && photo.height
+            ? { photoWidth: String(photo.width), photoHeight: String(photo.height) }
+            : {}),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)

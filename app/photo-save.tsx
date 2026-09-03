@@ -33,8 +33,8 @@ export default function PhotoSaveScreen() {
     poseImageUrl?: string;
     poseAspectRatio?: string;
     uri?: string;
-    personOverlayHeightRatio?: string;
-    frameAspectRatio?: string;
+    photoWidth?: string;
+    photoHeight?: string;
     spotId?: string;
     storyId?: string;
     collectionItemId?: string;
@@ -48,14 +48,17 @@ export default function PhotoSaveScreen() {
   const poseImageUrl = params.poseImageUrl ?? "";
   const parsedPoseAspectRatio = Number(params.poseAspectRatio);
   const uri = params.uri ?? "";
-  const parsedPersonOverlayHeightRatio = Number(params.personOverlayHeightRatio);
-  const personOverlayHeightRatio =
-    Number.isFinite(parsedPersonOverlayHeightRatio) && parsedPersonOverlayHeightRatio > 0
-      ? parsedPersonOverlayHeightRatio
-      : PERSON_OVERLAY_HEIGHT_RATIO;
-  const parsedFrameAspectRatio = Number(params.frameAspectRatio);
-  const frameAspectRatio =
-    Number.isFinite(parsedFrameAspectRatio) && parsedFrameAspectRatio > 0 ? parsedFrameAspectRatio : 0.55;
+  // Aspect ratio of the raw capture, so the frame matches the photo exactly
+  // (nothing cropped). Falls back to a portrait 3:4 if the dims weren't passed.
+  const parsedPhotoWidth = Number(params.photoWidth);
+  const parsedPhotoHeight = Number(params.photoHeight);
+  const photoAspectRatio =
+    Number.isFinite(parsedPhotoWidth) &&
+    Number.isFinite(parsedPhotoHeight) &&
+    parsedPhotoWidth > 0 &&
+    parsedPhotoHeight > 0
+      ? parsedPhotoWidth / parsedPhotoHeight
+      : 3 / 4;
   const spotId = resolveNumberParam(params.spotId);
   const storyId = resolveNumberParam(params.storyId);
   const collectionItemId = resolveNumberParam(params.collectionItemId);
@@ -86,18 +89,18 @@ export default function PhotoSaveScreen() {
     setWrapperSize({ width, height });
   };
 
-  // Lock the frame to the camera band's aspect ratio and fit it ENTIRELY
-  // inside the available area — nothing is ever cropped; whichever dimension
-  // has room just gets a thin grey margin. Scales to any screen size.
+  // Frame = the raw photo's own aspect ratio, fit ENTIRELY inside the
+  // available area (never cropped; the spare dimension just gets a thin grey
+  // margin). Scales to any screen size.
   const { width: wrapW, height: wrapH } = wrapperSize;
   const ready = wrapW > 0 && wrapH > 0;
-  const widthBound = ready && wrapW / wrapH <= frameAspectRatio;
-  const frameWidth = !ready ? wrapW : widthBound ? wrapW : wrapH * frameAspectRatio;
-  const frameHeight = !ready ? wrapH : widthBound ? wrapW / frameAspectRatio : wrapH;
+  const widthBound = ready && wrapW / wrapH <= photoAspectRatio;
+  const frameWidth = !ready ? wrapW : widthBound ? wrapW : wrapH * photoAspectRatio;
+  const frameHeight = !ready ? wrapH : widthBound ? wrapW / photoAspectRatio : wrapH;
 
-  const personOverlayHeight = frameHeight * personOverlayHeightRatio;
-  // Same auto-placement rule as the camera screen (figureRightOffset), against
-  // this frame's width so the figure sits the same distance toward the side.
+  // The figure stands bottom-right on the photo, a fixed fraction of the
+  // photo's height tall — same as the live camera overlay.
+  const personOverlayHeight = frameHeight * PERSON_OVERLAY_HEIGHT_RATIO;
   const personOverlayRight = pose ? figureRightOffset(personOverlayHeight * pose.aspectRatio, frameWidth) : 0;
 
   const { addPhoto } = useCapturedPhotos();
