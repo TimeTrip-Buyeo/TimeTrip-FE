@@ -308,6 +308,7 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
+          frameAspectRatio: String(windowWidth / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
