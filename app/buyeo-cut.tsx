@@ -134,16 +134,11 @@ export default function BuyeoCutScreen() {
     [],
     "[buyeo-cut] failed to load frames",
   );
-  // No location filter — the picker shows every location's section on one
-  // screen, so this fetches the user's full selfie set once and groups it by
-  // spotId → LocationId below (same mapping album.tsx's remote photos use).
+  // Always the user's FULL selfie set — coming in from a specific album only
+  // sets the initial section filter (below), it doesn't narrow the data.
   const { data: selfiesData, loadError: selfiesLoadError } = useApiResource(
-    () =>
-      getSelfiePhotoOptions({
-        locale,
-        ...(selectedCollectionItemId !== undefined ? { collectionItemId: selectedCollectionItemId } : {}),
-      }),
-    [locale, selectedCollectionItemId],
+    () => getSelfiePhotoOptions({ locale }),
+    [locale],
     "[buyeo-cut] failed to load selfie photos",
   );
   const remoteSelfies = useMemo(
@@ -192,13 +187,9 @@ export default function BuyeoCutScreen() {
     // location's bucket (not just the ones with an ALBUM_ENTRIES entry).
     const localItems: PickerItem[] = MAP_LOCATIONS.flatMap((location) => {
       const capturedPhotos = photosByLocation[location.id] ?? [];
-      const filtered =
-        selectedCollectionItemId !== undefined
-          ? capturedPhotos.filter((photo) => photo.collectionItemId === selectedCollectionItemId)
-          : capturedPhotos;
       // photo.uri is already a flattened composite (background + person cutout
       // baked in by photo-save.tsx's captureRef).
-      return filtered.map((photo) => ({
+      return capturedPhotos.map((photo) => ({
         id: photo.id,
         locationId: location.id,
         source: { uri: photo.uri },
@@ -214,17 +205,6 @@ export default function BuyeoCutScreen() {
       localItems.map((item) => item.serverSelfiePhotoId).filter((id): id is number => id !== undefined),
     );
     const remoteItems: PickerItem[] = remoteSelfies
-      .filter((photo) => {
-        // Opened from a specific album: getSelfiePhotoOptions was already called
-        // with that collectionItemId, so trust its narrowing. Don't re-drop a
-        // photo because its spot isn't in SPOT_ID_TO_LOCATION_ID (that map is
-        // deliberately partial) or because the response omitted collectionItemId
-        // — that's what was hiding whole albums' photos here.
-        if (selectedCollectionItemId !== undefined) {
-          return photo.collectionItemId === undefined || photo.collectionItemId === selectedCollectionItemId;
-        }
-        return true;
-      })
       .filter((photo) => !syncedRemoteIds.has(photo.selfiePhotoId))
       .map((photo) => ({
         id: `remote-${photo.selfiePhotoId}`,
@@ -254,7 +234,20 @@ export default function BuyeoCutScreen() {
         items,
       }))
       .filter((section) => section.items.length > 0);
-  }, [photosByLocation, remoteSelfies, selectedCollectionItemId]);
+  }, [photosByLocation, remoteSelfies]);
+
+  // Coming in from a specific figure's album detail — default the section
+  // filter to that figure (once, so the user can still switch to 전체). From
+  // the album main screen (no collectionItemId) it stays on 전체.
+  const hasAppliedInitialFilter = useRef(false);
+  useEffect(() => {
+    if (hasAppliedInitialFilter.current || selectedCollectionItemId === undefined) return;
+    const match = allSections.find((section) => section.sectionKey === `collection-${selectedCollectionItemId}`);
+    if (match) {
+      hasAppliedInitialFilter.current = true;
+      setThemeFilter(match.sectionKey);
+    }
+  }, [allSections, selectedCollectionItemId]);
 
   const sections = useMemo(
     () =>
