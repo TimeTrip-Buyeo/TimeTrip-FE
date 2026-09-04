@@ -1,6 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { Image } from "expo-image";
 import { useEffect, useRef } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from "react-native";
 
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { collectibleAcquiredText } from "@/constants/translations";
@@ -78,7 +79,14 @@ export function CollectibleAcquiredModal({
           </View>
 
           <View style={styles.itemCard}>
-            <Image source={image} style={styles.itemImage} resizeMode="cover" />
+            <Image
+              source={image}
+              style={styles.itemImage}
+              contentFit="cover"
+              // A full-body figure would get its head cropped by a centred
+              // cover; anchor to the top so the face stays and the legs go.
+              contentPosition={isPerson ? "top" : "center"}
+            />
             <View style={styles.itemTextColumn}>
               <Text style={styles.itemName}>{name}</Text>
               <Text style={styles.itemDescription}>{description}</Text>

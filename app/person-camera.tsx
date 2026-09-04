@@ -102,7 +102,9 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
 
     const apiPoseId = getPoseApiId(pose);
     const id = String(apiPoseId ?? `remote-${index}`);
-    const label = firstText(pose.name) ?? `Pose ${index + 1}`;
+    // The backend names these "프레임1", "프레임2"… but they're poses, not
+    // frames — relabel so the picker and the saved caption read "포즈".
+    const label = (firstText(pose.name)?.replace(/프레임/g, "포즈") ?? `포즈 ${index + 1}`).trim();
     const resolvedImageUrl = toApiUrl(imageUrl);
 
     return [

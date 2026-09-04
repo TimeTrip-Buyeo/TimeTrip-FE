@@ -1,7 +1,7 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
-import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -43,6 +43,23 @@ function SpotDetailPlayButton({
   const source = useMemo(() => (audioGuide ? { uri: toApiUrl(audioGuide.filePath) } : undefined), [audioGuide]);
   const player = useAudioPlayer(source);
   const status = useAudioPlayerStatus(player);
+
+  // Stop the guide when the map screen loses focus (navigating to another
+  // page). Selecting a different spot / closing the card already remounts
+  // this via its key; this covers leaving the screen entirely. Wrapped
+  // because on a full unmount useAudioPlayer may release the player before
+  // this cleanup runs, and pause() then throws "already released".
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        try {
+          player.pause();
+        } catch {
+          // player already released — nothing to stop
+        }
+      };
+    }, [player]),
+  );
 
   if (isSpecial) {
     return (
