@@ -46,11 +46,17 @@ function SpotDetailPlayButton({
 
   // Stop the guide when the map screen loses focus (navigating to another
   // page). Selecting a different spot / closing the card already remounts
-  // this via its key; this covers leaving the screen entirely.
+  // this via its key; this covers leaving the screen entirely. Wrapped
+  // because on a full unmount useAudioPlayer may release the player before
+  // this cleanup runs, and pause() then throws "already released".
   useFocusEffect(
     useCallback(() => {
       return () => {
-        player.pause();
+        try {
+          player.pause();
+        } catch {
+          // player already released — nothing to stop
+        }
       };
     }, [player]),
   );
