@@ -4,7 +4,7 @@ import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSourcePropType } from "react-native";
-import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -89,6 +89,12 @@ const COLLAGE_SLOT_RECTS = [
   { top: "33.54%", left: "18.04%", width: "64.04%", height: "31.46%" },
   { top: "65.11%", left: "18.04%", width: "64.04%", height: "31.28%" },
 ] as const;
+// Each slot's photo is rendered in a box this factor TALLER than the window,
+// so it can be dragged up/down to reframe (drag range = the overhang). ~0.58
+// keeps the box within a portrait selfie's own height (no upscale).
+const COLLAGE_SLOT_VISIBLE_FRACTION = 0.58;
+const collageSlotCanvasHeight = (index: number) =>
+  (parseFloat(COLLAGE_SLOT_RECTS[index].height) / 100) * COLLAGE_EXPORT_HEIGHT;
 
 type PickerItem = {
   id: string;
@@ -113,6 +119,53 @@ type PickerSection = {
   collectionItemName?: string;
   items: PickerItem[];
 };
+
+// A single collage photo window the user can drag vertically to reframe (so a
+// face isn't clipped by the short, wide slot). The photo is laid out in a box
+// taller than the window; dragging translates it within the clipped slot. The
+// preview is shown scaled down by COLLAGE_DISPLAY_SCALE, so raw gesture pixels
+// are divided back out to move the full-res canvas by the matching distance.
+function CollageSlot({ source, index }: { source: ImageSourcePropType; index: number }) {
+  const slotHeight = collageSlotCanvasHeight(index);
+  const imageBoxHeight = slotHeight / COLLAGE_SLOT_VISIBLE_FRACTION;
+  // Negative: how far up the taller image may be dragged before its bottom edge
+  // would enter the window. Range is [minTranslateY, 0].
+  const minTranslateY = slotHeight - imageBoxHeight;
+  // Start just below the very top so a forehead isn't hard against the edge.
+  const defaultTranslateY = minTranslateY * 0.12;
+
+  const translateY = useRef(new Animated.Value(defaultTranslateY)).current;
+  const committedOffset = useRef(defaultTranslateY);
+  const liveOffset = useRef(defaultTranslateY);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gesture) =>
+        Math.abs(gesture.dy) > 2 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_evt, gesture) => {
+        const raw = committedOffset.current + gesture.dy / COLLAGE_DISPLAY_SCALE;
+        const next = Math.min(0, Math.max(minTranslateY, raw));
+        liveOffset.current = next;
+        translateY.setValue(next);
+      },
+      onPanResponderRelease: () => {
+        committedOffset.current = liveOffset.current;
+      },
+      onPanResponderTerminate: () => {
+        committedOffset.current = liveOffset.current;
+      },
+    }),
+  ).current;
+
+  return (
+    <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]} {...panResponder.panHandlers}>
+      <Animated.View style={{ width: "100%", height: imageBoxHeight, transform: [{ translateY }] }}>
+        <ExpoImage source={source} style={styles.frameSlotImage} contentFit="cover" />
+      </Animated.View>
+    </View>
+  );
+}
 
 // Rebuilt to match Figma's "부여세컷 선택" → "콜라주 만들기" flow (nodes 0:1418,
 // 0:1670, 0:580/0:612) directly. The picker grid shows real captures only —
@@ -442,30 +495,27 @@ export default function BuyeoCutScreen() {
             <View style={styles.collageViewport}>
               <View style={styles.collageScaler}>
                 <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
+                  {/* Each photo starts anchored near its top (so the face is
+                      kept) and can be dragged vertically to reframe. */}
                   {selected.map((item, index) => (
-                    <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
-                      {/* Top-anchored crop — the slot windows are short and wide,
-                          so a centred crop cuts a portrait selfie's face; keep
-                          the top so the head stays. */}
-                      <ExpoImage
-                        source={item.source}
-                        style={styles.frameSlotImage}
-                        contentFit="cover"
-                        contentPosition="top"
-                      />
-                    </View>
+                    <CollageSlot key={item.id} source={item.source} index={index} />
                   ))}
                   {selectedFrame && (
-                    <Image
-                      source={{ uri: selectedFrame.frameImageUrl }}
-                      style={styles.frameOverlayImage}
-                      resizeMode="stretch"
-                    />
+                    // Sits on top of the slots — pointerEvents="none" lets drag
+                    // touches pass through to the photo underneath.
+                    <View style={styles.frameOverlayImage} pointerEvents="none">
+                      <Image
+                        source={{ uri: selectedFrame.frameImageUrl }}
+                        style={styles.frameSlotImage}
+                        resizeMode="stretch"
+                      />
+                    </View>
                   )}
                 </View>
               </View>
             </View>
 
+            <Text style={styles.slotDragHintText}>{t.slotDragHintText}</Text>
             <Text style={styles.aiGeneratedDisclaimerText}>{t.aiGeneratedDisclaimerText}</Text>
 
             {showSaveToast ? (
@@ -1141,6 +1191,12 @@ const styles = StyleSheet.create({
     left: 0,
     width: "100%",
     height: "100%",
+  },
+  slotDragHintText: {
+    marginTop: 12,
+    fontSize: 11,
+    textAlign: "center",
+    color: "#8a8f9a",
   },
   aiGeneratedDisclaimerText: {
     marginTop: 8,
