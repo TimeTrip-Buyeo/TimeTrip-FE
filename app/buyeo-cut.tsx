@@ -354,15 +354,23 @@ export default function BuyeoCutScreen() {
   const resolveCollageUri = async (endpoint: "download" | "file"): Promise<string> => {
     const serverIds = selected.map((item) => item.serverSelfiePhotoId);
     const allSynced = serverIds.every((id): id is number => id !== undefined);
+    console.log("[buyeo-cut][diag] serverIds", serverIds, "allSynced", allSynced, "frameId", selectedFrameId);
     if (allSynced) {
       try {
-        const { collageId } = await createCollage(serverIds as number[], selectedFrameId ?? undefined);
-        return endpoint === "download" ? await downloadCollageFile(collageId) : await getCollageFile(collageId);
+        const created = await createCollage(serverIds as number[], selectedFrameId ?? undefined);
+        console.log("[buyeo-cut][diag] createCollage ok", created);
+        const uri =
+          endpoint === "download"
+            ? await downloadCollageFile(created.collageId)
+            : await getCollageFile(created.collageId);
+        console.log("[buyeo-cut][diag] downloaded server collage ->", uri);
+        return uri;
       } catch (error) {
         console.error("[buyeo-cut] server collage render failed, falling back to on-screen capture", error);
       }
     }
     if (!collagePreviewRef.current) throw new Error("collage preview not mounted");
+    console.log("[buyeo-cut][diag] using captureRef fallback");
     return captureRef(collagePreviewRef.current, { format: "jpg", quality: 0.95, result: "tmpfile" });
   };
 
