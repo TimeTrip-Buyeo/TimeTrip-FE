@@ -4,7 +4,9 @@ import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSourcePropType } from "react-native";
-import { ActivityIndicator, Animated, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 
@@ -89,12 +91,15 @@ const COLLAGE_SLOT_RECTS = [
   { top: "33.54%", left: "18.04%", width: "64.04%", height: "31.46%" },
   { top: "65.11%", left: "18.04%", width: "64.04%", height: "31.28%" },
 ] as const;
-// Each slot's photo is rendered in a box this factor TALLER than the window,
-// so it can be dragged up/down to reframe (drag range = the overhang). ~0.58
-// keeps the box within a portrait selfie's own height (no upscale).
+// Each slot's photo is laid out in a box this factor TALLER than the window, so
+// even at 1x there's vertical overhang to pan for reframing. ~0.58 keeps the
+// box within a portrait selfie's own height (no upscaling at rest).
 const COLLAGE_SLOT_VISIBLE_FRACTION = 0.58;
 const collageSlotCanvasHeight = (index: number) =>
   (parseFloat(COLLAGE_SLOT_RECTS[index].height) / 100) * COLLAGE_EXPORT_HEIGHT;
+const collageSlotCanvasWidth = (index: number) =>
+  (parseFloat(COLLAGE_SLOT_RECTS[index].width) / 100) * COLLAGE_EXPORT_WIDTH;
+const COLLAGE_SLOT_MAX_ZOOM = 4;
 
 type PickerItem = {
   id: string;
@@ -120,49 +125,92 @@ type PickerSection = {
   items: PickerItem[];
 };
 
-// A single collage photo window the user can drag vertically to reframe (so a
-// face isn't clipped by the short, wide slot). The photo is laid out in a box
-// taller than the window; dragging translates it within the clipped slot. The
-// preview is shown scaled down by COLLAGE_DISPLAY_SCALE, so raw gesture pixels
-// are divided back out to move the full-res canvas by the matching distance.
-function CollageSlot({ source, index }: { source: ImageSourcePropType; index: number }) {
-  const slotHeight = collageSlotCanvasHeight(index);
-  const imageBoxHeight = slotHeight / COLLAGE_SLOT_VISIBLE_FRACTION;
-  // Negative: how far up the taller image may be dragged before its bottom edge
-  // would enter the window. Range is [minTranslateY, 0].
-  const minTranslateY = slotHeight - imageBoxHeight;
-  // Start just below the very top so a forehead isn't hard against the edge.
-  const defaultTranslateY = minTranslateY * 0.12;
+// A single collage photo window. The photo can be dragged (1 finger) and pinch-
+// zoomed (2 fingers) to reframe so a face isn't clipped by the short, wide slot.
+// It's laid out in a box taller than the window (COLLAGE_SLOT_VISIBLE_FRACTION)
+// and centred on the slot, so there's vertical pan room even at 1x. All in the
+// slot's own full-res canvas coordinates; gesture-handler does its own native
+// hit-testing so it works inside the scaled-down preview where a plain RN
+// PanResponder wouldn't get touches. gesture px ÷ COLLAGE_DISPLAY_SCALE converts
+// finger travel on the shrunken preview to canvas px.
+function CollageSlot({
+  source,
+  index,
+  onGestureStateChange,
+}: {
+  source: ImageSourcePropType;
+  index: number;
+  onGestureStateChange: (active: boolean) => void;
+}) {
+  const slotW = collageSlotCanvasWidth(index);
+  const slotH = collageSlotCanvasHeight(index);
+  const boxH = slotH / COLLAGE_SLOT_VISIBLE_FRACTION;
+  // Box is centred on the slot, so at 1x it overhangs (boxH - slotH)/2 each way.
+  // Start shifted up so the head, not the chest, sits in the window.
+  const defaultTy = -((boxH - slotH) / 2) * 0.55;
 
-  const translateY = useRef(new Animated.Value(defaultTranslateY)).current;
-  const committedOffset = useRef(defaultTranslateY);
-  const liveOffset = useRef(defaultTranslateY);
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(defaultTy);
+  const savedTx = useSharedValue(0);
+  const savedTy = useSharedValue(defaultTy);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_evt, gesture) =>
-        Math.abs(gesture.dy) > 2 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderMove: (_evt, gesture) => {
-        const raw = committedOffset.current + gesture.dy / COLLAGE_DISPLAY_SCALE;
-        const next = Math.min(0, Math.max(minTranslateY, raw));
-        liveOffset.current = next;
-        translateY.setValue(next);
-      },
-      onPanResponderRelease: () => {
-        committedOffset.current = liveOffset.current;
-      },
-      onPanResponderTerminate: () => {
-        committedOffset.current = liveOffset.current;
-      },
-    }),
-  ).current;
+  const pan = Gesture.Pan()
+    .maxPointers(1)
+    .onStart(() => {
+      runOnJS(onGestureStateChange)(true);
+    })
+    .onUpdate((e) => {
+      const s = scale.value;
+      const maxX = Math.max(0, (slotW * (s - 1)) / 2);
+      const maxY = Math.max(0, (boxH * s - slotH) / 2);
+      tx.value = Math.min(maxX, Math.max(-maxX, savedTx.value + e.translationX / COLLAGE_DISPLAY_SCALE));
+      ty.value = Math.min(maxY, Math.max(-maxY, savedTy.value + e.translationY / COLLAGE_DISPLAY_SCALE));
+    })
+    .onEnd(() => {
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+    })
+    .onFinalize(() => {
+      runOnJS(onGestureStateChange)(false);
+    });
+
+  const pinch = Gesture.Pinch()
+    .onStart(() => {
+      runOnJS(onGestureStateChange)(true);
+    })
+    .onUpdate((e) => {
+      const s = Math.min(COLLAGE_SLOT_MAX_ZOOM, Math.max(1, savedScale.value * e.scale));
+      scale.value = s;
+      // Zooming back out can leave the pan offset outside the now-smaller range.
+      const maxX = Math.max(0, (slotW * (s - 1)) / 2);
+      const maxY = Math.max(0, (boxH * s - slotH) / 2);
+      tx.value = Math.min(maxX, Math.max(-maxX, tx.value));
+      ty.value = Math.min(maxY, Math.max(-maxY, ty.value));
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+    })
+    .onFinalize(() => {
+      runOnJS(onGestureStateChange)(false);
+    });
+
+  const composed = Gesture.Simultaneous(pan, pinch);
+
+  const imageStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
+  }));
 
   return (
-    <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]} {...panResponder.panHandlers}>
-      <Animated.View style={{ width: "100%", height: imageBoxHeight, transform: [{ translateY }] }}>
-        <ExpoImage source={source} style={styles.frameSlotImage} contentFit="cover" />
-      </Animated.View>
+    <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
+      <GestureDetector gesture={composed}>
+        <Reanimated.View style={[{ width: slotW, height: boxH }, imageStyle]}>
+          <ExpoImage source={source} style={styles.frameSlotImage} contentFit="cover" />
+        </Reanimated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -206,6 +254,9 @@ export default function BuyeoCutScreen() {
   const selectedFrame = frames.find((frame) => frame.frameId === selectedFrameId) ?? null;
   const [themeFilter, setThemeFilter] = useState<ThemeFilter>(ALL_FILTER);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  // True only while a collage photo is being panned/zoomed — freezes the
+  // enclosing vertical ScrollView so the gestures don't fight it.
+  const [isSlotGesturing, setIsSlotGesturing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -475,7 +526,7 @@ export default function BuyeoCutScreen() {
 
   if (view === "collage") {
     return (
-      <View style={styles.container}>
+      <GestureHandlerRootView style={styles.container}>
         <View style={[styles.collageHeader, { paddingTop: insets.top + 12 }]}>
           <Pressable onPress={handleBack} hitSlop={8}>
             <FontAwesome5 name="chevron-left" size={20} color="#1b1b1b" solid />
@@ -487,7 +538,7 @@ export default function BuyeoCutScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.collageScrollContent}>
+        <ScrollView contentContainerStyle={styles.collageScrollContent} scrollEnabled={!isSlotGesturing}>
           <View style={styles.collagePreview}>
             {/* Clips the full-res canvas down to display size; the canvas
                 itself stays laid out at COLLAGE_EXPORT_WIDTH so captureRef
@@ -496,9 +547,14 @@ export default function BuyeoCutScreen() {
               <View style={styles.collageScaler}>
                 <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
                   {/* Each photo starts anchored near its top (so the face is
-                      kept) and can be dragged vertically to reframe. */}
+                      kept) and can be dragged / pinch-zoomed to reframe. */}
                   {selected.map((item, index) => (
-                    <CollageSlot key={item.id} source={item.source} index={index} />
+                    <CollageSlot
+                      key={item.id}
+                      source={item.source}
+                      index={index}
+                      onGestureStateChange={setIsSlotGesturing}
+                    />
                   ))}
                   {selectedFrame && (
                     // Sits on top of the slots — pointerEvents="none" lets drag
@@ -599,7 +655,7 @@ export default function BuyeoCutScreen() {
           </View>
         </View>
         </ScrollView>
-      </View>
+      </GestureHandlerRootView>
     );
   }
 
@@ -1207,6 +1263,8 @@ const styles = StyleSheet.create({
   frameSlot: {
     position: "absolute",
     overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#f3f4f6",
   },
   frameSlotImage: {
