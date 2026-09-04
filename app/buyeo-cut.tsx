@@ -100,6 +100,10 @@ const collageSlotCanvasHeight = (index: number) =>
 const collageSlotCanvasWidth = (index: number) =>
   (parseFloat(COLLAGE_SLOT_RECTS[index].width) / 100) * COLLAGE_EXPORT_WIDTH;
 const COLLAGE_SLOT_MAX_ZOOM = 4;
+// Can shrink below 1x too — the photo then no longer fills the window and the
+// slot's grey backs whatever it doesn't cover, which the user may want to fit a
+// whole photo in.
+const COLLAGE_SLOT_MIN_ZOOM = 0.4;
 
 type PickerItem = {
   id: string;
@@ -163,8 +167,10 @@ function CollageSlot({
     })
     .onUpdate((e) => {
       const s = scale.value;
-      const maxX = Math.max(0, (slotW * (s - 1)) / 2);
-      const maxY = Math.max(0, (boxH * s - slotH) / 2);
+      // abs(): above 1x this is the cover overhang; below 1x it's the empty
+      // margin the photo can still be nudged around in.
+      const maxX = Math.abs((slotW * (s - 1)) / 2);
+      const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, savedTx.value + e.translationX / COLLAGE_DISPLAY_SCALE));
       ty.value = Math.min(maxY, Math.max(-maxY, savedTy.value + e.translationY / COLLAGE_DISPLAY_SCALE));
     })
@@ -181,11 +187,11 @@ function CollageSlot({
       runOnJS(onGestureStateChange)(true);
     })
     .onUpdate((e) => {
-      const s = Math.min(COLLAGE_SLOT_MAX_ZOOM, Math.max(1, savedScale.value * e.scale));
+      const s = Math.min(COLLAGE_SLOT_MAX_ZOOM, Math.max(COLLAGE_SLOT_MIN_ZOOM, savedScale.value * e.scale));
       scale.value = s;
-      // Zooming back out can leave the pan offset outside the now-smaller range.
-      const maxX = Math.max(0, (slotW * (s - 1)) / 2);
-      const maxY = Math.max(0, (boxH * s - slotH) / 2);
+      // A scale change can leave the pan offset outside the new range.
+      const maxX = Math.abs((slotW * (s - 1)) / 2);
+      const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, tx.value));
       ty.value = Math.min(maxY, Math.max(-maxY, ty.value));
     })
