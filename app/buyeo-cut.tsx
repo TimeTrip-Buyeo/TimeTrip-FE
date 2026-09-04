@@ -72,12 +72,14 @@ const COLLAGE_FRAME_WIDTH = Math.round(PHOTO_TILE_WIDTH / 0.6404);
 // Height is computed explicitly (not left to an `aspectRatio` style prop) so
 // the frame box has one unambiguous fixed size on every platform.
 const COLLAGE_FRAME_HEIGHT = Math.round(COLLAGE_FRAME_WIDTH / COLLAGE_FRAME_RATIO);
-// captureRef renders the ~234dp on-screen preview as-is, which saves a small
-// blurry image. Ask it to rasterize at a much larger size (frame ratio kept)
-// so the saved/shared file is crisp — the selfies are hi-res and the frame
-// PNG is 887px wide natively, so 1080 clears both.
+// The collage is actually LAID OUT at this full resolution (frame ratio kept)
+// and only scaled DOWN for display, so captureRef grabs a crisp 1080-wide
+// bitmap 1:1 — the slot <Image>s decode at ~690px and the frame PNG (887px
+// native) barely upscales. Just enlarging the capture of the ~234dp preview
+// couldn't add detail that was never rendered.
 const COLLAGE_EXPORT_WIDTH = 1080;
 const COLLAGE_EXPORT_HEIGHT = Math.round(COLLAGE_EXPORT_WIDTH * (COLLAGE_FRAME_HEIGHT / COLLAGE_FRAME_WIDTH));
+const COLLAGE_DISPLAY_SCALE = COLLAGE_FRAME_WIDTH / COLLAGE_EXPORT_WIDTH;
 // Photo-window rectangles measured directly off the frame asset, as % of the
 // frame's own width/height — keeps the windows pixel-aligned to the frame's
 // artwork at any display size instead of guessing even thirds.
@@ -374,8 +376,6 @@ export default function BuyeoCutScreen() {
         format: "jpg",
         quality: 0.95,
         result: "tmpfile",
-        width: COLLAGE_EXPORT_WIDTH,
-        height: COLLAGE_EXPORT_HEIGHT,
       });
       await mediaLibrary.saveToLibraryAsync(localUri);
       setShowSaveToast(true);
@@ -410,8 +410,6 @@ export default function BuyeoCutScreen() {
         format: "jpg",
         quality: 0.95,
         result: "tmpfile",
-        width: COLLAGE_EXPORT_WIDTH,
-        height: COLLAGE_EXPORT_HEIGHT,
       });
       await sharing.shareAsync(localUri, { mimeType: "image/jpeg", dialogTitle: t.collageHeaderTitle });
     } catch (error) {
@@ -444,19 +442,26 @@ export default function BuyeoCutScreen() {
 
         <ScrollView contentContainerStyle={styles.collageScrollContent}>
           <View style={styles.collagePreview}>
-            <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
-              {selected.map((item, index) => (
-                <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
-                  <Image source={item.source} style={styles.frameSlotImage} resizeMode="cover" />
+            {/* Clips the full-res canvas down to display size; the canvas
+                itself stays laid out at COLLAGE_EXPORT_WIDTH so captureRef
+                gets it at full resolution. */}
+            <View style={styles.collageViewport}>
+              <View style={styles.collageScaler}>
+                <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
+                  {selected.map((item, index) => (
+                    <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
+                      <Image source={item.source} style={styles.frameSlotImage} resizeMode="cover" />
+                    </View>
+                  ))}
+                  {selectedFrame && (
+                    <Image
+                      source={{ uri: selectedFrame.frameImageUrl }}
+                      style={styles.frameOverlayImage}
+                      resizeMode="stretch"
+                    />
+                  )}
                 </View>
-              ))}
-              {selectedFrame && (
-                <Image
-                  source={{ uri: selectedFrame.frameImageUrl }}
-                  style={{ position: "absolute", top: 0, left: 0, width: COLLAGE_FRAME_WIDTH, height: COLLAGE_FRAME_HEIGHT }}
-                  resizeMode="stretch"
-                />
-              )}
+              </View>
             </View>
 
             <Text style={styles.aiGeneratedDisclaimerText}>{t.aiGeneratedDisclaimerText}</Text>
@@ -1102,11 +1107,30 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: "rgba(245,244,240,0.4)",
   },
-  frameBox: {
+  collageViewport: {
     width: COLLAGE_FRAME_WIDTH,
     height: COLLAGE_FRAME_HEIGHT,
+    overflow: "hidden",
+  },
+  collageScaler: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    transform: [{ scale: COLLAGE_DISPLAY_SCALE }],
+    transformOrigin: "top left",
+  },
+  frameBox: {
+    width: COLLAGE_EXPORT_WIDTH,
+    height: COLLAGE_EXPORT_HEIGHT,
     position: "relative",
     overflow: "hidden",
+  },
+  frameOverlayImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
   },
   aiGeneratedDisclaimerText: {
     marginTop: 8,
