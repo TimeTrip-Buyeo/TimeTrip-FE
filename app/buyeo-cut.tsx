@@ -709,8 +709,11 @@ function FilterOption({ label, active, onPress }: { label: string; active: boole
   return (
     <Pressable
       style={({ pressed }) => [styles.sheetOption, active && styles.sheetOptionActive, pressed && styles.sheetOptionPressed]}
-      onPress={onPress}>
-      <Text style={[styles.sheetOptionText, active && styles.sheetOptionTextActive]}>{label}</Text>
+      onPress={onPress}
+      hitSlop={6}>
+      <Text style={[styles.sheetOptionText, active && styles.sheetOptionTextActive]} pointerEvents="none">
+        {label}
+      </Text>
       {active && <FontAwesome5 name="check" size={12} color="#fff" solid />}
     </Pressable>
   );
@@ -1004,9 +1007,11 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
   },
   sheetOptions: {
+    alignSelf: "stretch",
     gap: 10,
   },
   sheetOption: {
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
