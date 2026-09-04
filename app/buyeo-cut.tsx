@@ -1,4 +1,5 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { Image as ExpoImage } from "expo-image";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -443,7 +444,15 @@ export default function BuyeoCutScreen() {
                 <View ref={collagePreviewRef} style={styles.frameBox} collapsable={false}>
                   {selected.map((item, index) => (
                     <View key={item.id} style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
-                      <Image source={item.source} style={styles.frameSlotImage} resizeMode="cover" />
+                      {/* Top-anchored crop — the slot windows are short and wide,
+                          so a centred crop cuts a portrait selfie's face; keep
+                          the top so the head stays. */}
+                      <ExpoImage
+                        source={item.source}
+                        style={styles.frameSlotImage}
+                        contentFit="cover"
+                        contentPosition="top"
+                      />
                     </View>
                   ))}
                   {selectedFrame && (
