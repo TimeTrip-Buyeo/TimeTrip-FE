@@ -1314,7 +1314,8 @@ const styles = StyleSheet.create({
   },
   slotDragHintText: {
     marginTop: 12,
-    fontSize: 11,
+    fontSize: 10,
+    lineHeight: 14,
     textAlign: "center",
     color: "#8a8f9a",
   },
