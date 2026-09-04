@@ -140,11 +140,12 @@ type PickerSection = {
 // PanResponder wouldn't get touches. gesture px ÷ COLLAGE_DISPLAY_SCALE converts
 // finger travel on the shrunken preview to canvas px.
 //
-// During capture (isCapturing) it swaps the reanimated live view for a plain
-// View + RN Image carrying the committed transform statically: view-shot always
-// reads a normal React-rendered transform, whereas a reanimated one is written
+// During capture (isCapturing) it drops the GestureDetector/reanimated wrapper
+// for a plain View carrying the committed transform as a normal style: view-shot
+// reads a React-rendered transform reliably, whereas a reanimated one is written
 // straight to the native view on the UI thread and Android capture sometimes
-// grabs it pre-transform.
+// grabs it pre-transform. The <ExpoImage> itself stays (same component both
+// paths) so its decoded bitmap is already warm when the snapshot is taken.
 function CollageSlot({
   id,
   source,
@@ -195,7 +196,14 @@ function CollageSlot({
       savedTy.value = ty.value;
       runOnJS(onCommit)(id, { tx: tx.value, ty: ty.value, scale: scale.value });
     })
-    .onFinalize(() => {
+    .onFinalize((_e, success) => {
+      // A cancelled gesture skips onEnd; still persist where the photo ended up
+      // so a later capture matches what's on screen.
+      if (!success) {
+        savedTx.value = tx.value;
+        savedTy.value = ty.value;
+        runOnJS(onCommit)(id, { tx: tx.value, ty: ty.value, scale: scale.value });
+      }
       runOnJS(onGestureStateChange)(false);
     });
 
@@ -218,7 +226,13 @@ function CollageSlot({
       savedTy.value = ty.value;
       runOnJS(onCommit)(id, { tx: tx.value, ty: ty.value, scale: scale.value });
     })
-    .onFinalize(() => {
+    .onFinalize((_e, success) => {
+      if (!success) {
+        savedScale.value = scale.value;
+        savedTx.value = tx.value;
+        savedTy.value = ty.value;
+        runOnJS(onCommit)(id, { tx: tx.value, ty: ty.value, scale: scale.value });
+      }
       runOnJS(onGestureStateChange)(false);
     });
 
@@ -228,7 +242,8 @@ function CollageSlot({
     transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
   }));
 
-  // Capture path — plain View + RN Image with the committed transform baked in.
+  // Capture path — plain View holding the committed transform as a static style,
+  // same <ExpoImage> as the live path so its bitmap stays warm.
   if (isCapturing) {
     const frame = committed ?? { tx: 0, ty: defaultTy, scale: 1 };
     return (
@@ -239,7 +254,7 @@ function CollageSlot({
             height: boxH,
             transform: [{ translateX: frame.tx }, { translateY: frame.ty }, { scale: frame.scale }],
           }}>
-          <Image source={source} style={styles.frameSlotImage} resizeMode="cover" />
+          <ExpoImage source={source} style={styles.frameSlotImage} contentFit="cover" />
         </View>
       </View>
     );
