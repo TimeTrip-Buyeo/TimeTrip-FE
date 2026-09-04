@@ -2,7 +2,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Image as ExpoImage } from "expo-image";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSourcePropType } from "react-native";
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
@@ -100,10 +100,11 @@ const collageSlotCanvasHeight = (index: number) =>
 const collageSlotCanvasWidth = (index: number) =>
   (parseFloat(COLLAGE_SLOT_RECTS[index].width) / 100) * COLLAGE_EXPORT_WIDTH;
 const COLLAGE_SLOT_MAX_ZOOM = 4;
-// Can shrink below 1x too — the photo then no longer fills the window and the
-// slot's grey backs whatever it doesn't cover, which the user may want to fit a
-// whole photo in.
-const COLLAGE_SLOT_MIN_ZOOM = 0.4;
+// Floored at 1x: below it the photo can't fill the window and the slot's grey
+// would bake into the saved image. Reframing is zoom-in + pan, not shrink.
+const COLLAGE_SLOT_MIN_ZOOM = 1;
+
+type SlotFrame = { tx: number; ty: number; scale: number };
 
 type PickerItem = {
   id: string;
@@ -137,13 +138,27 @@ type PickerSection = {
 // hit-testing so it works inside the scaled-down preview where a plain RN
 // PanResponder wouldn't get touches. gesture px ÷ COLLAGE_DISPLAY_SCALE converts
 // finger travel on the shrunken preview to canvas px.
+//
+// During capture (isCapturing) it swaps the reanimated live view for a plain
+// View + RN Image carrying the committed transform statically: view-shot always
+// reads a normal React-rendered transform, whereas a reanimated one is written
+// straight to the native view on the UI thread and Android capture sometimes
+// grabs it pre-transform.
 function CollageSlot({
+  id,
   source,
   index,
+  isCapturing,
+  committed,
+  onCommit,
   onGestureStateChange,
 }: {
+  id: string;
   source: ImageSourcePropType;
   index: number;
+  isCapturing: boolean;
+  committed?: SlotFrame;
+  onCommit: (id: string, frame: SlotFrame) => void;
   onGestureStateChange: (active: boolean) => void;
 }) {
   const slotW = collageSlotCanvasWidth(index);
@@ -153,12 +168,14 @@ function CollageSlot({
   // Start shifted up so the head, not the chest, sits in the window.
   const defaultTy = -((boxH - slotH) / 2) * 0.55;
 
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const tx = useSharedValue(0);
-  const ty = useSharedValue(defaultTy);
-  const savedTx = useSharedValue(0);
-  const savedTy = useSharedValue(defaultTy);
+  // Seed from the committed frame so a re-render (e.g. the capture swap) keeps
+  // the user's framing.
+  const scale = useSharedValue(committed?.scale ?? 1);
+  const savedScale = useSharedValue(committed?.scale ?? 1);
+  const tx = useSharedValue(committed?.tx ?? 0);
+  const ty = useSharedValue(committed?.ty ?? defaultTy);
+  const savedTx = useSharedValue(committed?.tx ?? 0);
+  const savedTy = useSharedValue(committed?.ty ?? defaultTy);
 
   const pan = Gesture.Pan()
     .maxPointers(1)
@@ -167,8 +184,6 @@ function CollageSlot({
     })
     .onUpdate((e) => {
       const s = scale.value;
-      // abs(): above 1x this is the cover overhang; below 1x it's the empty
-      // margin the photo can still be nudged around in.
       const maxX = Math.abs((slotW * (s - 1)) / 2);
       const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, savedTx.value + e.translationX / COLLAGE_DISPLAY_SCALE));
@@ -177,6 +192,7 @@ function CollageSlot({
     .onEnd(() => {
       savedTx.value = tx.value;
       savedTy.value = ty.value;
+      runOnJS(onCommit)(id, { tx: tx.value, ty: ty.value, scale: scale.value });
     })
     .onFinalize(() => {
       runOnJS(onGestureStateChange)(false);
@@ -199,6 +215,7 @@ function CollageSlot({
       savedScale.value = scale.value;
       savedTx.value = tx.value;
       savedTy.value = ty.value;
+      runOnJS(onCommit)(id, { tx: tx.value, ty: ty.value, scale: scale.value });
     })
     .onFinalize(() => {
       runOnJS(onGestureStateChange)(false);
@@ -210,6 +227,24 @@ function CollageSlot({
     transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
   }));
 
+  // Capture path — plain View + RN Image with the committed transform baked in.
+  if (isCapturing) {
+    const frame = committed ?? { tx: 0, ty: defaultTy, scale: 1 };
+    return (
+      <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
+        <View
+          style={{
+            width: slotW,
+            height: boxH,
+            transform: [{ translateX: frame.tx }, { translateY: frame.ty }, { scale: frame.scale }],
+          }}>
+          <Image source={source} style={styles.frameSlotImage} resizeMode="cover" />
+        </View>
+      </View>
+    );
+  }
+
+  // Live path — smooth reanimated view driven by the gestures.
   return (
     <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
       <GestureDetector gesture={composed}>
@@ -263,6 +298,13 @@ export default function BuyeoCutScreen() {
   // True only while a collage photo is being panned/zoomed — freezes the
   // enclosing vertical ScrollView so the gestures don't fight it.
   const [isSlotGesturing, setIsSlotGesturing] = useState(false);
+  // Committed pan/zoom per slot (by photo id), applied statically during capture
+  // so view-shot bakes the user's framing into the saved image.
+  const [slotFrames, setSlotFrames] = useState<Record<string, SlotFrame>>({});
+  const [isCapturing, setIsCapturing] = useState(false);
+  const commitSlotFrame = useCallback((id: string, frame: SlotFrame) => {
+    setSlotFrames((prev) => ({ ...prev, [id]: frame }));
+  }, []);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -457,6 +499,27 @@ export default function BuyeoCutScreen() {
   // real serverSelfiePhotoId to send. createCollage/downloadCollageFile are
   // left in lib/api/collage.ts — swap back to them here for the higher-
   // quality server-rendered original once acquisition is connected.
+  // Swaps every slot to its static (plain-transform) capture render, waits a
+  // couple of frames for it to actually paint, then snapshots. view-shot reads
+  // a normal React transform reliably; a reanimated one can be missed on Android.
+  const captureCollage = async (): Promise<string | null> => {
+    if (!collagePreviewRef.current) return null;
+    setIsCapturing(true);
+    try {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      if (!collagePreviewRef.current) return null;
+      return await captureRef(collagePreviewRef.current, {
+        format: "jpg",
+        quality: 0.95,
+        result: "tmpfile",
+      });
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -471,16 +534,11 @@ export default function BuyeoCutScreen() {
         setShowSaveErrorToast(true);
         return;
       }
-      if (!collagePreviewRef.current) {
+      const localUri = await captureCollage();
+      if (!localUri) {
         setShowSaveErrorToast(true);
         return;
       }
-
-      const localUri = await captureRef(collagePreviewRef.current, {
-        format: "jpg",
-        quality: 0.95,
-        result: "tmpfile",
-      });
       await mediaLibrary.saveToLibraryAsync(localUri);
       setShowSaveToast(true);
     } catch (error) {
@@ -505,16 +563,11 @@ export default function BuyeoCutScreen() {
         setShowShareUnsupportedToast(true);
         return;
       }
-      if (!collagePreviewRef.current) {
+      const localUri = await captureCollage();
+      if (!localUri) {
         setShowShareUnavailableToast(true);
         return;
       }
-
-      const localUri = await captureRef(collagePreviewRef.current, {
-        format: "jpg",
-        quality: 0.95,
-        result: "tmpfile",
-      });
       await sharing.shareAsync(localUri, { mimeType: "image/jpeg", dialogTitle: t.collageHeaderTitle });
     } catch (error) {
       console.error("[buyeo-cut] failed to share collage", error);
@@ -557,8 +610,12 @@ export default function BuyeoCutScreen() {
                   {selected.map((item, index) => (
                     <CollageSlot
                       key={item.id}
+                      id={item.id}
                       source={item.source}
                       index={index}
+                      isCapturing={isCapturing}
+                      committed={slotFrames[item.id]}
+                      onCommit={commitSlotFrame}
                       onGestureStateChange={setIsSlotGesturing}
                     />
                   ))}
