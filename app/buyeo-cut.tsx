@@ -72,6 +72,12 @@ const COLLAGE_FRAME_WIDTH = Math.round(PHOTO_TILE_WIDTH / 0.6404);
 // Height is computed explicitly (not left to an `aspectRatio` style prop) so
 // the frame box has one unambiguous fixed size on every platform.
 const COLLAGE_FRAME_HEIGHT = Math.round(COLLAGE_FRAME_WIDTH / COLLAGE_FRAME_RATIO);
+// captureRef renders the ~234dp on-screen preview as-is, which saves a small
+// blurry image. Ask it to rasterize at a much larger size (frame ratio kept)
+// so the saved/shared file is crisp — the selfies are hi-res and the frame
+// PNG is 887px wide natively, so 1080 clears both.
+const COLLAGE_EXPORT_WIDTH = 1080;
+const COLLAGE_EXPORT_HEIGHT = Math.round(COLLAGE_EXPORT_WIDTH * (COLLAGE_FRAME_HEIGHT / COLLAGE_FRAME_WIDTH));
 // Photo-window rectangles measured directly off the frame asset, as % of the
 // frame's own width/height — keeps the windows pixel-aligned to the frame's
 // artwork at any display size instead of guessing even thirds.
@@ -366,8 +372,10 @@ export default function BuyeoCutScreen() {
 
       const localUri = await captureRef(collagePreviewRef.current, {
         format: "jpg",
-        quality: 0.9,
+        quality: 0.95,
         result: "tmpfile",
+        width: COLLAGE_EXPORT_WIDTH,
+        height: COLLAGE_EXPORT_HEIGHT,
       });
       await mediaLibrary.saveToLibraryAsync(localUri);
       setShowSaveToast(true);
@@ -400,8 +408,10 @@ export default function BuyeoCutScreen() {
 
       const localUri = await captureRef(collagePreviewRef.current, {
         format: "jpg",
-        quality: 0.9,
+        quality: 0.95,
         result: "tmpfile",
+        width: COLLAGE_EXPORT_WIDTH,
+        height: COLLAGE_EXPORT_HEIGHT,
       });
       await sharing.shareAsync(localUri, { mimeType: "image/jpeg", dialogTitle: t.collageHeaderTitle });
     } catch (error) {
