@@ -1,6 +1,6 @@
 import { File, Paths } from "expo-file-system";
 
-import { apiGet, apiPost, refreshAuthHeaders, toApiUrl } from "@/lib/api/client";
+import { apiGet, apiPost, getAuthHeaders, toApiUrl } from "@/lib/api/client";
 
 export type CollageSummaryResponse = {
   collageId: number;
@@ -65,25 +65,18 @@ export function createCollage(selfiePhotoIds: number[], frameId?: number): Promi
 
 // /download and /file both respond with a raw binary image (no {isSuccess,...}
 // envelope, per Swagger — format: binary), so apiGet can't parse them. They're
-// written straight to a local cache file, which is what expo-sharing /
-// expo-media-library need anyway (neither accepts a remote URL).
-//
-// Uses fetch (not File.downloadFileAsync) because the latter doesn't forward
-// the Authorization header, so these auth-required endpoints came back 401.
+// downloaded straight to a local cache file instead, which is what
+// expo-sharing/expo-media-library need anyway (neither accepts a remote URL).
 // Swagger doesn't declare the image format; named .jpg to match this app's
-// other selfie/collage image handling, which is JPEG throughout.
+// other selfie/collage image handling (photo-save.tsx, selfies.ts), which is
+// JPEG throughout.
 async function downloadCollageBinary(collageId: number, endpoint: "download" | "file", filename: string): Promise<string> {
-  const headers = (await refreshAuthHeaders()) ?? {};
-  const response = await fetch(toApiUrl(`/api/collages/${collageId}/${endpoint}`), { headers });
-  if (!response.ok) {
-    throw new Error(`collage ${endpoint} download failed (${response.status})`);
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-
-  const file = new File(Paths.cache, filename);
-  if (file.exists) file.delete();
-  file.create();
-  file.write(bytes);
+  const headers = await getAuthHeaders();
+  const destination = new File(Paths.cache, filename);
+  const file = await File.downloadFileAsync(toApiUrl(`/api/collages/${collageId}/${endpoint}`), destination, {
+    headers,
+    idempotent: true,
+  });
   return file.uri;
 }
 

@@ -17,7 +17,7 @@ import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useHiddenAlbumPhotoIds } from "@/hooks/use-hidden-album-photos";
 import { useLanguage } from "@/hooks/use-language";
 import { toApiUrl } from "@/lib/api/client";
-import { createCollage, downloadCollageFile, getCollageFile, getFrames } from "@/lib/api/collage";
+import { getFrames } from "@/lib/api/collage";
 import { getSelfiePhotoOptions } from "@/lib/api/selfies";
 import { getSharingModule } from "@/lib/sharing";
 
@@ -346,34 +346,13 @@ export default function BuyeoCutScreen() {
     router.back();
   };
 
-  // Prefer the server-rendered collage (full quality, real JPEG from
-  // /api/collages) whenever every selected photo has a server id — which
-  // remote-sourced picks always do. Falls back to a react-native-view-shot
-  // capture of the on-screen preview when a local-only (unsynced) capture is
-  // in the mix, or if the server call fails.
-  const resolveCollageUri = async (endpoint: "download" | "file"): Promise<string> => {
-    const serverIds = selected.map((item) => item.serverSelfiePhotoId);
-    const allSynced = serverIds.every((id): id is number => id !== undefined);
-    console.log("[buyeo-cut][diag] serverIds", serverIds, "allSynced", allSynced, "frameId", selectedFrameId);
-    if (allSynced) {
-      try {
-        const created = await createCollage(serverIds as number[], selectedFrameId ?? undefined);
-        console.log("[buyeo-cut][diag] createCollage ok", created);
-        const uri =
-          endpoint === "download"
-            ? await downloadCollageFile(created.collageId)
-            : await getCollageFile(created.collageId);
-        console.log("[buyeo-cut][diag] downloaded server collage ->", uri);
-        return uri;
-      } catch (error) {
-        console.error("[buyeo-cut] server collage render failed, falling back to on-screen capture", error);
-      }
-    }
-    if (!collagePreviewRef.current) throw new Error("collage preview not mounted");
-    console.log("[buyeo-cut][diag] using captureRef fallback");
-    return captureRef(collagePreviewRef.current, { format: "jpg", quality: 0.95, result: "tmpfile" });
-  };
-
+  // Captures the on-screen collage directly (same react-native-view-shot
+  // approach as handleShare) instead of createCollage + downloadCollageFile's
+  // server round-trip — /selfie-photos requires a server-side "acquired"
+  // collection item that isn't wired up yet, so selected photos never have a
+  // real serverSelfiePhotoId to send. createCollage/downloadCollageFile are
+  // left in lib/api/collage.ts — swap back to them here for the higher-
+  // quality server-rendered original once acquisition is connected.
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -388,7 +367,16 @@ export default function BuyeoCutScreen() {
         setShowSaveErrorToast(true);
         return;
       }
-      const localUri = await resolveCollageUri("download");
+      if (!collagePreviewRef.current) {
+        setShowSaveErrorToast(true);
+        return;
+      }
+
+      const localUri = await captureRef(collagePreviewRef.current, {
+        format: "jpg",
+        quality: 0.95,
+        result: "tmpfile",
+      });
       await mediaLibrary.saveToLibraryAsync(localUri);
       setShowSaveToast(true);
     } catch (error) {
@@ -413,7 +401,16 @@ export default function BuyeoCutScreen() {
         setShowShareUnsupportedToast(true);
         return;
       }
-      const localUri = await resolveCollageUri("file");
+      if (!collagePreviewRef.current) {
+        setShowShareUnavailableToast(true);
+        return;
+      }
+
+      const localUri = await captureRef(collagePreviewRef.current, {
+        format: "jpg",
+        quality: 0.95,
+        result: "tmpfile",
+      });
       await sharing.shareAsync(localUri, { mimeType: "image/jpeg", dialogTitle: t.collageHeaderTitle });
     } catch (error) {
       console.error("[buyeo-cut] failed to share collage", error);
