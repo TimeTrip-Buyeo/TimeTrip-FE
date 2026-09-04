@@ -100,9 +100,10 @@ const collageSlotCanvasHeight = (index: number) =>
 const collageSlotCanvasWidth = (index: number) =>
   (parseFloat(COLLAGE_SLOT_RECTS[index].width) / 100) * COLLAGE_EXPORT_WIDTH;
 const COLLAGE_SLOT_MAX_ZOOM = 4;
-// Floored at 1x: below it the photo can't fill the window and the slot's grey
-// would bake into the saved image. Reframing is zoom-in + pan, not shrink.
-const COLLAGE_SLOT_MIN_ZOOM = 1;
+// Below 1x the photo no longer fills the window; the slot background (now white)
+// shows through and bakes into the saved image. Allowed so a whole photo can be
+// fit in, but floored so it can't shrink to nothing.
+const COLLAGE_SLOT_MIN_ZOOM = 0.65;
 
 type SlotFrame = { tx: number; ty: number; scale: number };
 
@@ -1328,7 +1329,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f3f4f6",
+    // White (not grey): if a photo is zoomed below 1x this backs the gap and
+    // bakes into the saved image, so it should read as intentional matting.
+    backgroundColor: "#fff",
   },
   frameSlotImage: {
     width: "100%",
