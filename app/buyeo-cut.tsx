@@ -670,9 +670,12 @@ function FilterSheet({ insetsBottom, title, closeLabel, allLabel, activeFilter, 
   const sheetTranslateY = useRef(new Animated.Value(80)).current;
 
   useEffect(() => {
+    // JS driver, not native: a native-driven entrance animation leaves
+    // Android's touch dispatch out of sync until the next tap, so the first
+    // press on a filter option does nothing and it takes two taps.
     Animated.parallel([
-      Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.spring(sheetTranslateY, { toValue: 0, useNativeDriver: true, damping: 18, mass: 0.8 }),
+      Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: false }),
+      Animated.spring(sheetTranslateY, { toValue: 0, useNativeDriver: false, damping: 18, mass: 0.8 }),
     ]).start();
   }, [backdropOpacity, sheetTranslateY]);
 
