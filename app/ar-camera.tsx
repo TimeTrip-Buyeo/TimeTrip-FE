@@ -13,7 +13,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type ImageSourcePropType,
 } from "react-native";
@@ -51,28 +50,8 @@ const AR_TIMESLIP_TEST_BYPASS_RADIUS_CHECK = true;
 // screen entry (see lib/geo.ts for the enter/exit hysteresis values).
 type GeoState = "searching" | "loading" | "ready" | "empty";
 
-// Overlay/guide frame height as a fraction of window height, and its width
-// cap as a fraction of window width — keeps the frame proportional to the
-// device screen instead of a fixed pixel size (see app/person-camera.tsx's
-// PERSON_OVERLAY_HEIGHT_RATIO for the same pattern). The frame's own shape
-// (317:360) matches the previous hardcoded box; the overlay image always
-// fills it edge-to-edge via contentFit="cover", cropping as needed.
-const AR_OVERLAY_HEIGHT_RATIO = 0.5;
-const AR_OVERLAY_MAX_WIDTH_RATIO = 0.85;
-const AR_OVERLAY_FRAME_ASPECT_RATIO = 317 / 360;
-
 function resolveSpotTitle(raw: string | string[] | undefined) {
   return resolveSingleParam(raw) || null;
-}
-
-// Fits a box of the given aspect ratio (width/height) inside maxWidth x
-// maxHeight, preserving the ratio — height-first, falling back to
-// width-first when the height-first box would overflow maxWidth.
-function fitOverlaySize(aspectRatio: number, maxWidth: number, maxHeight: number) {
-  const height = maxHeight;
-  const width = height * aspectRatio;
-  if (width <= maxWidth) return { width, height };
-  return { width: maxWidth, height: maxWidth / aspectRatio };
 }
 
 function AudioGuideButton({ guide, onFinished }: { guide: StoryAudioGuide; onFinished: () => void }) {
@@ -148,8 +127,6 @@ export default function ArCameraScreen() {
   const [retryToken, setRetryToken] = useState(0);
   const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
-
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   // Keyed by `${spotId}:${month}:${locale}` so a SEARCHING→READY round-trip,
   // or switching back to a previously-viewed language, reuses the cached
@@ -356,16 +333,6 @@ export default function ArCameraScreen() {
     ? { uri: acquireImageUrl }
     : require("@/assets/images/icon.png");
 
-  const overlayMaxWidth = windowWidth * AR_OVERLAY_MAX_WIDTH_RATIO;
-  const overlayMaxHeight = windowHeight * AR_OVERLAY_HEIGHT_RATIO;
-  // Same frame size for the real overlay image and every placeholder — the
-  // image fills it completely via contentFit="cover" regardless of its own
-  // aspect ratio, so there's no need to size the frame around the image.
-  const frameSize = useMemo(
-    () => fitOverlaySize(AR_OVERLAY_FRAME_ASPECT_RATIO, overlayMaxWidth, overlayMaxHeight),
-    [overlayMaxWidth, overlayMaxHeight],
-  );
-
   return (
     <View style={styles.container}>
       {permission?.granted ? (
@@ -406,29 +373,29 @@ export default function ArCameraScreen() {
           {geoState === "ready" && timeslip && timeslip.overlayImageUrl ? (
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
-              style={[styles.overlayImage, frameSize]}
+              style={styles.overlayImage}
               contentFit="cover"
             />
           ) : geoState === "ready" && timeslip ? (
-            <View style={[styles.guideBox, frameSize]}>
+            <View style={styles.guideBox}>
               <FontAwesome5 name="image" size={52} color="rgba(255,255,255,0.3)" solid />
               <View style={styles.guideCaption}>
                 <Text style={styles.guideCaptionText}>{timeslip.guideText}</Text>
               </View>
             </View>
           ) : geoState === "loading" ? (
-            <View style={[styles.guideBox, frameSize]}>
+            <View style={styles.guideBox}>
               <ActivityIndicator color="rgba(255,255,255,0.85)" />
             </View>
           ) : geoState === "empty" ? (
-            <View style={[styles.guideBox, frameSize]}>
+            <View style={styles.guideBox}>
               <FontAwesome5 name="calendar-times" size={52} color="rgba(255,255,255,0.3)" solid />
               <View style={styles.guideCaption}>
                 <Text style={styles.guideCaptionText}>{t.emptyStateTitle}</Text>
               </View>
             </View>
           ) : (
-            <View style={[styles.guideBox, frameSize]}>
+            <View style={styles.guideBox}>
               <FontAwesome5 name="expand" size={60} color="rgba(255,255,255,0.3)" solid />
               <View style={styles.guideCaption}>
                 <Text style={styles.guideCaptionText}>{t.searchingHintText}</Text>
@@ -675,10 +642,9 @@ const styles = StyleSheet.create({
   },
   guideBoxWrapper: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   guideBox: {
+    flex: 1,
     borderRadius: 8,
     borderWidth: 2,
     borderStyle: "dashed",
@@ -688,6 +654,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   overlayImage: {
+    flex: 1,
     opacity: 0.78,
   },
   guideCaption: {
@@ -701,7 +668,6 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   imageDisclosureText: {
-    width: 317,
     marginTop: 8,
     textAlign: "right",
     fontSize: 9,
