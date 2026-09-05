@@ -8,7 +8,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image as RNImage,
   LayoutAnimation,
   Linking,
   Pressable,
@@ -52,15 +51,15 @@ const AR_TIMESLIP_TEST_BYPASS_RADIUS_CHECK = true;
 // screen entry (see lib/geo.ts for the enter/exit hysteresis values).
 type GeoState = "searching" | "loading" | "ready" | "empty";
 
-// Overlay/guide box height as a fraction of window height, and its width cap
-// as a fraction of window width — keeps the box proportional to the device
-// screen instead of a fixed pixel size (see app/person-camera.tsx's
-// PERSON_OVERLAY_HEIGHT_RATIO for the same pattern).
+// Overlay/guide frame height as a fraction of window height, and its width
+// cap as a fraction of window width — keeps the frame proportional to the
+// device screen instead of a fixed pixel size (see app/person-camera.tsx's
+// PERSON_OVERLAY_HEIGHT_RATIO for the same pattern). The frame's own shape
+// (317:360) matches the previous hardcoded box; the overlay image always
+// fills it edge-to-edge via contentFit="cover", cropping as needed.
 const AR_OVERLAY_HEIGHT_RATIO = 0.5;
 const AR_OVERLAY_MAX_WIDTH_RATIO = 0.85;
-// Matches the previous hardcoded 317x360 box; used before the real overlay
-// image's aspect ratio has been fetched, and for the no-image placeholders.
-const DEFAULT_OVERLAY_ASPECT_RATIO = 317 / 360;
+const AR_OVERLAY_FRAME_ASPECT_RATIO = 317 / 360;
 
 function resolveSpotTitle(raw: string | string[] | undefined) {
   return resolveSingleParam(raw) || null;
@@ -149,7 +148,6 @@ export default function ArCameraScreen() {
   const [retryToken, setRetryToken] = useState(0);
   const [activeAudioGuide, setActiveAudioGuide] = useState<StoryAudioGuide | null>(null);
   const [isCollectionItemAcquired, setIsCollectionItemAcquired] = useState(false);
-  const [overlayAspectRatio, setOverlayAspectRatio] = useState(DEFAULT_OVERLAY_ASPECT_RATIO);
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
@@ -285,28 +283,6 @@ export default function ArCameraScreen() {
     setIsCollectionItemAcquired(timeslip.collectionItem.isAcquired);
   }, [geoState, timeslip]);
 
-  // The API doesn't return the overlay image's natural dimensions, so its
-  // real aspect ratio is read from the image itself — reset to the default
-  // per URL so a stale ratio from a previous overlay never gets applied to
-  // a new one while this lookup is in flight.
-  useEffect(() => {
-    const uri = timeslip?.overlayImageUrl;
-    if (!uri) return;
-
-    let isActive = true;
-    setOverlayAspectRatio(DEFAULT_OVERLAY_ASPECT_RATIO);
-    RNImage.getSize(
-      uri,
-      (width, height) => {
-        if (isActive && width > 0 && height > 0) setOverlayAspectRatio(width / height);
-      },
-      (error) => console.error("[ar-camera] overlay image size lookup failed", error),
-    );
-    return () => {
-      isActive = false;
-    };
-  }, [timeslip?.overlayImageUrl]);
-
   const mapT = mapScreenText[locale];
   const t = arCameraText[locale];
   const currentLocaleMeta = LOCALES.find((item) => item.code === locale)!;
@@ -382,15 +358,12 @@ export default function ArCameraScreen() {
 
   const overlayMaxWidth = windowWidth * AR_OVERLAY_MAX_WIDTH_RATIO;
   const overlayMaxHeight = windowHeight * AR_OVERLAY_HEIGHT_RATIO;
-  // Placeholders (loading/empty/no-overlay states) always use the default
-  // ratio so they don't resize when overlayAspectRatio resets/resolves.
-  const placeholderSize = useMemo(
-    () => fitOverlaySize(DEFAULT_OVERLAY_ASPECT_RATIO, overlayMaxWidth, overlayMaxHeight),
+  // Same frame size for the real overlay image and every placeholder — the
+  // image fills it completely via contentFit="cover" regardless of its own
+  // aspect ratio, so there's no need to size the frame around the image.
+  const frameSize = useMemo(
+    () => fitOverlaySize(AR_OVERLAY_FRAME_ASPECT_RATIO, overlayMaxWidth, overlayMaxHeight),
     [overlayMaxWidth, overlayMaxHeight],
-  );
-  const overlaySize = useMemo(
-    () => fitOverlaySize(overlayAspectRatio, overlayMaxWidth, overlayMaxHeight),
-    [overlayAspectRatio, overlayMaxWidth, overlayMaxHeight],
   );
 
   return (
@@ -433,29 +406,29 @@ export default function ArCameraScreen() {
           {geoState === "ready" && timeslip && timeslip.overlayImageUrl ? (
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
-              style={[styles.overlayImage, overlaySize]}
-              contentFit="contain"
+              style={[styles.overlayImage, frameSize]}
+              contentFit="cover"
             />
           ) : geoState === "ready" && timeslip ? (
-            <View style={[styles.guideBox, placeholderSize]}>
+            <View style={[styles.guideBox, frameSize]}>
               <FontAwesome5 name="image" size={52} color="rgba(255,255,255,0.3)" solid />
               <View style={styles.guideCaption}>
                 <Text style={styles.guideCaptionText}>{timeslip.guideText}</Text>
               </View>
             </View>
           ) : geoState === "loading" ? (
-            <View style={[styles.guideBox, placeholderSize]}>
+            <View style={[styles.guideBox, frameSize]}>
               <ActivityIndicator color="rgba(255,255,255,0.85)" />
             </View>
           ) : geoState === "empty" ? (
-            <View style={[styles.guideBox, placeholderSize]}>
+            <View style={[styles.guideBox, frameSize]}>
               <FontAwesome5 name="calendar-times" size={52} color="rgba(255,255,255,0.3)" solid />
               <View style={styles.guideCaption}>
                 <Text style={styles.guideCaptionText}>{t.emptyStateTitle}</Text>
               </View>
             </View>
           ) : (
-            <View style={[styles.guideBox, placeholderSize]}>
+            <View style={[styles.guideBox, frameSize]}>
               <FontAwesome5 name="expand" size={60} color="rgba(255,255,255,0.3)" solid />
               <View style={styles.guideCaption}>
                 <Text style={styles.guideCaptionText}>{t.searchingHintText}</Text>
