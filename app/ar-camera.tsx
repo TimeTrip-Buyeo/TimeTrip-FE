@@ -397,7 +397,7 @@ export default function ArCameraScreen() {
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
               style={styles.overlayImage}
-              contentFit="contain"
+              contentFit="cover"
             />
           ) : geoState === "ready" && timeslip ? (
             <View style={styles.guideBox}>
@@ -699,12 +699,9 @@ const styles = StyleSheet.create({
   },
   guideBoxWrapper: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   guideBox: {
-    width: 317,
-    height: 360,
+    flex: 1,
     borderRadius: 8,
     borderWidth: 2,
     borderStyle: "dashed",
@@ -714,8 +711,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   overlayImage: {
-    width: 317,
-    height: 360,
+    flex: 1,
     opacity: 0.78,
   },
   guideCaption: {
@@ -729,7 +725,6 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   imageDisclosureText: {
-    width: 317,
     marginTop: 8,
     textAlign: "right",
     fontSize: 9,
