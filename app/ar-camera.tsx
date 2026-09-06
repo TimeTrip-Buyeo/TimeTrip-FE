@@ -567,6 +567,12 @@ export default function ArCameraScreen() {
   );
 }
 
+// The sheet's rounded top corners cut into its own rect, exposing whatever
+// sits behind it there. Extending the overlay frame this far past
+// guideBoxWrapper's bottom edge (behind the sheet) means that cutout reveals
+// more of the overlay image instead of the raw camera feed underneath.
+const SHEET_TOP_RADIUS = 32;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -644,7 +650,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   guideBox: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: -SHEET_TOP_RADIUS,
     borderRadius: 8,
     borderWidth: 2,
     borderStyle: "dashed",
@@ -654,7 +664,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   overlayImage: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: -SHEET_TOP_RADIUS,
     opacity: 0.78,
   },
   guideCaption: {
@@ -684,8 +698,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: "#fdfcf8",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderTopLeftRadius: SHEET_TOP_RADIUS,
+    borderTopRightRadius: SHEET_TOP_RADIUS,
     paddingHorizontal: 24,
     paddingTop: 8,
     gap: 16,
