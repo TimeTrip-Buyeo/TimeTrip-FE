@@ -397,7 +397,7 @@ export default function ArCameraScreen() {
             <Image
               source={{ uri: timeslip.overlayImageUrl }}
               style={styles.overlayImage}
-              contentFit="contain"
+              contentFit="cover"
             />
           ) : geoState === "ready" && timeslip ? (
             <View style={styles.guideBox}>
@@ -594,6 +594,12 @@ export default function ArCameraScreen() {
   );
 }
 
+// The sheet's rounded top corners cut into its own rect, exposing whatever
+// sits behind it there. Extending the overlay frame this far past
+// guideBoxWrapper's bottom edge (behind the sheet) means that cutout reveals
+// more of the overlay image instead of the raw camera feed underneath.
+const SHEET_TOP_RADIUS = 32;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -699,12 +705,13 @@ const styles = StyleSheet.create({
   },
   guideBoxWrapper: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   guideBox: {
-    width: 317,
-    height: 360,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: -SHEET_TOP_RADIUS,
     borderRadius: 8,
     borderWidth: 2,
     borderStyle: "dashed",
@@ -714,8 +721,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   overlayImage: {
-    width: 317,
-    height: 360,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: -SHEET_TOP_RADIUS,
     opacity: 0.78,
   },
   guideCaption: {
@@ -728,9 +738,13 @@ const styles = StyleSheet.create({
     fontSize: 11.3,
     color: "#fff",
   },
+  // Overlaid on top of the overlay image itself (bottom-right corner)
+  // instead of taking its own row below it, so the image can fill the
+  // guideBoxWrapper edge-to-edge with no gap left for this caption.
   imageDisclosureText: {
-    width: 317,
-    marginTop: 8,
+    position: "absolute",
+    right: 12,
+    bottom: 8,
     textAlign: "right",
     fontSize: 9,
     fontWeight: "600",
@@ -741,8 +755,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: "#fdfcf8",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderTopLeftRadius: SHEET_TOP_RADIUS,
+    borderTopRightRadius: SHEET_TOP_RADIUS,
     paddingHorizontal: 24,
     paddingTop: 8,
     gap: 16,
