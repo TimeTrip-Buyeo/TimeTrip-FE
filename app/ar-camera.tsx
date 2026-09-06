@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   guideBox: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 8,
     borderWidth: 2,
     borderStyle: "dashed",
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   overlayImage: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     opacity: 0.78,
   },
   guideCaption: {
@@ -667,8 +667,13 @@ const styles = StyleSheet.create({
     fontSize: 11.3,
     color: "#fff",
   },
+  // Overlaid on top of the overlay image itself (bottom-right corner)
+  // instead of taking its own row below it, so the image can fill the
+  // guideBoxWrapper edge-to-edge with no gap left for this caption.
   imageDisclosureText: {
-    marginTop: 8,
+    position: "absolute",
+    right: 12,
+    bottom: 8,
     textAlign: "right",
     fontSize: 9,
     fontWeight: "600",
