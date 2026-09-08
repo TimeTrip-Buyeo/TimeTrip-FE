@@ -63,21 +63,37 @@ async function cropToViewfinder(
   photo: { uri: string; width?: number; height?: number },
   frame: { screenWidth: number; screenHeight: number; bandTop: number; bandHeight: number },
 ): Promise<string> {
-  const { uri, width, height } = photo;
+  const { uri, width: rawWidth, height: rawHeight } = photo;
   const { screenWidth, screenHeight, bandTop, bandHeight } = frame;
-  if (!width || !height || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
+  if (!rawWidth || !rawHeight || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
 
-  // The preview scaled the sensor image to the screen height (its taller axis),
-  // cropping left/right — so full image height maps to full screen height.
-  // NOTE: this assumes a portrait screen taller than the sensor is wide (true
-  // for phones in portrait). On a tablet or a screen wider than the sensor
-  // aspect, the preview would scale to WIDTH instead and this crop would be
-  // off — revisit height/screenHeight here if targeting tablets.
-  const pxPerScreenUnit = height / screenHeight;
-  const cropWidth = Math.min(width, Math.round(screenWidth * pxPerScreenUnit));
-  const cropHeight = Math.min(height, Math.round(bandHeight * pxPerScreenUnit));
-  const originX = Math.round((width - cropWidth) / 2);
-  const originY = Math.round(Math.min(Math.max(bandTop * pxPerScreenUnit, 0), height - cropHeight));
+  // takePictureAsync sometimes reports the sensor-native (landscape) dimensions
+  // even though the saved pixels are upright portrait — using those as-is made
+  // the crop grab a too-small centre region, i.e. the saved photo looked zoomed
+  // in vs. what was framed. The camera is used in portrait, so treat the longer
+  // axis as the height.
+  const width = Math.min(rawWidth, rawHeight);
+  const height = Math.max(rawWidth, rawHeight);
+
+  // <CameraView> renders the preview with `cover`: the sensor frame is scaled by
+  // whichever factor makes it fill BOTH screen axes, then centre-cropped. Mirror
+  // that exactly — same factor on both axes — then map the on-screen viewfinder
+  // band back into photo pixels. Using Math.max covers the fit-to-width case too
+  // (wider sensor / tablet), where the old fit-to-height assumption was off.
+  const coverScale = Math.max(screenWidth / width, screenHeight / height); // screen units per photo px
+  const photoPxPerScreenUnit = 1 / coverScale;
+  // The slice of the photo that's actually visible on screen (centred).
+  const visibleWidthPx = Math.min(width, screenWidth * photoPxPerScreenUnit);
+  const visibleHeightPx = Math.min(height, screenHeight * photoPxPerScreenUnit);
+  const visibleOriginXPx = (width - visibleWidthPx) / 2;
+  const visibleOriginYPx = (height - visibleHeightPx) / 2;
+  // The viewfinder band spans the full screen width, only clipped vertically.
+  const cropWidth = Math.round(visibleWidthPx);
+  const cropHeight = Math.round(Math.min(visibleHeightPx, bandHeight * photoPxPerScreenUnit));
+  const originX = Math.round(Math.min(Math.max(visibleOriginXPx, 0), width - cropWidth));
+  const originY = Math.round(
+    Math.min(Math.max(visibleOriginYPx + bandTop * photoPxPerScreenUnit, 0), height - cropHeight),
+  );
 
   try {
     const image = await ImageManipulator.manipulate(uri)
