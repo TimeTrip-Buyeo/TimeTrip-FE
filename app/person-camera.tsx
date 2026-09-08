@@ -311,6 +311,9 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
+          // Shape of the crop cropToViewfinder just produced — the save screen
+          // sizes its frame to this so the photo shows exactly as framed here.
+          viewfinderAspectRatio: String(windowWidth / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
