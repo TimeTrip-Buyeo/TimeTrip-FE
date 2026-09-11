@@ -18,9 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
-import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { PERSON_POSES } from "@/constants/poses";
+import { PERSON_POSES, remotePoseLabel } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
@@ -43,6 +42,10 @@ const DEFAULT_REMOTE_POSE_ASPECT_RATIO = 0.55;
 type RuntimePersonPose = {
   id: string;
   apiPoseId?: number;
+  // Set only for remote (server-driven) poses — lets a saved photo's caption
+  // be re-translated later from just this number + the raw Korean name,
+  // without needing to refetch the pose list. See resolveCapturedPoseLabel.
+  poseNumber?: number;
   label: Record<Locale, string>;
   image: ImageSourcePropType;
   imageUrl?: string;
@@ -63,21 +66,37 @@ async function cropToViewfinder(
   photo: { uri: string; width?: number; height?: number },
   frame: { screenWidth: number; screenHeight: number; bandTop: number; bandHeight: number },
 ): Promise<string> {
-  const { uri, width, height } = photo;
+  const { uri, width: rawWidth, height: rawHeight } = photo;
   const { screenWidth, screenHeight, bandTop, bandHeight } = frame;
-  if (!width || !height || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
+  if (!rawWidth || !rawHeight || screenWidth <= 0 || screenHeight <= 0 || bandHeight <= 0) return uri;
 
-  // The preview scaled the sensor image to the screen height (its taller axis),
-  // cropping left/right — so full image height maps to full screen height.
-  // NOTE: this assumes a portrait screen taller than the sensor is wide (true
-  // for phones in portrait). On a tablet or a screen wider than the sensor
-  // aspect, the preview would scale to WIDTH instead and this crop would be
-  // off — revisit height/screenHeight here if targeting tablets.
-  const pxPerScreenUnit = height / screenHeight;
-  const cropWidth = Math.min(width, Math.round(screenWidth * pxPerScreenUnit));
-  const cropHeight = Math.min(height, Math.round(bandHeight * pxPerScreenUnit));
-  const originX = Math.round((width - cropWidth) / 2);
-  const originY = Math.round(Math.min(Math.max(bandTop * pxPerScreenUnit, 0), height - cropHeight));
+  // takePictureAsync sometimes reports the sensor-native (landscape) dimensions
+  // even though the saved pixels are upright portrait — using those as-is made
+  // the crop grab a too-small centre region, i.e. the saved photo looked zoomed
+  // in vs. what was framed. The camera is used in portrait, so treat the longer
+  // axis as the height.
+  const width = Math.min(rawWidth, rawHeight);
+  const height = Math.max(rawWidth, rawHeight);
+
+  // <CameraView> renders the preview with `cover`: the sensor frame is scaled by
+  // whichever factor makes it fill BOTH screen axes, then centre-cropped. Mirror
+  // that exactly — same factor on both axes — then map the on-screen viewfinder
+  // band back into photo pixels. Using Math.max covers the fit-to-width case too
+  // (wider sensor / tablet), where the old fit-to-height assumption was off.
+  const coverScale = Math.max(screenWidth / width, screenHeight / height); // screen units per photo px
+  const photoPxPerScreenUnit = 1 / coverScale;
+  // The slice of the photo that's actually visible on screen (centred).
+  const visibleWidthPx = Math.min(width, screenWidth * photoPxPerScreenUnit);
+  const visibleHeightPx = Math.min(height, screenHeight * photoPxPerScreenUnit);
+  const visibleOriginXPx = (width - visibleWidthPx) / 2;
+  const visibleOriginYPx = (height - visibleHeightPx) / 2;
+  // The viewfinder band spans the full screen width, only clipped vertically.
+  const cropWidth = Math.round(visibleWidthPx);
+  const cropHeight = Math.round(Math.min(visibleHeightPx, bandHeight * photoPxPerScreenUnit));
+  const originX = Math.round(Math.min(Math.max(visibleOriginXPx, 0), width - cropWidth));
+  const originY = Math.round(
+    Math.min(Math.max(visibleOriginYPx + bandTop * photoPxPerScreenUnit, 0), height - cropHeight),
+  );
 
   try {
     const image = await ImageManipulator.manipulate(uri)
@@ -102,16 +121,25 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
 
     const apiPoseId = getPoseApiId(pose);
     const id = String(apiPoseId ?? `remote-${index}`);
-    // The backend names these "프레임1", "프레임2"… but they're poses, not
-    // frames — relabel so the picker and the saved caption read "포즈".
-    const label = (firstText(pose.name)?.replace(/프레임/g, "포즈") ?? `포즈 ${index + 1}`).trim();
+    // The backend only ever names these in Korean ("프레임1", "프레임2"…) —
+    // pull out the pose number and rebuild the label per-locale via
+    // remotePoseLabel instead of using the raw backend text, so the picker
+    // reads in whatever language is active.
+    const poseNumber = Number(firstText(pose.name)?.match(/\d+/)?.[0]) || index + 1;
+    const label: Record<Locale, string> = {
+      ko: remotePoseLabel(poseNumber, "ko"),
+      en: remotePoseLabel(poseNumber, "en"),
+      zh: remotePoseLabel(poseNumber, "zh"),
+      ja: remotePoseLabel(poseNumber, "ja"),
+    };
     const resolvedImageUrl = toApiUrl(imageUrl);
 
     return [
       {
         id,
         apiPoseId,
-        label: { ko: label, en: label, zh: label, ja: label },
+        poseNumber,
+        label,
         image: { uri: resolvedImageUrl },
         imageUrl: resolvedImageUrl,
         aspectRatio: aspectRatios[id] ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO,
@@ -140,7 +168,6 @@ export default function PersonCameraScreen() {
   const mapT = mapScreenText[locale];
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
-  const entry = ALBUM_ENTRIES[locationId];
   const fallbackPoses = PERSON_POSES[locationId] ?? [];
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -307,10 +334,17 @@ export default function PersonCameraScreen() {
           locationId,
           poseId: selectedPose?.apiPoseId !== undefined ? String(selectedPose.apiPoseId) : selectedPose?.id ?? "",
           poseLabel: selectedPose?.label[locale] ?? "",
+          // Carried through so the album can re-translate this caption later
+          // if the app language changes after the photo was taken, instead
+          // of the poseLabel string above staying frozen in today's locale.
+          ...(selectedPose?.poseNumber !== undefined ? { poseNumber: String(selectedPose.poseNumber) } : {}),
           ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
+          // Shape of the crop cropToViewfinder just produced — the save screen
+          // sizes its frame to this so the photo shows exactly as framed here.
+          viewfinderAspectRatio: String(windowWidth / viewfinderHeight),
           ...(resolveSingleParam(params.spotId) ? { spotId: resolveSingleParam(params.spotId)! } : {}),
           ...(resolveSingleParam(params.storyId) ? { storyId: resolveSingleParam(params.storyId)! } : {}),
           ...(resolveSingleParam(params.collectionItemId)
@@ -435,10 +469,6 @@ export default function PersonCameraScreen() {
         </Pressable>
         <View style={styles.headerTextColumn}>
           <Text style={styles.headerTitle}>{mapT.pins[locationId]}</Text>
-          <Text style={styles.headerSubtitle}>
-            {t.locationSubtitlePrefix}
-            {entry?.locationCaption[locale] ?? mapT.pins[locationId]}
-          </Text>
         </View>
         <View style={styles.timerButtonWrapper}>
           <Pressable

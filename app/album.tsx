@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,6 +10,7 @@ import { LangPill } from "@/components/lang-pill";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
+import { resolveCapturedPoseLabel } from "@/constants/poses";
 import { albumScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
@@ -137,27 +138,36 @@ export default function AlbumScreen() {
 // hidden ones), falling back to the server-provided thumbnailUrl while that
 // loads or if the album has none. Locked albums never fetch — their
 // collectionItemId isn't unlocked yet — so they keep the plain thumbnail.
-function AlbumCardCover({ album }: { album: AlbumResponse }) {
+function AlbumCardCover({ album, refreshToken }: { album: AlbumResponse; refreshToken: number }) {
   const { locale } = useLanguage();
   const t = albumScreenText[locale];
   const hiddenIds = useHiddenAlbumPhotoIds();
   const { data } = useApiResource(
     () => (album.isLocked ? Promise.resolve(null) : getAlbumPhotos(album.collectionItemId, locale)),
-    [album.collectionItemId, album.isLocked, locale],
+    [album.collectionItemId, album.isLocked, locale, refreshToken],
     "[album] failed to load album cover",
+    { keepPreviousData: true },
   );
-  const firstPhotoUrl = data?.photos.find((photo) => !hiddenIds.has(photo.selfiePhotoId))?.photoUrl;
+  const visiblePhotos = data?.photos.filter((photo) => !hiddenIds.has(photo.selfiePhotoId));
+  const firstPhotoUrl = visiblePhotos?.[0]?.photoUrl;
   const coverUri = firstPhotoUrl ?? album.thumbnailUrl ?? undefined;
+  // The real count is the actual photo list (same one the album detail grid
+  // shows) minus locally-deleted photos — NOT album.photoCount, which the
+  // /api/albums list can report stale/inflated. Locked albums can't fetch the
+  // list, so they fall back to the server number.
+  const photoCount = visiblePhotos ? visiblePhotos.length : album.isLocked ? album.photoCount : null;
 
   return (
     <View style={styles.cardThumb}>
       {!!coverUri && <Image source={{ uri: coverUri }} style={styles.cardThumbImage} resizeMode="cover" />}
-      <View style={styles.cardPhotoCountBadge}>
-        <Text style={styles.cardPhotoCountText}>
-          {album.photoCount}
-          {t.photoCountSuffix}
-        </Text>
-      </View>
+      {photoCount !== null && (
+        <View style={styles.cardPhotoCountBadge}>
+          <Text style={styles.cardPhotoCountText}>
+            {photoCount}
+            {t.photoCountSuffix}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -228,10 +238,19 @@ function AlbumList() {
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
   const { photosByLocation } = useCapturedPhotos();
+  // Bumped every time this screen regains focus, so returning from a capture /
+  // delete re-pulls album counts and covers instead of showing stale ones.
+  const [refreshToken, setRefreshToken] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshToken((token) => token + 1);
+    }, []),
+  );
   const { data: albums, loadError } = useApiResource(
     () => getAlbums(locale).then((response) => response.albums),
-    [locale],
+    [locale, refreshToken],
     "[album] failed to load albums",
+    { keepPreviousData: true },
   );
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -286,7 +305,7 @@ function AlbumList() {
         ) : (
           <View style={styles.list}>
             {displayedAlbums.map((album) => {
-              const thumb = <AlbumCardCover album={album} />;
+              const thumb = <AlbumCardCover album={album} refreshToken={refreshToken} />;
               const textColumn = <AlbumCardText album={album} />;
 
               // Locked albums have no unlocked content behind them yet — rendered as a
@@ -672,6 +691,24 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
             // resurrected it. Treat it as non-deletable, same as isRemote.
             const isSynced = !isRemote && (captured as CapturedPhoto).serverSelfiePhotoId !== undefined;
             const canDelete = !isRemote && !isSynced;
+            // Only local captures carry pose info (the server doesn't return
+            // which pose was used) — combined with the character's name so
+            // the grid caption reads "법왕 · 포즈 1", matching the viewer and
+            // the photo-save screen right after taking the photo.
+            const localCaptured = !isRemote ? (captured as CapturedPhoto) : null;
+            const cardPoseCaption = localCaptured
+              ? resolveCapturedPoseLabel(
+                  locationId,
+                  localCaptured.poseId,
+                  localCaptured.poseNumber,
+                  locale,
+                  localCaptured.poseLabel,
+                )
+              : undefined;
+            const cardLabel =
+              captured.collectionItemName && cardPoseCaption
+                ? `${captured.collectionItemName} · ${cardPoseCaption}`
+                : cardPoseCaption || captured.collectionItemName;
             return (
               <Pressable
                 key={captured.id}
@@ -686,6 +723,13 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
                   style={styles.photoImage}
                   resizeMode="cover"
                 />
+                {cardLabel && (
+                  <View style={styles.gridCaptionPill}>
+                    <Text style={styles.gridCaptionText} numberOfLines={1}>
+                      {cardLabel}
+                    </Text>
+                  </View>
+                )}
                 {isEditMode && canDelete && (
                   <View style={styles.deleteBadge}>
                     <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
@@ -724,7 +768,17 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
   const buyeoCutCollectionItemId = captured?.collectionItemId ?? remotePhoto?.collectionItemId;
   const collectionItemName = captured?.collectionItemName ?? remotePhoto?.collectionItemName;
-  const displayLabel = collectionItemName ?? captured?.poseLabel;
+  // Pose caption ("포즈 1" etc.), re-derived for the *current* locale instead
+  // of trusting the plain string baked in at capture time, so switching
+  // languages after the photo was taken re-translates it too. Combined with
+  // the collected character's name (when there is one) so this reads
+  // "법왕 · 포즈 1", not just the character name with no indication of which
+  // pose was used.
+  const poseCaption = captured
+    ? resolveCapturedPoseLabel(locationId, captured.poseId, captured.poseNumber, locale, captured.poseLabel)
+    : undefined;
+  const displayLabel =
+    collectionItemName && poseCaption ? `${collectionItemName} · ${poseCaption}` : poseCaption || collectionItemName;
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -1163,6 +1217,22 @@ const styles = StyleSheet.create({
   photoImage: {
     width: "100%",
     height: "100%",
+  },
+  gridCaptionPill: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: 8,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  gridCaptionText: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#fdfcf8",
+    textAlign: "center",
   },
   // Photo viewer (Figma "사진 개별 선택시", node 0:1630)
   viewerHeader: {
