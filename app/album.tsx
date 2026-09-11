@@ -1,6 +1,6 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -137,27 +137,36 @@ export default function AlbumScreen() {
 // hidden ones), falling back to the server-provided thumbnailUrl while that
 // loads or if the album has none. Locked albums never fetch — their
 // collectionItemId isn't unlocked yet — so they keep the plain thumbnail.
-function AlbumCardCover({ album }: { album: AlbumResponse }) {
+function AlbumCardCover({ album, refreshToken }: { album: AlbumResponse; refreshToken: number }) {
   const { locale } = useLanguage();
   const t = albumScreenText[locale];
   const hiddenIds = useHiddenAlbumPhotoIds();
   const { data } = useApiResource(
     () => (album.isLocked ? Promise.resolve(null) : getAlbumPhotos(album.collectionItemId, locale)),
-    [album.collectionItemId, album.isLocked, locale],
+    [album.collectionItemId, album.isLocked, locale, refreshToken],
     "[album] failed to load album cover",
+    { keepPreviousData: true },
   );
-  const firstPhotoUrl = data?.photos.find((photo) => !hiddenIds.has(photo.selfiePhotoId))?.photoUrl;
+  const visiblePhotos = data?.photos.filter((photo) => !hiddenIds.has(photo.selfiePhotoId));
+  const firstPhotoUrl = visiblePhotos?.[0]?.photoUrl;
   const coverUri = firstPhotoUrl ?? album.thumbnailUrl ?? undefined;
+  // The real count is the actual photo list (same one the album detail grid
+  // shows) minus locally-deleted photos — NOT album.photoCount, which the
+  // /api/albums list can report stale/inflated. Locked albums can't fetch the
+  // list, so they fall back to the server number.
+  const photoCount = visiblePhotos ? visiblePhotos.length : album.isLocked ? album.photoCount : null;
 
   return (
     <View style={styles.cardThumb}>
       {!!coverUri && <Image source={{ uri: coverUri }} style={styles.cardThumbImage} resizeMode="cover" />}
-      <View style={styles.cardPhotoCountBadge}>
-        <Text style={styles.cardPhotoCountText}>
-          {album.photoCount}
-          {t.photoCountSuffix}
-        </Text>
-      </View>
+      {photoCount !== null && (
+        <View style={styles.cardPhotoCountBadge}>
+          <Text style={styles.cardPhotoCountText}>
+            {photoCount}
+            {t.photoCountSuffix}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -228,10 +237,19 @@ function AlbumList() {
   const mapT = mapScreenText[locale];
   const [isLegendVisible, setIsLegendVisible] = useState(false);
   const { photosByLocation } = useCapturedPhotos();
+  // Bumped every time this screen regains focus, so returning from a capture /
+  // delete re-pulls album counts and covers instead of showing stale ones.
+  const [refreshToken, setRefreshToken] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshToken((token) => token + 1);
+    }, []),
+  );
   const { data: albums, loadError } = useApiResource(
     () => getAlbums(locale).then((response) => response.albums),
-    [locale],
+    [locale, refreshToken],
     "[album] failed to load albums",
+    { keepPreviousData: true },
   );
   const handleSelectLocale = (nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -286,7 +304,7 @@ function AlbumList() {
         ) : (
           <View style={styles.list}>
             {displayedAlbums.map((album) => {
-              const thumb = <AlbumCardCover album={album} />;
+              const thumb = <AlbumCardCover album={album} refreshToken={refreshToken} />;
               const textColumn = <AlbumCardText album={album} />;
 
               // Locked albums have no unlocked content behind them yet — rendered as a

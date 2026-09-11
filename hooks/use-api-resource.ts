@@ -2,14 +2,21 @@ import { useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
 
-/** Shared fetch-with-cancellation-guard pattern for screen-level API reads. */
-export function useApiResource<T>(fetcher: () => Promise<T>, deps: unknown[], errorLabel: string) {
+/** Shared fetch-with-cancellation-guard pattern for screen-level API reads.
+ *  Pass `{ keepPreviousData: true }` for deps that are background refreshes
+ *  (e.g. a screen-focus token) so the UI doesn't flash back to a spinner. */
+export function useApiResource<T>(
+  fetcher: () => Promise<T>,
+  deps: unknown[],
+  errorLabel: string,
+  options: { keepPreviousData?: boolean } = {},
+) {
   const [data, setData] = useState<T | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setData(null);
+    if (!options.keepPreviousData) setData(null);
     setLoadError(false);
     fetcher()
       .then((response) => {
