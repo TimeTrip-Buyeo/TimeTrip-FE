@@ -377,16 +377,6 @@ export default function ArCameraScreen() {
         </View>
       </LinearGradient>
 
-      {/* Same fading black hint pill as person-camera's guide pill, same design.
-          Sits in the band the guide area reserves below (guideBoxWrapper's
-          paddingTop), so it never overlaps the overlay image. */}
-      <Animated.View
-        style={[styles.hintPill, { top: insets.top + 52, opacity: matchHintOpacity }]}
-        pointerEvents="none">
-        <View style={styles.hintPillDot} />
-        <Text style={styles.hintPillText}>{t.matchOverlayHintLabel}</Text>
-      </Animated.View>
-
       {/* Guide/overlay area and sheet share one flex column so expanding the
           sheet (which grows taller) shrinks the guide area above it instead
           of the sheet covering the overlay image — both resize in the same
@@ -559,6 +549,16 @@ export default function ArCameraScreen() {
           )}
         </View>
       </View>
+
+      {/* Same fading black hint pill as person-camera's guide pill, same design.
+          Rendered after contentColumn (and its overlay image) so it always
+          paints on top of the overlay, never hidden behind it. */}
+      <Animated.View
+        style={[styles.hintPill, { top: insets.top + 52, opacity: matchHintOpacity }]}
+        pointerEvents="none">
+        <View style={styles.hintPillDot} />
+        <Text style={styles.hintPillText}>{t.matchOverlayHintLabel}</Text>
+      </Animated.View>
 
       {isAcquiredModalVisible && acquireResult && (
         <CollectibleAcquiredModal

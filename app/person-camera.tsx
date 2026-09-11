@@ -102,16 +102,24 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
 
     const apiPoseId = getPoseApiId(pose);
     const id = String(apiPoseId ?? `remote-${index}`);
-    // The backend names these "프레임1", "프레임2"… but they're poses, not
-    // frames — relabel so the picker and the saved caption read "포즈".
-    const label = (firstText(pose.name)?.replace(/프레임/g, "포즈") ?? `포즈 ${index + 1}`).trim();
+    // The backend only ever names these in Korean ("프레임1", "프레임2"…) —
+    // pull out the pose number and rebuild the label per-locale from
+    // personCameraText.poseNumberLabel instead of using the raw backend
+    // text, so the picker reads in whatever language is active.
+    const poseNumber = Number(firstText(pose.name)?.match(/\d+/)?.[0]) || index + 1;
+    const label: Record<Locale, string> = {
+      ko: personCameraText.ko.poseNumberLabel(poseNumber),
+      en: personCameraText.en.poseNumberLabel(poseNumber),
+      zh: personCameraText.zh.poseNumberLabel(poseNumber),
+      ja: personCameraText.ja.poseNumberLabel(poseNumber),
+    };
     const resolvedImageUrl = toApiUrl(imageUrl);
 
     return [
       {
         id,
         apiPoseId,
-        label: { ko: label, en: label, zh: label, ja: label },
+        label,
         image: { uri: resolvedImageUrl },
         imageUrl: resolvedImageUrl,
         aspectRatio: aspectRatios[id] ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO,

@@ -690,15 +690,21 @@ export default function BuyeoCutScreen() {
                     solid={selectedFrame === null}
                   />
                 </Pressable>
-                {frames.map((frame) => {
+                {frames.map((frame, index) => {
                   const isActive = frame.frameId === selectedFrameId;
+                  // The backend only ever names these in Korean ("프레임1",
+                  // "프레임2"…) — pull out the frame number and rebuild the
+                  // label from t.frameNumberLabel instead of using the raw
+                  // backend text, so the picker reads in whatever language
+                  // is active.
+                  const frameNumber = Number(frame.name.match(/\d+/)?.[0]) || index + 1;
                   return (
                     <Pressable
                       key={frame.frameId}
                       style={[styles.frameOptionButton, isActive && styles.frameOptionButtonActive]}
                       onPress={() => setSelectedFrameId(frame.frameId)}>
                       <Text style={[styles.frameOptionText, isActive && styles.frameOptionTextActive]}>
-                        {frame.name}
+                        {t.frameNumberLabel(frameNumber)}
                       </Text>
                       <FontAwesome5 name="check" size={12} color={isActive ? "#800000" : "transparent"} solid={isActive} />
                     </Pressable>
