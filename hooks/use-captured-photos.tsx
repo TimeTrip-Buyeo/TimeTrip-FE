@@ -7,6 +7,11 @@ export type CapturedPhoto = {
   locationId: LocationId;
   poseId: string;
   poseLabel: string;
+  // Set only for remote (server-driven) poses — lets the album re-translate
+  // this photo's caption if the app language changes after it was taken,
+  // via resolveCapturedPoseLabel, instead of poseLabel staying frozen in
+  // whatever locale was active at capture time.
+  poseNumber?: number;
   /** file:// URI for the final selfie image saved by the photo-save screen. */
   uri: string;
   takenAt: number;

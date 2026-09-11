@@ -1,7 +1,7 @@
 import type { ImageSourcePropType } from "react-native";
 
 import type { LocationId } from "./locations";
-import type { Locale } from "./translations";
+import { personCameraText, type Locale } from "./translations";
 
 export type PersonPose = {
   id: string;
@@ -45,3 +45,28 @@ export const PERSON_POSES: Partial<Record<LocationId, PersonPose[]>> = {
     },
   ],
 };
+
+// The backend only ever names its per-item poses in Korean ("프레임1",
+// "프레임2"…) — always rebuild the label from personCameraText.poseNumberLabel
+// (for every locale, ko included) instead of using the raw backend text, so
+// the picker reads in whatever language is active.
+export function remotePoseLabel(poseNumber: number, locale: Locale): string {
+  return personCameraText[locale].poseNumberLabel(poseNumber);
+}
+
+// A photo saved to the album only carries poseId + (for remote poses)
+// poseNumber — this re-derives the caption for whatever locale is active
+// *now*, instead of the plain string baked in at capture time, so switching
+// languages after the fact re-translates old captions too.
+export function resolveCapturedPoseLabel(
+  locationId: LocationId,
+  poseId: string,
+  poseNumber: number | undefined,
+  locale: Locale,
+  fallback: string,
+): string {
+  const staticPose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
+  if (staticPose) return staticPose.label[locale];
+  if (poseNumber !== undefined) return remotePoseLabel(poseNumber, locale);
+  return fallback;
+}

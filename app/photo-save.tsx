@@ -8,7 +8,7 @@ import { captureRef } from "react-native-view-shot";
 import { GripRectIcon } from "@/components/grip-rect-icon";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { PERSON_POSES } from "@/constants/poses";
+import { PERSON_POSES, resolveCapturedPoseLabel } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText } from "@/constants/translations";
 import { useCapturedPhotos } from "@/hooks/use-captured-photos";
 import { useLanguage } from "@/hooks/use-language";
@@ -30,6 +30,7 @@ export default function PhotoSaveScreen() {
     locationId?: string;
     poseId?: string;
     poseLabel?: string;
+    poseNumber?: string;
     poseImageUrl?: string;
     poseAspectRatio?: string;
     uri?: string;
@@ -44,6 +45,7 @@ export default function PhotoSaveScreen() {
   const poseId = params.poseId ?? "";
   const selectedPoseId = resolveNumberParam(params.poseId);
   const poseLabel = params.poseLabel ?? "";
+  const poseNumber = resolveNumberParam(params.poseNumber) ?? undefined;
   const collectionItemName = resolveSingleParam(params.collectionItemName) ?? "";
   const poseImageUrl = params.poseImageUrl ?? "";
   const parsedPoseAspectRatio = Number(params.poseAspectRatio);
@@ -70,6 +72,15 @@ export default function PhotoSaveScreen() {
   const albumT = albumScreenText[locale];
   const mapT = mapScreenText[locale];
   const entry = ALBUM_ENTRIES[locationId];
+  // Re-derived from locationId/poseId/poseNumber rather than trusting the
+  // plain poseLabel string as-is — same resolver the album re-runs later, so
+  // this screen and the album always agree on today's locale. Combined with
+  // the acquired character's name (when there is one) so the caption reads
+  // "법왕 · 포즈 1", not just the character name with no indication of which
+  // pose was used.
+  const poseCaption = resolveCapturedPoseLabel(locationId, poseId, poseNumber, locale, poseLabel);
+  const captionLabel =
+    collectionItemName && poseCaption ? `${collectionItemName} · ${poseCaption}` : poseCaption || collectionItemName;
   const fallbackPose = PERSON_POSES[locationId]?.find((candidate) => candidate.id === poseId);
   const pose = poseImageUrl
     ? {
@@ -156,7 +167,7 @@ export default function PhotoSaveScreen() {
       const compositeUri = await captureCompositePhoto();
       const didShare = await shareImageAsync(
         compositeUri,
-        collectionItemName || poseLabel || entry?.name[locale] || mapT.pins[locationId],
+        captionLabel || entry?.name[locale] || mapT.pins[locationId],
       );
       if (!didShare) setShowShareUnavailableToast(true);
     } catch (error) {
@@ -195,6 +206,7 @@ export default function PhotoSaveScreen() {
         locationId,
         poseId,
         poseLabel,
+        ...(poseNumber !== undefined ? { poseNumber } : {}),
         uri: compositeUri,
         ...(collectionItemId !== null ? { collectionItemId } : {}),
         ...(collectionItemName ? { collectionItemName } : {}),
@@ -261,9 +273,9 @@ export default function PhotoSaveScreen() {
           {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
         </View>
 
-        {poseLabel && (
+        {captionLabel && (
           <View style={styles.captionPill}>
-            <Text style={styles.captionText}>● {poseLabel}</Text>
+            <Text style={styles.captionText}>● {captionLabel}</Text>
           </View>
         )}
 

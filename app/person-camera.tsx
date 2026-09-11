@@ -18,9 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GripRectIcon } from "@/components/grip-rect-icon";
-import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
-import { PERSON_POSES } from "@/constants/poses";
+import { PERSON_POSES, remotePoseLabel } from "@/constants/poses";
 import { albumScreenText, mapScreenText, personCameraText, type Locale } from "@/constants/translations";
 import { useLanguage } from "@/hooks/use-language";
 import { getCollectionItemPoses, type CollectionItemPose } from "@/lib/api/collection-item-poses";
@@ -43,6 +42,10 @@ const DEFAULT_REMOTE_POSE_ASPECT_RATIO = 0.55;
 type RuntimePersonPose = {
   id: string;
   apiPoseId?: number;
+  // Set only for remote (server-driven) poses — lets a saved photo's caption
+  // be re-translated later from just this number + the raw Korean name,
+  // without needing to refetch the pose list. See resolveCapturedPoseLabel.
+  poseNumber?: number;
   label: Record<Locale, string>;
   image: ImageSourcePropType;
   imageUrl?: string;
@@ -119,15 +122,15 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
     const apiPoseId = getPoseApiId(pose);
     const id = String(apiPoseId ?? `remote-${index}`);
     // The backend only ever names these in Korean ("프레임1", "프레임2"…) —
-    // pull out the pose number and rebuild the label per-locale from
-    // personCameraText.poseNumberLabel instead of using the raw backend
-    // text, so the picker reads in whatever language is active.
+    // pull out the pose number and rebuild the label per-locale via
+    // remotePoseLabel instead of using the raw backend text, so the picker
+    // reads in whatever language is active.
     const poseNumber = Number(firstText(pose.name)?.match(/\d+/)?.[0]) || index + 1;
     const label: Record<Locale, string> = {
-      ko: personCameraText.ko.poseNumberLabel(poseNumber),
-      en: personCameraText.en.poseNumberLabel(poseNumber),
-      zh: personCameraText.zh.poseNumberLabel(poseNumber),
-      ja: personCameraText.ja.poseNumberLabel(poseNumber),
+      ko: remotePoseLabel(poseNumber, "ko"),
+      en: remotePoseLabel(poseNumber, "en"),
+      zh: remotePoseLabel(poseNumber, "zh"),
+      ja: remotePoseLabel(poseNumber, "ja"),
     };
     const resolvedImageUrl = toApiUrl(imageUrl);
 
@@ -135,6 +138,7 @@ function toRuntimePoses(poses: CollectionItemPose[], aspectRatios: Record<string
       {
         id,
         apiPoseId,
+        poseNumber,
         label,
         image: { uri: resolvedImageUrl },
         imageUrl: resolvedImageUrl,
@@ -164,7 +168,6 @@ export default function PersonCameraScreen() {
   const mapT = mapScreenText[locale];
   const t = personCameraText[locale];
   const albumT = albumScreenText[locale];
-  const entry = ALBUM_ENTRIES[locationId];
   const fallbackPoses = PERSON_POSES[locationId] ?? [];
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -331,6 +334,10 @@ export default function PersonCameraScreen() {
           locationId,
           poseId: selectedPose?.apiPoseId !== undefined ? String(selectedPose.apiPoseId) : selectedPose?.id ?? "",
           poseLabel: selectedPose?.label[locale] ?? "",
+          // Carried through so the album can re-translate this caption later
+          // if the app language changes after the photo was taken, instead
+          // of the poseLabel string above staying frozen in today's locale.
+          ...(selectedPose?.poseNumber !== undefined ? { poseNumber: String(selectedPose.poseNumber) } : {}),
           ...(selectedPose?.imageUrl ? { poseImageUrl: selectedPose.imageUrl } : {}),
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
@@ -462,10 +469,6 @@ export default function PersonCameraScreen() {
         </Pressable>
         <View style={styles.headerTextColumn}>
           <Text style={styles.headerTitle}>{mapT.pins[locationId]}</Text>
-          <Text style={styles.headerSubtitle}>
-            {t.locationSubtitlePrefix}
-            {entry?.locationCaption[locale] ?? mapT.pins[locationId]}
-          </Text>
         </View>
         <View style={styles.timerButtonWrapper}>
           <Pressable

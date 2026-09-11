@@ -10,6 +10,7 @@ import { LangPill } from "@/components/lang-pill";
 import { ALBUM_ENTRIES } from "@/constants/album";
 import { GUNGSEO_FONT_BOLD } from "@/constants/fonts";
 import { LOCATION_ID_TO_SPOT_ID, type LocationId } from "@/constants/locations";
+import { resolveCapturedPoseLabel } from "@/constants/poses";
 import { albumScreenText, mapScreenText, type Locale } from "@/constants/translations";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCapturedPhotos, type CapturedPhoto } from "@/hooks/use-captured-photos";
@@ -690,6 +691,24 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
             // resurrected it. Treat it as non-deletable, same as isRemote.
             const isSynced = !isRemote && (captured as CapturedPhoto).serverSelfiePhotoId !== undefined;
             const canDelete = !isRemote && !isSynced;
+            // Only local captures carry pose info (the server doesn't return
+            // which pose was used) — combined with the character's name so
+            // the grid caption reads "법왕 · 포즈 1", matching the viewer and
+            // the photo-save screen right after taking the photo.
+            const localCaptured = !isRemote ? (captured as CapturedPhoto) : null;
+            const cardPoseCaption = localCaptured
+              ? resolveCapturedPoseLabel(
+                  locationId,
+                  localCaptured.poseId,
+                  localCaptured.poseNumber,
+                  locale,
+                  localCaptured.poseLabel,
+                )
+              : undefined;
+            const cardLabel =
+              captured.collectionItemName && cardPoseCaption
+                ? `${captured.collectionItemName} · ${cardPoseCaption}`
+                : cardPoseCaption || captured.collectionItemName;
             return (
               <Pressable
                 key={captured.id}
@@ -704,6 +723,13 @@ function AlbumDetail({ locationId }: { locationId: LocationId }) {
                   style={styles.photoImage}
                   resizeMode="cover"
                 />
+                {cardLabel && (
+                  <View style={styles.gridCaptionPill}>
+                    <Text style={styles.gridCaptionText} numberOfLines={1}>
+                      {cardLabel}
+                    </Text>
+                  </View>
+                )}
                 {isEditMode && canDelete && (
                   <View style={styles.deleteBadge}>
                     <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
@@ -742,7 +768,17 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
   const remotePhoto = remotePhotos.find((item) => item.id === photoParam);
   const buyeoCutCollectionItemId = captured?.collectionItemId ?? remotePhoto?.collectionItemId;
   const collectionItemName = captured?.collectionItemName ?? remotePhoto?.collectionItemName;
-  const displayLabel = collectionItemName ?? captured?.poseLabel;
+  // Pose caption ("포즈 1" etc.), re-derived for the *current* locale instead
+  // of trusting the plain string baked in at capture time, so switching
+  // languages after the photo was taken re-translates it too. Combined with
+  // the collected character's name (when there is one) so this reads
+  // "법왕 · 포즈 1", not just the character name with no indication of which
+  // pose was used.
+  const poseCaption = captured
+    ? resolveCapturedPoseLabel(locationId, captured.poseId, captured.poseNumber, locale, captured.poseLabel)
+    : undefined;
+  const displayLabel =
+    collectionItemName && poseCaption ? `${collectionItemName} · ${poseCaption}` : poseCaption || collectionItemName;
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -1181,6 +1217,22 @@ const styles = StyleSheet.create({
   photoImage: {
     width: "100%",
     height: "100%",
+  },
+  gridCaptionPill: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: 8,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  gridCaptionText: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#fdfcf8",
+    textAlign: "center",
   },
   // Photo viewer (Figma "사진 개별 선택시", node 0:1630)
   viewerHeader: {
