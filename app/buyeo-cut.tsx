@@ -91,10 +91,6 @@ const COLLAGE_SLOT_RECTS = [
   { top: "33.54%", left: "18.04%", width: "64.04%", height: "31.46%" },
   { top: "65.11%", left: "18.04%", width: "64.04%", height: "31.28%" },
 ] as const;
-// Each slot's photo is laid out in a box this factor TALLER than the window, so
-// even at 1x there's vertical overhang to pan for reframing. ~0.58 keeps the
-// box within a portrait selfie's own height (no upscaling at rest).
-const COLLAGE_SLOT_VISIBLE_FRACTION = 0.58;
 const collageSlotCanvasHeight = (index: number) =>
   (parseFloat(COLLAGE_SLOT_RECTS[index].height) / 100) * COLLAGE_EXPORT_HEIGHT;
 const collageSlotCanvasWidth = (index: number) =>
@@ -111,6 +107,12 @@ type PickerItem = {
   id: string;
   locationId: LocationId;
   source: ImageSourcePropType;
+  /** width/height of the actual photo file, when already known (local
+      captures record this at save time — see CapturedPhoto.aspectRatio).
+      Lets the collage slot show the photo exactly as framed in the album
+      by default, instead of guessing a crop. Undefined for remote-only
+      selfies; CollageSlot falls back to reading it off the file itself. */
+  aspectRatio?: number;
   collectionItemId?: number;
   collectionItemName?: string;
   /** Set only if the server upload in photo-save.tsx succeeded — undefined for
@@ -132,46 +134,90 @@ type PickerSection = {
 };
 
 // A single collage photo window. The photo can be dragged (1 finger) and pinch-
-// zoomed (2 fingers) to reframe so a face isn't clipped by the short, wide slot.
-// It's laid out in a box taller than the window (COLLAGE_SLOT_VISIBLE_FRACTION)
-// and centred on the slot, so there's vertical pan room even at 1x. All in the
-// slot's own full-res canvas coordinates; gesture-handler does its own native
-// hit-testing so it works inside the scaled-down preview where a plain RN
-// PanResponder wouldn't get touches. gesture px ÷ COLLAGE_DISPLAY_SCALE converts
-// finger travel on the shrunken preview to canvas px.
+// zoomed (2 fingers) to reframe. The box is sized off the photo's own real
+// aspect ratio (rather than a fixed shape unrelated to what it contains) and
+// set to COVER the slot — fills edge to edge with no white margin — with a
+// default vertical offset that starts from the photo's own top edge instead
+// of a plain centre-crop, since our photos are always bottom-anchored (feet
+// at the very bottom), so the top is where the head actually is. Zooming
+// (up to COLLAGE_SLOT_MAX_ZOOM) still lets someone crop in tighter, and
+// dragging can re-centre if the top-aligned default isn't quite right for a
+// particular shot. All in the slot's own full-res canvas coordinates;
+// gesture-handler does its own native hit-testing so it works inside the
+// scaled-down preview where a plain RN PanResponder wouldn't get touches.
+// gesture px ÷ COLLAGE_DISPLAY_SCALE converts finger travel on the shrunken
+// preview to canvas px.
 //
-// During capture (isCapturing) it drops the GestureDetector/reanimated wrapper
-// for a plain View carrying the committed transform as a normal style: view-shot
-// reads a React-rendered transform reliably, whereas a reanimated one is written
-// straight to the native view on the UI thread and Android capture sometimes
-// grabs it pre-transform. The <ExpoImage> itself stays (same component both
-// paths) so its decoded bitmap is already warm when the snapshot is taken.
+// Capture used to swap this to a plain View + fresh <ExpoImage> at save time
+// (theory: view-shot reads a React-rendered transform more reliably than one
+// Reanimated writes straight to the native view). In practice that swap made
+// react-native-view-shot fail to resolve the freshly-mounted image entirely
+// under the New Architecture — confirmed on-device, saved collages came back
+// with every photo slot blank (just the frame). Keeping the exact same
+// GestureDetector → Reanimated.View → ExpoImage tree mounted at all times
+// (never swapping element types) avoids that: the shared values already hold
+// the committed resting transform whenever a gesture isn't in progress, which
+// is the only time a save can happen anyway.
 function CollageSlot({
   id,
   source,
+  knownAspectRatio,
   index,
-  isCapturing,
   committed,
   onCommit,
   onGestureStateChange,
 }: {
   id: string;
   source: ImageSourcePropType;
+  knownAspectRatio?: number;
   index: number;
-  isCapturing: boolean;
   committed?: SlotFrame;
   onCommit: (id: string, frame: SlotFrame) => void;
   onGestureStateChange: (active: boolean) => void;
 }) {
   const slotW = collageSlotCanvasWidth(index);
   const slotH = collageSlotCanvasHeight(index);
-  const boxH = slotH / COLLAGE_SLOT_VISIBLE_FRACTION;
-  // Box is centred on the slot, so at 1x it overhangs (boxH - slotH)/2 each way.
-  // Start shifted up so the head, not the chest, sits in the window.
-  const defaultTy = -((boxH - slotH) / 2) * 0.55;
 
-  // Seed from the committed frame so a re-render (e.g. the capture swap) keeps
-  // the user's framing.
+  // Remote-only selfies don't carry their own width/height — read it off the
+  // file, same as person-camera.tsx does for remote pose thumbnails. Local
+  // captures already know it (CapturedPhoto.aspectRatio) and skip this.
+  const [fetchedAspectRatio, setFetchedAspectRatio] = useState<number | null>(null);
+  useEffect(() => {
+    if (knownAspectRatio) return;
+    const uri = typeof source === "object" && "uri" in source ? source.uri : undefined;
+    if (!uri) return;
+    let isActive = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (isActive && width > 0 && height > 0) setFetchedAspectRatio(width / height);
+      },
+      () => undefined,
+    );
+    return () => {
+      isActive = false;
+    };
+  }, [knownAspectRatio, source]);
+
+  const slotRatio = slotW / slotH;
+  // Falls back to the slot's own ratio (box == slot, no crop needed) only for
+  // the brief window before a remote photo's real ratio has loaded.
+  const photoRatio = knownAspectRatio ?? fetchedAspectRatio ?? slotRatio;
+  // Cover, not contain — fills the slot edge to edge with no white margin
+  // (whichever axis the photo doesn't naturally match gets cropped, same as
+  // any normal photo-grid/thumbnail). Our photos are typically narrower than
+  // the slot (photoRatio < slotRatio), so the box is fit to slot WIDTH and
+  // overflows slot HEIGHT — meaning the crop is vertical, not horizontal.
+  const boxW = photoRatio >= slotRatio ? slotH * photoRatio : slotW;
+  const boxH = photoRatio >= slotRatio ? slotH : slotW / photoRatio;
+  // Default vertical offset: our photos are always bottom-anchored (feet at
+  // the very bottom — see person-camera.tsx), so when the box overflows
+  // vertically, showing from its TOP edge down (rather than centring) keeps
+  // the head in frame instead of an even center-crop clipping it. No-op
+  // (0) when the box doesn't overflow vertically at all.
+  const defaultTy = (boxH - slotH) / 2;
+
+  // Seed from the committed frame so a re-render keeps the user's framing.
   const scale = useSharedValue(committed?.scale ?? 1);
   const savedScale = useSharedValue(committed?.scale ?? 1);
   const tx = useSharedValue(committed?.tx ?? 0);
@@ -186,7 +232,7 @@ function CollageSlot({
     })
     .onUpdate((e) => {
       const s = scale.value;
-      const maxX = Math.abs((slotW * (s - 1)) / 2);
+      const maxX = Math.abs((boxW * (s - 1)) / 2);
       const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, savedTx.value + e.translationX / COLLAGE_DISPLAY_SCALE));
       ty.value = Math.min(maxY, Math.max(-maxY, savedTy.value + e.translationY / COLLAGE_DISPLAY_SCALE));
@@ -215,7 +261,7 @@ function CollageSlot({
       const s = Math.min(COLLAGE_SLOT_MAX_ZOOM, Math.max(COLLAGE_SLOT_MIN_ZOOM, savedScale.value * e.scale));
       scale.value = s;
       // A scale change can leave the pan offset outside the new range.
-      const maxX = Math.abs((slotW * (s - 1)) / 2);
+      const maxX = Math.abs((boxW * (s - 1)) / 2);
       const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, tx.value));
       ty.value = Math.min(maxY, Math.max(-maxY, ty.value));
@@ -242,29 +288,10 @@ function CollageSlot({
     transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
   }));
 
-  // Capture path — plain View holding the committed transform as a static style,
-  // same <ExpoImage> as the live path so its bitmap stays warm.
-  if (isCapturing) {
-    const frame = committed ?? { tx: 0, ty: defaultTy, scale: 1 };
-    return (
-      <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
-        <View
-          style={{
-            width: slotW,
-            height: boxH,
-            transform: [{ translateX: frame.tx }, { translateY: frame.ty }, { scale: frame.scale }],
-          }}>
-          <ExpoImage source={source} style={styles.frameSlotImage} contentFit="cover" />
-        </View>
-      </View>
-    );
-  }
-
-  // Live path — smooth reanimated view driven by the gestures.
   return (
     <View style={[styles.frameSlot, COLLAGE_SLOT_RECTS[index]]}>
       <GestureDetector gesture={composed}>
-        <Reanimated.View style={[{ width: slotW, height: boxH }, imageStyle]}>
+        <Reanimated.View style={[{ width: boxW, height: boxH }, imageStyle]}>
           <ExpoImage source={source} style={styles.frameSlotImage} contentFit="cover" />
         </Reanimated.View>
       </GestureDetector>
@@ -317,7 +344,6 @@ export default function BuyeoCutScreen() {
   // Committed pan/zoom per slot (by photo id), applied statically during capture
   // so view-shot bakes the user's framing into the saved image.
   const [slotFrames, setSlotFrames] = useState<Record<string, SlotFrame>>({});
-  const [isCapturing, setIsCapturing] = useState(false);
   const commitSlotFrame = useCallback((id: string, frame: SlotFrame) => {
     setSlotFrames((prev) => ({ ...prev, [id]: frame }));
   }, []);
@@ -362,6 +388,7 @@ export default function BuyeoCutScreen() {
         id: photo.id,
         locationId: location.id,
         source: { uri: photo.uri },
+        aspectRatio: photo.aspectRatio,
         collectionItemId: photo.collectionItemId,
         collectionItemName: photo.collectionItemName,
         serverSelfiePhotoId: photo.serverSelfiePhotoId,
@@ -515,25 +542,20 @@ export default function BuyeoCutScreen() {
   // real serverSelfiePhotoId to send. createCollage/downloadCollageFile are
   // left in lib/api/collage.ts — swap back to them here for the higher-
   // quality server-rendered original once acquisition is connected.
-  // Swaps every slot to its static (plain-transform) capture render, waits a
-  // couple of frames for it to actually paint, then snapshots. view-shot reads
-  // a normal React transform reliably; a reanimated one can be missed on Android.
+  // Waits a couple of frames so any pending layout/commit is painted before
+  // snapshotting — CollageSlot no longer swaps element types for capture (see
+  // its own comment), so this is just settling, not a render-mode switch.
   const captureCollage = async (): Promise<string | null> => {
     if (!collagePreviewRef.current) return null;
-    setIsCapturing(true);
-    try {
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      });
-      if (!collagePreviewRef.current) return null;
-      return await captureRef(collagePreviewRef.current, {
-        format: "jpg",
-        quality: 0.95,
-        result: "tmpfile",
-      });
-    } finally {
-      setIsCapturing(false);
-    }
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    if (!collagePreviewRef.current) return null;
+    return await captureRef(collagePreviewRef.current, {
+      format: "jpg",
+      quality: 0.95,
+      result: "tmpfile",
+    });
   };
 
   const handleSave = async () => {
@@ -628,8 +650,8 @@ export default function BuyeoCutScreen() {
                       key={item.id}
                       id={item.id}
                       source={item.source}
+                      knownAspectRatio={item.aspectRatio}
                       index={index}
-                      isCapturing={isCapturing}
                       committed={slotFrames[item.id]}
                       onCommit={commitSlotFrame}
                       onGestureStateChange={setIsSlotGesturing}
