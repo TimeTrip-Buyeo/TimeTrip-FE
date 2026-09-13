@@ -296,22 +296,32 @@ export default function PersonCameraScreen() {
   // here is what let the two silently overlap and swallow the collapse
   // toggle's taps once the section shrank.
   const actionBarHeight = ACTION_BAR_CONTENT_HEIGHT + insets.bottom;
-  // The figure's floor. Anchored to the pose panel's COLLAPSED height (header
-  // row + the section's own vertical padding), never its live height — so
-  // expanding or collapsing the pose list while framing has no effect on the
-  // saved photo. Falls back to just the action bar when there's no pose
-  // section to render at all (poses.length <= 1).
+  // The figure's OWN floor — anchored to the pose panel's COLLAPSED height
+  // (header row + the section's own vertical padding), never its live
+  // height, so expanding/collapsing the pose list while framing never moves
+  // the figure. This intentionally sits well above the true photo bottom
+  // (chromeFloor below) so the pose panel never covers the figure's feet —
+  // it's a UI-avoidance line, not the capture boundary.
   const captureFloor = actionBarHeight + (poses.length > 1 ? poseHeaderHeight + POSE_PANEL_PADDING : 0);
+  // The photo's actual bottom bound — just past the action bar, the only
+  // permanently-opaque chrome. The pose panel floats semi-transparently on
+  // top of the live camera feed rather than physically letterboxing it, so
+  // excluding its height too (as captureFloor does) made the saved photo
+  // needlessly short/square: nearly half the screen was being carved out for
+  // UI chrome that a real camera photo would never lose.
+  const chromeFloor = actionBarHeight;
   const personOverlayHeight = windowHeight * PERSON_OVERLAY_HEIGHT_RATIO;
   const personOverlayWidth = personOverlayHeight * (selectedPose?.aspectRatio ?? DEFAULT_REMOTE_POSE_ASPECT_RATIO);
   // Bleed a fixed FRACTION of the figure's own width off the right edge, so
   // wide and narrow poses alike keep the same proportion on-screen instead of
   // some getting clipped by a one-size pixel offset.
   const personOverlayRight = -(personOverlayWidth * PERSON_OVERLAY_BLEED_FRACTION);
-  // The visible viewfinder: screen minus the top header minus that floor. The
-  // saved photo is cropped to exactly this band, so what you framed is what
-  // you get — and it doesn't move when the pose panel does.
-  const viewfinderHeight = Math.max(1, windowHeight - headerHeight - captureFloor);
+  // The visible viewfinder: screen minus the top header minus chromeFloor.
+  // The saved photo is cropped to exactly this (taller) band — the figure
+  // itself still stands on its own higher captureFloor line, so there's
+  // simply more real floor/background visible below its feet now, the way
+  // an actual camera photo would show.
+  const viewfinderHeight = Math.max(1, windowHeight - headerHeight - chromeFloor);
   // The pose panel's live top edge — the "AI image" disclosure rides just
   // above it so an expanded panel can't cover it.
   const posePanelTop = actionBarHeight + (poses.length > 1 ? poseSectionHeight : 0);
@@ -342,6 +352,12 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
+          // The figure stands on captureFloor, not on the crop's true bottom
+          // (chromeFloor) — that gap is real background the live view shows
+          // below its feet. Passed as a fraction of the crop's own height so
+          // photo-save.tsx can leave the same gap instead of pinning the
+          // figure flush to the exported photo's bottom edge.
+          personOverlayBottomRatio: String((captureFloor - chromeFloor) / viewfinderHeight),
           // Shape of the crop cropToViewfinder just produced — the save screen
           // sizes its frame to this so the photo shows exactly as framed here.
           viewfinderAspectRatio: String(windowWidth / viewfinderHeight),
@@ -447,10 +463,14 @@ export default function PersonCameraScreen() {
         </Text>
       )}
 
-      {/* Bottom tracks the pose panel's live top edge (+ gap) so the "take a
-          photo with the figure" pill below it clears the panel instead of
-          hiding behind it. */}
-      <View style={[styles.guideFrame, { bottom: posePanelTop + 44 }]} pointerEvents="none">
+      {/* Matches the actual capture bounds exactly (top: headerHeight, bottom:
+          chromeFloor, full width) — this used to be a smaller decorative
+          inset (top: 22%, ±24px sides, a +44 gap above the pose panel) that
+          didn't line up with cropToViewfinder's real crop, so the saved
+          photo showed noticeably more of the scene on every side than what
+          the corners framed. Now what's inside the corners is exactly what
+          gets saved. */}
+      <View style={[styles.guideFrame, { top: headerHeight, bottom: chromeFloor }]} pointerEvents="none">
         <View style={[styles.guideCorner, styles.guideCornerTL]} />
         <View style={[styles.guideCorner, styles.guideCornerTR]} />
         <View style={[styles.guideCorner, styles.guideCornerBL]} />
@@ -644,10 +664,10 @@ const styles = StyleSheet.create({
   },
   guideFrame: {
     position: "absolute",
-    top: "22%",
-    // `bottom` is set inline — it follows the pose panel's live top edge.
-    left: 24,
-    right: 24,
+    // `top`/`bottom` are set inline to headerHeight/captureFloor — the exact
+    // same bounds cropToViewfinder crops the saved photo to.
+    left: 0,
+    right: 0,
   },
   guideCorner: {
     position: "absolute",

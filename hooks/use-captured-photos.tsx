@@ -14,6 +14,10 @@ export type CapturedPhoto = {
   poseNumber?: number;
   /** file:// URI for the final selfie image saved by the photo-save screen. */
   uri: string;
+  // width/height of `uri`'s actual pixels (the camera's cropped viewfinder
+  // band) — lets viewers size their frame to match exactly instead of
+  // guessing a fixed box and cover-cropping (zooming) the photo to fit it.
+  aspectRatio?: number;
   takenAt: number;
   collectionItemId?: number;
   collectionItemName?: string;

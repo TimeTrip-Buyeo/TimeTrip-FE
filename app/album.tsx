@@ -1,7 +1,17 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNav, type BottomNavKey } from "@/components/bottom-nav";
@@ -36,6 +46,56 @@ function parseId(value: string | undefined): number | undefined {
 
 function getTakenAtMillis(takenAt: number | string): number {
   return typeof takenAt === "number" ? takenAt : new Date(takenAt).getTime();
+}
+
+// Server/remote photos don't carry their own width/height — this reads it
+// off the actual file so the viewer can size its frame to match instead of
+// guessing, same as person-camera.tsx does for remote pose thumbnails.
+function useImageAspectRatio(uri: string | undefined): number | null {
+  const [ratio, setRatio] = useState<number | null>(null);
+
+  useEffect(() => {
+    setRatio(null);
+    if (!uri) return;
+    let isActive = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (isActive && width > 0 && height > 0) setRatio(width / height);
+      },
+      () => undefined,
+    );
+    return () => {
+      isActive = false;
+    };
+  }, [uri]);
+
+  return ratio;
+}
+
+// Fits a frame of exactly `aspectRatio` inside the measured available area
+// (width first, clamped to height) so the photo shows edge-to-edge with no
+// cover-crop and no letterbox — same technique as photo-save.tsx's
+// fittedFrameStyle. Falls back to filling the whole area (old behaviour)
+// until the ratio is known, so there's no flash of an empty frame.
+function useFittedFrameStyle(aspectRatio: number | null) {
+  const [availSize, setAvailSize] = useState({ width: 0, height: 0 });
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setAvailSize({ width, height });
+  }, []);
+
+  if (!aspectRatio || availSize.width <= 0 || availSize.height <= 0) {
+    return { onLayout, style: null as { width: number; height: number } | null };
+  }
+
+  let frameWidth = availSize.width;
+  let frameHeight = frameWidth / aspectRatio;
+  if (frameHeight > availSize.height) {
+    frameHeight = availSize.height;
+    frameWidth = frameHeight * aspectRatio;
+  }
+  return { onLayout, style: { width: frameWidth, height: frameHeight } };
 }
 
 function confirmDeleteSelfiePhoto(
@@ -507,6 +567,8 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
     [selfiePhotoId, locale],
     "[album] failed to load photo detail",
   );
+  const aspectRatio = useImageAspectRatio(photo?.photoUrl);
+  const { onLayout: handlePhotoLayout, style: fittedPhotoStyle } = useFittedFrameStyle(aspectRatio);
 
   const handleShare = async () => {
     if (!photo) return;
@@ -541,14 +603,16 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
         </View>
       ) : (
         <>
-          <View style={styles.viewerPhotoWrapper}>
-            <Image source={{ uri: photo.photoUrl }} style={styles.viewerPhoto} resizeMode="cover" />
-            <View style={styles.viewerCaptionPill}>
-              <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
+          <View style={styles.viewerPhotoWrapper} onLayout={handlePhotoLayout}>
+            <View style={fittedPhotoStyle ?? styles.viewerPhotoInnerFill}>
+              <Image source={{ uri: photo.photoUrl }} style={styles.viewerPhoto} resizeMode="cover" />
+              <View style={styles.viewerCaptionPill}>
+                <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
+              </View>
+              <Pressable style={styles.viewerDeleteCorner} onPress={handleDelete} hitSlop={10}>
+                <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
+              </Pressable>
             </View>
-            <Pressable style={styles.viewerDeleteCorner} onPress={handleDelete} hitSlop={10}>
-              <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
-            </Pressable>
           </View>
 
           {photo.shareable && (
@@ -779,6 +843,11 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
     : undefined;
   const displayLabel =
     collectionItemName && poseCaption ? `${collectionItemName} · ${poseCaption}` : poseCaption || collectionItemName;
+  // Local captures already know their own ratio (set at save time); a
+  // location-only remote photo doesn't, so it's read off the file instead.
+  const remoteAspectRatio = useImageAspectRatio(!captured ? remotePhoto?.uri : undefined);
+  const aspectRatio = captured?.aspectRatio ?? remoteAspectRatio;
+  const { onLayout: handlePhotoLayout, style: fittedPhotoStyle } = useFittedFrameStyle(aspectRatio);
   const [selfieRouteParams, setSelfieRouteParams] = useState<SelfieRouteParams>({});
   const [isSelfieRouteLoading, setIsSelfieRouteLoading] = useState(true);
 
@@ -831,17 +900,19 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
         </View>
       </View>
 
-      <View style={styles.viewerPhotoWrapper}>
-        {captured ? (
-          <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
-        ) : remotePhoto ? (
-          <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
-        ) : null}
-        {displayLabel && (
-          <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {displayLabel}</Text>
-          </View>
-        )}
+      <View style={styles.viewerPhotoWrapper} onLayout={handlePhotoLayout}>
+        <View style={fittedPhotoStyle ?? styles.viewerPhotoInnerFill}>
+          {captured ? (
+            <Image source={{ uri: captured.uri }} style={styles.viewerPhoto} resizeMode="cover" />
+          ) : remotePhoto ? (
+            <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
+          ) : null}
+          {displayLabel && (
+            <View style={styles.viewerCaptionPill}>
+              <Text style={styles.viewerCaptionText}>● {displayLabel}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <View style={[styles.viewerActions, { paddingBottom: insets.bottom + 16 }]}>
@@ -1262,8 +1333,16 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: "#f3f4f6",
     overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Only used until the photo's real aspect ratio is known (see
+  // useFittedFrameStyle) — fills the wrapper the same way the old
+  // always-cover layout did, so there's no flash of an empty frame.
+  viewerPhotoInnerFill: {
+    width: "100%",
+    height: "100%",
   },
   viewerPhoto: {
     width: "100%",

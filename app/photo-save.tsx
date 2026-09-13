@@ -1,4 +1,5 @@
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import * as FileSystem from "expo-file-system/legacy";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
@@ -22,6 +23,16 @@ import {
 } from "@/lib/selfie-route";
 import { shareImageAsync } from "@/lib/share-image";
 
+// The off-screen export canvas's fixed width (dp) — same role as
+// buyeo-cut.tsx's COLLAGE_EXPORT_WIDTH: high enough that the composited
+// photo keeps camera-scale resolution instead of being downsized to
+// whatever small preview box happens to fit on screen.
+const PHOTO_EXPORT_WIDTH = 1080;
+// The disclosure watermark's font size as a fraction of the export canvas
+// width — matches its old ~9px-at-~328dp on-screen proportion so it reads
+// the same relative size in the exported photo as it used to on screen.
+const DISCLOSURE_FONT_SIZE_FRACTION = 9 / 328;
+
 // Matches Figma "사진 저장", node 0:1589 — same layout as the album's photo
 // viewer, but the center action is "download/save" (not share) and there's
 // a small share button pinned to the photo's own corner instead.
@@ -35,6 +46,7 @@ export default function PhotoSaveScreen() {
     poseAspectRatio?: string;
     uri?: string;
     personOverlayHeightRatio?: string;
+    personOverlayBottomRatio?: string;
     viewfinderAspectRatio?: string;
     spotId?: string;
     storyId?: string;
@@ -55,6 +67,14 @@ export default function PhotoSaveScreen() {
     Number.isFinite(parsedPersonOverlayHeightRatio) && parsedPersonOverlayHeightRatio > 0
       ? parsedPersonOverlayHeightRatio
       : PERSON_OVERLAY_HEIGHT_RATIO;
+  // How far above the crop's true bottom edge the figure's feet actually sit
+  // live (see person-camera.tsx's captureFloor vs chromeFloor) — 0 for older
+  // links that didn't pass it, matching the previous flush-to-bottom look.
+  const parsedPersonOverlayBottomRatio = Number(params.personOverlayBottomRatio);
+  const personOverlayBottomRatio =
+    Number.isFinite(parsedPersonOverlayBottomRatio) && parsedPersonOverlayBottomRatio > 0
+      ? parsedPersonOverlayBottomRatio
+      : 0;
   // The camera cropped the photo to its viewfinder band — mirror that exact
   // width:height here so the frame matches the photo with no extra cover-crop.
   const parsedViewfinderAspectRatio = Number(params.viewfinderAspectRatio);
@@ -118,20 +138,52 @@ export default function PhotoSaveScreen() {
       frameHeight = availSize.height;
       frameWidth = frameHeight * viewfinderAspectRatio;
     }
-    return { flex: undefined, marginHorizontal: undefined, width: frameWidth, height: frameHeight } as const;
+    // `flex: 0` (not undefined) — RN's bridge drops undefined-valued style
+    // keys, so `undefined` here never actually cancels photoWrapper's base
+    // `flex: 1`, and in this column layout flex-grow then silently stretches
+    // the view's height to fill the screen regardless of the explicit
+    // `height` below (width is unaffected — it's the cross axis). That
+    // mismatch is what let the saved photo come out taller/more zoomed than
+    // what was actually framed.
+    return { flex: 0, marginHorizontal: 0, width: frameWidth, height: frameHeight } as const;
   })();
+
+  // The on-screen preview box (fittedFrameStyle) is only a few hundred dp
+  // wide — capturing THAT directly (the old approach) baked the photo down
+  // to a low-res screenshot far smaller than what the camera actually shot,
+  // which read as "blocky/squared-off" no matter how correct its aspect
+  // ratio was. Instead render the real composite on an off-screen canvas at
+  // a fixed, camera-scale resolution, and show only a scaled-down preview of
+  // that same canvas on screen (identical trick to buyeo-cut.tsx's collage
+  // export) — captureRef then grabs the full-resolution canvas directly.
+  const exportSize =
+    viewfinderAspectRatio && viewfinderAspectRatio > 0
+      ? { width: PHOTO_EXPORT_WIDTH, height: Math.round(PHOTO_EXPORT_WIDTH / viewfinderAspectRatio) }
+      : null;
+  const displayScale = exportSize && fittedFrameStyle ? fittedFrameStyle.width / exportSize.width : 1;
 
   // The saved photo was cropped to the camera screen's visible viewfinder. Here
   // it fills the whole gray frame (scaled up to the frame height, sides cropped
   // — no letterbox bars), and since the viewfinder band maps to the full frame
   // height, the figure is bottom-anchored and sized by the same fraction of the
-  // band it took up while framing.
-  const personOverlayHeight = wrapperSize.height * personOverlayHeightRatio;
+  // band it took up while framing. Measured off the export canvas (when known)
+  // rather than the on-screen preview size, since that canvas is what actually
+  // gets captured.
+  const overlayBasisHeight = exportSize ? exportSize.height : wrapperSize.height;
+  const personOverlayHeight = overlayBasisHeight * personOverlayHeightRatio;
   // Same rule as the camera screen: bleed a fraction of the figure's own width
   // off the edge, so wide/narrow poses keep the same proportion on-screen.
   const personOverlayRight = pose
     ? -(personOverlayHeight * pose.aspectRatio * PERSON_OVERLAY_BLEED_FRACTION)
     : 0;
+  // The figure stood on captureFloor live, not on the crop's true bottom —
+  // reproduce that same real-background gap below its feet here instead of
+  // pinning it flush to the exported photo's bottom edge.
+  const personOverlayBottom = overlayBasisHeight * personOverlayBottomRatio;
+  // Baked into the exported canvas, so its size must scale with the canvas
+  // (fixed at PHOTO_EXPORT_WIDTH) rather than staying a flat px value the
+  // way it could when the canvas was just the small on-screen preview.
+  const disclosureFontSize = exportSize ? exportSize.width * DISCLOSURE_FONT_SIZE_FRACTION : 9;
 
   const { addPhoto } = useCapturedPhotos();
   const [isSaved, setIsSaved] = useState(false);
@@ -144,13 +196,31 @@ export default function PhotoSaveScreen() {
     if (compositePhotoUriRef.current) return compositePhotoUriRef.current;
     if (!compositeRef.current) return uri;
     try {
-      const compositeUri = await captureRef(compositeRef.current, {
+      const rawUri = await captureRef(compositeRef.current, {
         format: "jpg",
         quality: 0.9,
         result: "tmpfile",
       });
-      compositePhotoUriRef.current = compositeUri;
-      return compositeUri;
+      // `result: "tmpfile"` is explicitly ephemeral — react-native-view-shot
+      // deletes its own previous tmpfiles the next time ANYTHING else in the
+      // app calls captureRef (confirmed via logcat: "RNViewShot: deleted
+      // file: ..."). This photo is kept in the album for the rest of the
+      // session (see useCapturedPhotos), so by the time it's opened again —
+      // e.g. from 부여세컷 — a later capture elsewhere could have already
+      // deleted the underlying file, leaving a dangling uri that silently
+      // fails to load (the collage frame still renders since that's a
+      // remote https image, so only the photo itself goes missing). Copying
+      // it out to our own cache path immediately avoids that cleanup.
+      const compositeUri = FileSystem.cacheDirectory
+        ? `${FileSystem.cacheDirectory}timetrip-selfie-${Date.now()}-${Math.round(Math.random() * 1e6)}.jpg`
+        : null;
+      if (compositeUri) {
+        await FileSystem.copyAsync({ from: rawUri, to: compositeUri });
+        compositePhotoUriRef.current = compositeUri;
+        return compositeUri;
+      }
+      compositePhotoUriRef.current = rawUri;
+      return rawUri;
     } catch (error) {
       // e.g. an old dev client running before react-native-view-shot's
       // native module was linked — fall back to the raw frame instead of
@@ -208,6 +278,9 @@ export default function PhotoSaveScreen() {
         poseLabel,
         ...(poseNumber !== undefined ? { poseNumber } : {}),
         uri: compositeUri,
+        // compositeUri was captured at fittedFrameStyle's box, which is sized
+        // to exactly this ratio — so this is the saved file's real pixel ratio.
+        ...(viewfinderAspectRatio ? { aspectRatio: viewfinderAspectRatio } : {}),
         ...(collectionItemId !== null ? { collectionItemId } : {}),
         ...(collectionItemName ? { collectionItemName } : {}),
         serverSelfiePhotoId,
@@ -258,20 +331,65 @@ export default function PhotoSaveScreen() {
       <View
         style={[styles.photoWrapper, fittedFrameStyle]}
         onLayout={handlePhotoWrapperLayout}>
-        <View ref={compositeRef} style={StyleSheet.absoluteFill} collapsable={false}>
-          {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
-          {pose && (
+        {exportSize ? (
+          // Canvas is laid out at its real (large) size and only visually
+          // shrunk to fit the preview box via transform: scale — captureRef
+          // below grabs the untransformed canvas, so the file comes out at
+          // full export resolution regardless of how small it looks here.
+          <View style={styles.photoViewport} pointerEvents="none">
             <View
-              style={[
-                styles.photoPersonOverlay,
-                { aspectRatio: pose.aspectRatio, height: personOverlayHeight, right: personOverlayRight },
-              ]}
-              pointerEvents="none">
-              <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
+              style={[styles.photoScaler, { transform: [{ scale: displayScale }] }]}>
+              <View
+                ref={compositeRef}
+                style={{ width: exportSize.width, height: exportSize.height }}
+                collapsable={false}>
+                {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
+                {pose && (
+                  <View
+                    style={[
+                      styles.photoPersonOverlay,
+                      {
+                        aspectRatio: pose.aspectRatio,
+                        height: personOverlayHeight,
+                        right: personOverlayRight,
+                        bottom: personOverlayBottom,
+                      },
+                    ]}
+                    pointerEvents="none">
+                    <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
+                  </View>
+                )}
+                {pose && (
+                  <Text style={[styles.photoDisclosureText, { fontSize: disclosureFontSize }]}>
+                    {t.aiImageDisclosure}
+                  </Text>
+                )}
+              </View>
             </View>
-          )}
-          {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
-        </View>
+          </View>
+        ) : (
+          // Legacy fallback (no viewfinderAspectRatio param, e.g. an older
+          // link) — capture the on-screen box directly as before.
+          <View ref={compositeRef} style={StyleSheet.absoluteFill} collapsable={false}>
+            {uri ? <Image source={{ uri }} style={styles.photoBackground} resizeMode="cover" /> : null}
+            {pose && (
+              <View
+                style={[
+                  styles.photoPersonOverlay,
+                  {
+                    aspectRatio: pose.aspectRatio,
+                    height: personOverlayHeight,
+                    right: personOverlayRight,
+                    bottom: personOverlayBottom,
+                  },
+                ]}
+                pointerEvents="none">
+                <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
+              </View>
+            )}
+            {pose && <Text style={styles.photoDisclosureText}>{t.aiImageDisclosure}</Text>}
+          </View>
+        )}
 
         {captionLabel && (
           <View style={styles.captionPill}>
@@ -379,19 +497,31 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: "#f3f4f6",
     overflow: "hidden",
   },
   photoBackground: {
     width: "100%",
     height: "100%",
   },
+  // Clips the full-resolution export canvas down to the preview box; the
+  // canvas itself stays laid out at its real (larger) size so captureRef
+  // grabs it at full resolution — see exportSize/displayScale above.
+  photoViewport: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  photoScaler: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    transformOrigin: "top left",
+  },
   // Same floor-standing, edge-bleeding placement as the live camera overlay
   // (not centered), so the saved preview matches what was actually framed.
-  // `right` is set inline from the figure's own width.
+  // `right`/`bottom` are set inline (bottom leaves the same real-background
+  // gap below the figure's feet that person-camera.tsx's captureFloor does).
   photoPersonOverlay: {
     position: "absolute",
-    bottom: 0,
     zIndex: 2,
   },
   photoPersonOverlayImage: {
