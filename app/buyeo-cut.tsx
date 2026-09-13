@@ -232,7 +232,7 @@ function CollageSlot({
     })
     .onUpdate((e) => {
       const s = scale.value;
-      const maxX = Math.abs((boxW * (s - 1)) / 2);
+      const maxX = Math.abs((boxW * s - slotW) / 2);
       const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, savedTx.value + e.translationX / COLLAGE_DISPLAY_SCALE));
       ty.value = Math.min(maxY, Math.max(-maxY, savedTy.value + e.translationY / COLLAGE_DISPLAY_SCALE));
@@ -261,7 +261,7 @@ function CollageSlot({
       const s = Math.min(COLLAGE_SLOT_MAX_ZOOM, Math.max(COLLAGE_SLOT_MIN_ZOOM, savedScale.value * e.scale));
       scale.value = s;
       // A scale change can leave the pan offset outside the new range.
-      const maxX = Math.abs((boxW * (s - 1)) / 2);
+      const maxX = Math.abs((boxW * s - slotW) / 2);
       const maxY = Math.abs((boxH * s - slotH) / 2);
       tx.value = Math.min(maxX, Math.max(-maxX, tx.value));
       ty.value = Math.min(maxY, Math.max(-maxY, ty.value));

@@ -352,6 +352,12 @@ export default function PersonCameraScreen() {
           ...(selectedPose?.aspectRatio ? { poseAspectRatio: String(selectedPose.aspectRatio) } : {}),
           uri: framedUri,
           personOverlayHeightRatio: String(personOverlayHeight / viewfinderHeight),
+          // The figure stands on captureFloor, not on the crop's true bottom
+          // (chromeFloor) — that gap is real background the live view shows
+          // below its feet. Passed as a fraction of the crop's own height so
+          // photo-save.tsx can leave the same gap instead of pinning the
+          // figure flush to the exported photo's bottom edge.
+          personOverlayBottomRatio: String((captureFloor - chromeFloor) / viewfinderHeight),
           // Shape of the crop cropToViewfinder just produced — the save screen
           // sizes its frame to this so the photo shows exactly as framed here.
           viewfinderAspectRatio: String(windowWidth / viewfinderHeight),

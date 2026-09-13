@@ -606,13 +606,13 @@ function AlbumServerPhotoViewer({ selfiePhotoId }: { selfiePhotoId: number }) {
           <View style={styles.viewerPhotoWrapper} onLayout={handlePhotoLayout}>
             <View style={fittedPhotoStyle ?? styles.viewerPhotoInnerFill}>
               <Image source={{ uri: photo.photoUrl }} style={styles.viewerPhoto} resizeMode="cover" />
+              <View style={styles.viewerCaptionPill}>
+                <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
+              </View>
+              <Pressable style={styles.viewerDeleteCorner} onPress={handleDelete} hitSlop={10}>
+                <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
+              </Pressable>
             </View>
-            <View style={styles.viewerCaptionPill}>
-              <Text style={styles.viewerCaptionText}>● {photo.personName}</Text>
-            </View>
-            <Pressable style={styles.viewerDeleteCorner} onPress={handleDelete} hitSlop={10}>
-              <FontAwesome5 name="trash-alt" size={12} color="#fff" solid />
-            </Pressable>
           </View>
 
           {photo.shareable && (
@@ -907,12 +907,12 @@ function PhotoViewer({ locationId, photoParam }: { locationId: LocationId; photo
           ) : remotePhoto ? (
             <Image source={{ uri: remotePhoto.uri }} style={styles.viewerPhoto} resizeMode="cover" />
           ) : null}
+          {displayLabel && (
+            <View style={styles.viewerCaptionPill}>
+              <Text style={styles.viewerCaptionText}>● {displayLabel}</Text>
+            </View>
+          )}
         </View>
-        {displayLabel && (
-          <View style={styles.viewerCaptionPill}>
-            <Text style={styles.viewerCaptionText}>● {displayLabel}</Text>
-          </View>
-        )}
       </View>
 
       <View style={[styles.viewerActions, { paddingBottom: insets.bottom + 16 }]}>
@@ -1333,7 +1333,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: "#f3f4f6",
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

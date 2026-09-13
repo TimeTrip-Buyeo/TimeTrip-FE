@@ -46,6 +46,7 @@ export default function PhotoSaveScreen() {
     poseAspectRatio?: string;
     uri?: string;
     personOverlayHeightRatio?: string;
+    personOverlayBottomRatio?: string;
     viewfinderAspectRatio?: string;
     spotId?: string;
     storyId?: string;
@@ -66,6 +67,14 @@ export default function PhotoSaveScreen() {
     Number.isFinite(parsedPersonOverlayHeightRatio) && parsedPersonOverlayHeightRatio > 0
       ? parsedPersonOverlayHeightRatio
       : PERSON_OVERLAY_HEIGHT_RATIO;
+  // How far above the crop's true bottom edge the figure's feet actually sit
+  // live (see person-camera.tsx's captureFloor vs chromeFloor) — 0 for older
+  // links that didn't pass it, matching the previous flush-to-bottom look.
+  const parsedPersonOverlayBottomRatio = Number(params.personOverlayBottomRatio);
+  const personOverlayBottomRatio =
+    Number.isFinite(parsedPersonOverlayBottomRatio) && parsedPersonOverlayBottomRatio > 0
+      ? parsedPersonOverlayBottomRatio
+      : 0;
   // The camera cropped the photo to its viewfinder band — mirror that exact
   // width:height here so the frame matches the photo with no extra cover-crop.
   const parsedViewfinderAspectRatio = Number(params.viewfinderAspectRatio);
@@ -167,6 +176,10 @@ export default function PhotoSaveScreen() {
   const personOverlayRight = pose
     ? -(personOverlayHeight * pose.aspectRatio * PERSON_OVERLAY_BLEED_FRACTION)
     : 0;
+  // The figure stood on captureFloor live, not on the crop's true bottom —
+  // reproduce that same real-background gap below its feet here instead of
+  // pinning it flush to the exported photo's bottom edge.
+  const personOverlayBottom = overlayBasisHeight * personOverlayBottomRatio;
   // Baked into the exported canvas, so its size must scale with the canvas
   // (fixed at PHOTO_EXPORT_WIDTH) rather than staying a flat px value the
   // way it could when the canvas was just the small on-screen preview.
@@ -335,7 +348,12 @@ export default function PhotoSaveScreen() {
                   <View
                     style={[
                       styles.photoPersonOverlay,
-                      { aspectRatio: pose.aspectRatio, height: personOverlayHeight, right: personOverlayRight },
+                      {
+                        aspectRatio: pose.aspectRatio,
+                        height: personOverlayHeight,
+                        right: personOverlayRight,
+                        bottom: personOverlayBottom,
+                      },
                     ]}
                     pointerEvents="none">
                     <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
@@ -358,7 +376,12 @@ export default function PhotoSaveScreen() {
               <View
                 style={[
                   styles.photoPersonOverlay,
-                  { aspectRatio: pose.aspectRatio, height: personOverlayHeight, right: personOverlayRight },
+                  {
+                    aspectRatio: pose.aspectRatio,
+                    height: personOverlayHeight,
+                    right: personOverlayRight,
+                    bottom: personOverlayBottom,
+                  },
                 ]}
                 pointerEvents="none">
                 <Image source={pose.image} style={styles.photoPersonOverlayImage} resizeMode="cover" />
@@ -474,7 +497,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: "#f3f4f6",
     overflow: "hidden",
   },
   photoBackground: {
@@ -496,10 +518,10 @@ const styles = StyleSheet.create({
   },
   // Same floor-standing, edge-bleeding placement as the live camera overlay
   // (not centered), so the saved preview matches what was actually framed.
-  // `right` is set inline from the figure's own width.
+  // `right`/`bottom` are set inline (bottom leaves the same real-background
+  // gap below the figure's feet that person-camera.tsx's captureFloor does).
   photoPersonOverlay: {
     position: "absolute",
-    bottom: 0,
     zIndex: 2,
   },
   photoPersonOverlayImage: {
