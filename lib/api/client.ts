@@ -95,6 +95,16 @@ function shouldReissue(error: ApiError) {
   return error.status === 401 || error.code?.startsWith("SEC401_") || error.code === "COMMON401";
 }
 
+// A slower request that started before a dead refresh token was replaced by
+// a fresh login must not tear down that new session — only clear/notify if
+// the tokens that just failed are still the ones actually stored.
+async function tearDownIfStillCurrent(attemptedRefreshToken: string) {
+  const current = await getTokens();
+  if (current?.refreshToken !== attemptedRefreshToken) return;
+  await clearTokens();
+  unauthorizedListener?.();
+}
+
 async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const tokens = await getTokens();
   const headers = {
@@ -109,8 +119,7 @@ async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T
 
     const refreshed = await reissueOnce(tokens.refreshToken);
     if (!refreshed) {
-      await clearTokens();
-      unauthorizedListener?.();
+      await tearDownIfStillCurrent(tokens.refreshToken);
       throw error;
     }
 
@@ -159,8 +168,7 @@ export async function refreshAuthHeaders(): Promise<Record<string, string> | und
 
   const refreshed = await reissueOnce(tokens.refreshToken);
   if (!refreshed) {
-    await clearTokens();
-    unauthorizedListener?.();
+    await tearDownIfStillCurrent(tokens.refreshToken);
     return undefined;
   }
   return { Authorization: `Bearer ${refreshed.accessToken}` };
