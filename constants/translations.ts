@@ -25,6 +25,17 @@ export const shareSuffix: Record<Locale, string> = {
   ja: '— TimeTrip 扶余',
 };
 
+// hooks/use-session.tsx의 전역 unauthorizedListener가 refresh token이 완전히
+// 죽었을 때(= access token만 만료된 경우의 조용한 자동 재발급과 구분) 띄우는 안내.
+type SessionExpiredText = { title: string; message: string };
+
+export const sessionExpiredText: Record<Locale, SessionExpiredText> = {
+  ko: { title: '재로그인이 필요합니다', message: '로그인이 만료되었습니다. 다시 로그인해주세요.' },
+  en: { title: 'Please log in again', message: 'Your session has expired. Please log in again.' },
+  zh: { title: '需要重新登录', message: '登录已过期，请重新登录。' },
+  ja: { title: '再ログインが必要です', message: 'ログインの有効期限が切れました。再度ログインしてください。' },
+};
+
 type StepText = { title: string; description: string };
 
 type OnboardingGuideText = {
