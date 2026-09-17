@@ -156,15 +156,19 @@ export type AcquireCollectionItemResult = {
   isCharacter: boolean;
   cardImageUrl: string | null;
   acquiredAt: string;
-  popupTitle: string;
-  popupMessage: string;
 };
 
 // 409 COLLECTION4091 means "already acquired" — per spec this is silently
 // ignored (no error toast), so callers get null instead of a thrown error.
-export async function acquireCollectionItem(collectionItemId: number): Promise<AcquireCollectionItemResult | null> {
+export async function acquireCollectionItem(
+  collectionItemId: number,
+  options: { locale: Locale },
+): Promise<AcquireCollectionItemResult | null> {
+  const params = new URLSearchParams({ language: options.locale });
   try {
-    return await apiPost<AcquireCollectionItemResult>(`/api/collections/items/${collectionItemId}/acquire`);
+    return await apiPost<AcquireCollectionItemResult>(
+      `/api/collections/items/${collectionItemId}/acquire?${params.toString()}`,
+    );
   } catch (error) {
     if (error instanceof ApiError && error.code === "COLLECTION4091") return null;
     throw error;
