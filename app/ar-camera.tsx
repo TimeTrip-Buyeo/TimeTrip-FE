@@ -294,7 +294,7 @@ export default function ArCameraScreen() {
     if (!timeslip || isCollectionItemAcquired) return;
     const itemId = timeslip.collectionItem.collectionItemId;
 
-    acquireCollectionItem(itemId)
+    acquireCollectionItem(itemId, { locale })
       .then((result) => {
         // null means 409 (already acquired) — ignored silently per spec.
         setIsCollectionItemAcquired(true);
@@ -320,7 +320,7 @@ export default function ArCameraScreen() {
       .catch((error) => {
         console.error("[ar-camera] acquire failed", error);
       });
-  }, [timeslip, isCollectionItemAcquired]);
+  }, [timeslip, isCollectionItemAcquired, locale]);
 
   // timeslip?.spotName is only trusted when timeslipLocale matches the
   // current locale (i.e. it was fetched/cache-hit for this exact language);
