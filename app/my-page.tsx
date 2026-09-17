@@ -61,8 +61,7 @@ export default function MyPageScreen() {
             router.replace("/login");
           } catch (error) {
             if (error instanceof SessionExpiredError) {
-              Alert.alert(t.withdrawConfirmTitle, t.withdrawSessionExpiredMessage);
-              router.replace("/login");
+              // 전역 unauthorizedListener(hooks/use-session.tsx)가 이미 안내와 이동을 처리함.
               return;
             }
             Alert.alert(t.withdrawConfirmTitle, t.withdrawErrorMessage);

@@ -1,9 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { router } from 'expo-router';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
+import { Alert } from 'react-native';
 
 import * as authApi from '@/lib/api/auth';
 import { setUnauthorizedListener } from '@/lib/api/client';
 import { clearRemoteAlbumPhotoCache } from '@/lib/remote-album-cache';
 import { clearTokens, getTokens, saveTokens } from '@/lib/token-storage';
+import { sessionExpiredText } from '@/constants/translations';
+import { useLanguage } from '@/hooks/use-language';
 
 type SessionContextValue = {
   isLoggedIn: boolean;
@@ -41,6 +45,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSessionReady, setIsSessionReady] = useState(false);
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
+  const { locale } = useLanguage();
+  const sessionExpiredHandledRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -52,14 +58,22 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     setUnauthorizedListener(() => {
+      if (sessionExpiredHandledRef.current) return;
+      sessionExpiredHandledRef.current = true;
+
       clearRemoteAlbumPhotoCache();
       setIsLoggedIn(false);
       setCurrentEmail(null);
+
+      const t = sessionExpiredText[locale];
+      Alert.alert(t.title, t.message);
+      router.replace('/login');
     });
     return () => setUnauthorizedListener(null);
-  }, []);
+  }, [locale]);
 
   const login = useCallback((email?: string) => {
+    sessionExpiredHandledRef.current = false;
     setIsLoggedIn(true);
     setCurrentEmail(email ?? null);
   }, []);
