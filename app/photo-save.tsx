@@ -318,10 +318,6 @@ export default function PhotoSaveScreen() {
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>{mapT.pins[locationId]}</Text>
-          <Text style={styles.headerSubtitle}>
-            {t.locationSubtitlePrefix}
-            {entry?.locationCaption[locale] ?? mapT.pins[locationId]}
-          </Text>
         </View>
       </View>
 
@@ -481,10 +477,6 @@ const styles = StyleSheet.create({
     fontFamily: GUNGSEO_FONT_BOLD,
     fontSize: 18,
     color: "#1b1b1b",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#6b7280",
   },
   photoWrapperOuter: {
     flex: 1,
